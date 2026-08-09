@@ -63,6 +63,19 @@ devices and there is no reason to hand those to your daily driver.
 ./build/test-vm.sh --reset            # wipe the scratch disk and NVRAM first
 ```
 
+Checking what the VM is doing, without a human watching the screen:
+
+```bash
+./build/vm-ready.sh                   # block until Plasma is up, set 1080p
+./build/guest-run.sh 'systemctl --failed'   # run a command inside the guest
+./build/screenshot.sh /tmp/shot.png   # capture the framebuffer
+```
+
+`guest-run.sh` goes over the QEMU guest agent, so it needs no network, no SSH
+and no credentials — it works against an unmodified live ISO. Install runs get
+verified by script rather than by eye, which is the only way the UEFI / BIOS /
+NVMe / dual-boot test matrix stays affordable.
+
 The first build downloads the full Plasma stack and takes 15–25 minutes.
 Subsequent builds reuse the `sakura-pkgcache` docker volume and are far faster.
 
