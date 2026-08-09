@@ -46,8 +46,11 @@ fi
 
 rm -f "$QMP_SOCK"
 
-display_args=(-display gtk,show-cursor=on)
-(( headless )) && display_args=(-display none)
+# virtio-vga-gl needs gl=on on the display backend or the guest falls back to
+# llvmpipe, which makes Plasma painfully slow. Headless has no GL context at
+# all, so it drops to the plain virtio-vga device.
+display_args=(-display gtk,gl=on,show-cursor=on -device virtio-vga-gl)
+(( headless )) && display_args=(-display none -device virtio-vga)
 
 echo ">> booting $(basename "$ISO")"
 exec qemu-system-x86_64 \
@@ -61,7 +64,6 @@ exec qemu-system-x86_64 \
     -drive file="$DISK",if=virtio,format=qcow2 \
     -drive file="$ISO",media=cdrom,readonly=on \
     -boot order=d \
-    -device virtio-vga-gl \
     -device qemu-xhci -device usb-tablet \
     -netdev user,id=net0 -device virtio-net,netdev=net0 \
     -qmp "unix:$QMP_SOCK,server,nowait" \

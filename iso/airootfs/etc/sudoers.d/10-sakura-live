@@ -1,0 +1,2 @@
+# Live media only. The installed system does not ship this file.
+sakura ALL=(ALL:ALL) NOPASSWD: ALL
