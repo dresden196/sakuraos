@@ -9,7 +9,12 @@ merging blind.
 ## Divergences from releng
 
 **Branding.** `profiledef.sh` — `iso_name`, `iso_label`, `install_dir`,
-publisher strings.
+publisher strings — plus `/etc/hostname` and `/etc/motd`. releng's motd points
+users at `iwctl`, which no longer exists on this media now that NetworkManager
+has replaced iwd, so leaving it would have actively misled people.
+
+`/etc/os-release` is still Arch's. Fixing that needs a `sakura-branding`
+package, which belongs to M1, not to the ISO profile.
 
 **zstd instead of xz for squashfs.** xz costs roughly fifteen minutes per
 rebuild on a Plasma-sized rootfs. zstd-19 is a few percent larger and several
@@ -33,15 +38,19 @@ The networkd units and `/etc/systemd/network/*.network` are removed rather than
 left inert, so there is no ambiguity about which stack is live.
 `systemd-resolved` is kept; NetworkManager drives it.
 
-**`video=Virtual-1:1920x1080` on the kernel cmdline.** Under QEMU, virtio-gpu
-advertises 640x480 as its preferred mode and Plasma believes it, even with
-`edid=on` and `xres`/`yres` set on the device. Forcing the mode is the only
-thing that reliably works. `Virtual-1` is a connector name that exists only in
-virtual machines, so this is inert on real hardware.
-
 **Target-system tooling on the media.** `limine`, `sbctl`, `snapper`,
 `snap-pac`, `pacman-contrib` — present because the installer drives them, not
 because the live session needs them.
+
+## Deliberately not changed
+
+**Screen resolution in VMs is not an ISO problem.** Under QEMU the guest comes
+up at 640x480 because Plasma honours the EDID-preferred mode and virtio-gpu
+insists that is 640x480 — `edid=on`, `xres`/`yres` on the device, and
+`video=Virtual-1:1920x1080` on the kernel cmdline were all tried and none of
+them move it. `kscreen-doctor` overrides it fine at runtime, so the fix lives in
+`build/vm-ready.sh` where it belongs. Real hardware gets EDID from the monitor
+and is unaffected. Do not re-add a `video=` parameter here; it does nothing.
 
 ## Still inherited from releng, to revisit
 
