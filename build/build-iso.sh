@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Build a SakuraOS ISO inside a container.
+#
+# Nothing is installed on the host: archiso, the package cache, and the ~10 GB
+# of intermediate build state all live in the container and a docker volume.
+# The only thing that lands on the host is the finished ISO in out/.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+IMAGE=sakura-build
+CACHE_VOLUME=sakura-pkgcache
+
+cd "$REPO_ROOT"
+
+if [[ "${1:-}" == "--rebuild-image" ]] || ! docker image inspect "$IMAGE" &>/dev/null; then
+    echo ">> building $IMAGE container image"
+    docker build -t "$IMAGE" -f build/Containerfile build/
+fi
+
+# Persisting the pacman cache across builds turns a 20 minute first build into
+# a ~3 minute rebuild. mkarchiso runs pacstrap with -c, so it uses the cache at
+# this path rather than one inside the work directory.
+docker volume create "$CACHE_VOLUME" >/dev/null
+
+echo ">> running mkarchiso"
+docker run --rm --privileged \
+    -v "$REPO_ROOT:/build" \
+    -v "$CACHE_VOLUME:/var/cache/pacman/pkg" \
+    -w /build \
+    "$IMAGE" \
+    bash -euo pipefail -c '
+        rm -rf /tmp/work
+        mkarchiso -v -w /tmp/work -o /build/out /build/iso
+        # mkarchiso writes as root; hand the artifacts back to the caller so the
+        # host user can read and delete them without sudo.
+        chown -R '"$(id -u):$(id -g)"' /build/out
+    '
+
+echo
+echo ">> done:"
+ls -lh out/*.iso
