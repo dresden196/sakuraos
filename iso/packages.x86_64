@@ -128,3 +128,50 @@ xdg-utils
 xfsprogs
 xl2tpd
 zsh
+
+# --- SakuraOS live session -------------------------------------------------
+# Plasma workspace. plasma-desktop pulls plasma-workspace, systemsettings,
+# powerdevil and polkit-kde-agent; kwin is named explicitly so the compositor
+# can never be dropped by a dependency change upstream.
+plasma-desktop
+kwin
+sddm
+qt6-wayland
+xdg-desktop-portal-kde
+xorg-xwayland
+
+# Applets and hardware integration the live session needs to be usable
+plasma-nm
+plasma-pa
+kscreen
+bluedevil
+networkmanager
+power-profiles-daemon
+
+# Audio
+pipewire
+pipewire-alsa
+pipewire-pulse
+wireplumber
+
+# Graphics — mesa covers virtio-gpu under QEMU as well as real hardware
+mesa
+
+# Applications, kept deliberately minimal for M0
+konsole
+dolphin
+kate
+ark
+
+# Fonts, otherwise the entire session renders as tofu
+noto-fonts
+noto-fonts-emoji
+
+# --- SakuraOS target-system tooling ----------------------------------------
+# Present on the live media because the installer drives them. btrfs-progs,
+# efibootmgr and archinstall already come from the releng list above.
+limine
+sbctl
+snapper
+snap-pac
+pacman-contrib

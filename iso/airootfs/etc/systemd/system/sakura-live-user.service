@@ -1,0 +1,19 @@
+[Unit]
+Description=Create the SakuraOS live session user
+# Shipping /etc/passwd and /etc/group overlays would clobber the ones from the
+# filesystem package, so the live user is created at boot instead. The rootfs
+# is a writable overlay by then, so useradd behaves normally.
+ConditionPathExists=!/home/sakura
+After=systemd-sysusers.service
+Before=display-manager.service sddm.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/useradd --create-home --user-group \
+    --groups wheel,video,audio,input,storage \
+    --shell /bin/bash --comment "SakuraOS Live" sakura
+ExecStart=/usr/bin/passwd --delete sakura
+
+[Install]
+WantedBy=multi-user.target
