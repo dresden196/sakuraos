@@ -7,7 +7,10 @@
 #   ./build/test-vm.sh              boot the newest ISO in out/
 #   ./build/test-vm.sh --secboot    same, with Secure Boot firmware
 #   ./build/test-vm.sh --reset      wipe the scratch disk and NVRAM first
-#   ./build/test-vm.sh --headless   no window; QMP screenshots only
+#   ./build/test-vm.sh --headless   no window (screenshots still work)
+#   ./build/test-vm.sh --gl         virgl acceleration; disables screenshots
+#
+# Screenshots: build/screenshot.sh out.png — works in every mode except --gl.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,15 +18,18 @@ OVMF_DIR=/usr/share/edk2/x64
 DISK="$REPO_ROOT/out/sakura-test.qcow2"
 NVRAM="$REPO_ROOT/out/OVMF_VARS.fd"
 QMP_SOCK="$REPO_ROOT/out/qmp.sock"
+QGA_SOCK="$REPO_ROOT/out/qga.sock"
 
 secboot=0
 headless=0
 reset=0
+gl=0
 for arg in "$@"; do
     case "$arg" in
         --secboot)  secboot=1 ;;
         --headless) headless=1 ;;
         --reset)    reset=1 ;;
+        --gl)       gl=1 ;;
         *) echo "unknown flag: $arg" >&2; exit 1 ;;
     esac
 done
@@ -44,13 +50,19 @@ fi
 [[ -f "$NVRAM" ]] || cp "$OVMF_DIR/OVMF_VARS.4m.fd" "$NVRAM"
 [[ -f "$DISK" ]]  || qemu-img create -f qcow2 "$DISK" 60G >/dev/null
 
-rm -f "$QMP_SOCK"
+rm -f "$QMP_SOCK" "$QGA_SOCK"
 
-# virtio-vga-gl needs gl=on on the display backend or the guest falls back to
-# llvmpipe, which makes Plasma painfully slow. Headless has no GL context at
-# all, so it drops to the plain virtio-vga device.
-display_args=(-display gtk,gl=on,show-cursor=on -device virtio-vga-gl)
-(( headless )) && display_args=(-display none -device virtio-vga)
+# Default to plain virtio-vga: with virgl the framebuffer lives on the host GPU
+# via dmabuf, so QMP screendump returns "no surface" and every screenshot-based
+# check breaks. Software rendering is fine for an installer and being able to
+# capture the screen from a script is worth more. --gl trades that away.
+# edid=on is what makes xres/yres actually reach the guest. Without it
+# virtio-gpu advertises 640x480 as its preferred mode and Plasma believes it,
+# leaving no room to judge any UI we build.
+VGA="virtio-vga,edid=on,xres=1920,yres=1080"
+display_args=(-display gtk,show-cursor=on -device "$VGA")
+(( gl ))       && display_args=(-display gtk,gl=on,show-cursor=on -device virtio-vga-gl,edid=on,xres=1920,yres=1080)
+(( headless )) && display_args=(-display none -device "$VGA")
 
 echo ">> booting $(basename "$ISO")"
 exec qemu-system-x86_64 \
@@ -65,6 +77,9 @@ exec qemu-system-x86_64 \
     -drive file="$ISO",media=cdrom,readonly=on \
     -boot order=d \
     -device qemu-xhci -device usb-tablet \
-    -netdev user,id=net0 -device virtio-net,netdev=net0 \
+    -netdev user,id=net0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=net0 \
     -qmp "unix:$QMP_SOCK,server,nowait" \
+    -chardev "socket,path=$QGA_SOCK,server=on,wait=off,id=qga0" \
+    -device virtio-serial \
+    -device virtserialport,chardev=qga0,name=org.qemu.guest_agent.0 \
     "${display_args[@]}"
