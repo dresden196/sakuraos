@@ -1,0 +1,11 @@
+# Build environment for SakuraOS ISO images.
+#
+# mkarchiso needs an Arch host, root, and loop devices. Running it in a
+# throwaway container keeps all of that off the developer's machine — nothing
+# in this file touches the host system.
+FROM archlinux:latest
+
+RUN pacman -Syu --noconfirm archiso git && \
+    pacman -Scc --noconfirm
+
+WORKDIR /build
