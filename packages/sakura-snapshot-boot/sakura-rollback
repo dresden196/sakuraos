@@ -1,0 +1,60 @@
+#!/bin/sh
+# Roll the live root subvolume back to a snapshot.
+#
+# Must run with the root subvolume NOT mounted -- from the recovery initramfs,
+# with the btrfs top-level mounted somewhere. Refusing to run otherwise is
+# deliberate: renaming a mounted root subvolume is the kind of thing that
+# appears to work and then corrupts a boot two reboots later.
+#
+#   sakura-rollback <top-level-mount> <snapshot-number>
+set -eu
+
+. /usr/lib/sakura/snapshot-boot/lib.sh
+
+TOP="${1:?usage: sakura-rollback <top-level-mount> <snapshot-number>}"
+NUM="${2:?usage: sakura-rollback <top-level-mount> <snapshot-number>}"
+
+SNAP="$TOP/$SAKURA_SNAPSHOT_SUBVOL/$NUM/snapshot"
+ROOT="$TOP/$SAKURA_ROOT_SUBVOL"
+
+[ -d "$SNAP" ] || { echo "snapshot $NUM does not exist at $SNAP" >&2; exit 1; }
+
+# Refuse to replace the subvolume we are currently running from. btrfs will
+# happily rename a mounted subvolume and the system keeps working right up
+# until something needs a fresh path lookup, so this fails late and badly.
+# The live root is mounted as /, not at $TOP/@, so checking $TOP/@ with
+# mountpoint would look correct and catch nothing.
+if awk -v sv="/$SAKURA_ROOT_SUBVOL" '
+        $2 == "/" && $3 == "btrfs" {
+            n = split($4, opts, ",")
+            for (i = 1; i <= n; i++)
+                if (opts[i] == "subvol=" sv) { found = 1 }
+        }
+        END { exit !found }
+    ' /proc/mounts 2>/dev/null; then
+    echo "$SAKURA_ROOT_SUBVOL is mounted as /; rollback must run from the recovery environment" >&2
+    exit 1
+fi
+
+STAMP=$(date -u +%Y%m%d-%H%M%S 2>/dev/null || echo manual)
+PREVIOUS="$TOP/@rollback-$STAMP"
+
+# Keep the state we are replacing rather than deleting it. If the rollback was
+# the wrong call, the only copy of the "broken" system is the one thing that
+# can prove what actually went wrong -- and users roll back for the wrong
+# reason often enough that this must not be a one-way door.
+if [ -d "$ROOT" ]; then
+    echo "preserving current root as ${PREVIOUS##*/}"
+    mv "$ROOT" "$PREVIOUS"
+fi
+
+echo "restoring snapshot $NUM into $SAKURA_ROOT_SUBVOL"
+if ! btrfs subvolume snapshot "$SNAP" "$ROOT"; then
+    # Put the old root back rather than leaving the machine with no root
+    # subvolume at all, which would be unbootable with no way in.
+    echo "snapshot creation failed; restoring previous root" >&2
+    [ -d "$PREVIOUS" ] && mv "$PREVIOUS" "$ROOT"
+    exit 1
+fi
+
+echo "rollback complete"

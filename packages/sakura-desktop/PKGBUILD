@@ -23,10 +23,9 @@ depends=(
     'linux-firmware'
     'sudo'
 
-    # Boot chain: limine + UKI, with snapshot entries and Secure Boot signing
+    # Boot chain: limine + UKI, with recovery rollback and Secure Boot signing
     'limine'
-    'limine-snapper-sync'
-    'limine-mkinitcpio-hook'
+    'sakura-snapshot-boot'
     'sbctl'
     'efibootmgr'
     'mkinitcpio'

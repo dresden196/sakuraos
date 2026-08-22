@@ -1,0 +1,34 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# Replaces limine-snapper-sync, limine-entry-tool and limine-mkinitcpio-hook.
+# Those are three GraalVM-compiled Kotlin projects from a single upstream, and
+# all three currently fail to build against Arch's gradle. This does the one
+# job SakuraOS actually needs from them, in shell, with tests.
+pkgname=sakura-snapshot-boot
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Snapshot rollback and boot menu generation for SakuraOS"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+depends=('btrfs-progs' 'limine' 'snapper' 'mkinitcpio')
+conflicts=('limine-snapper-sync' 'limine-entry-tool')
+source=(
+    'lib.sh'
+    'sakura-rollback'
+    'sakura-recovery-menu'
+    'sakura-boot-entries'
+    'initcpio-install'
+    'initcpio-hook'
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+package() {
+    install -Dm644 "$srcdir/lib.sh"              "$pkgdir/usr/lib/sakura/snapshot-boot/lib.sh"
+    install -Dm755 "$srcdir/sakura-rollback"     "$pkgdir/usr/lib/sakura/snapshot-boot/sakura-rollback"
+    install -Dm755 "$srcdir/sakura-recovery-menu" "$pkgdir/usr/lib/sakura/snapshot-boot/sakura-recovery-menu"
+    install -Dm755 "$srcdir/sakura-boot-entries" "$pkgdir/usr/bin/sakura-boot-entries"
+
+    install -Dm644 "$srcdir/initcpio-install" "$pkgdir/usr/lib/initcpio/install/sakura-recovery"
+    install -Dm644 "$srcdir/initcpio-hook"    "$pkgdir/usr/lib/initcpio/hooks/sakura-recovery"
+}
