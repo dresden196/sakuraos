@@ -28,10 +28,16 @@ docker run --rm --privileged \
             /usr/lib/sakura/snapshot-boot/sakura-rollback
         install -Dm755 /build/packages/sakura-snapshot-boot/sakura-boot-entries \
             /usr/bin/sakura-boot-entries
+        install -Dm755 /build/packages/sakura-terminal-assist/alpm-check \
+            /usr/lib/sakura/terminal-assist/alpm-check
+        install -Dm644 /build/packages/sakura-terminal-assist/profile.sh \
+            /etc/profile.d/sakura-terminal-assist.sh
 
         rc=0
         bash /build/tests/test-rollback.sh || rc=1
         echo
         bash /build/tests/test-boot-entries.sh || rc=1
+        echo
+        bash /build/tests/test-terminal-assist.sh || rc=1
         exit $rc
     '

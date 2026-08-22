@@ -1,0 +1,15 @@
+# Runs before any package removal, from any frontend.
+#
+# The numbering puts this ahead of other hooks so the transaction is stopped
+# before anything else has done work on the strength of it going ahead.
+[Trigger]
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Sakura Terminal Assist: checking for changes that would break this system...
+When = PreTransaction
+Exec = /usr/lib/sakura/terminal-assist/alpm-check
+NeedsTargets
+AbortOnFail

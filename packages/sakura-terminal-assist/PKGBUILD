@@ -1,0 +1,25 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# Two layers, deliberately. The pacman hook cannot be bypassed by choosing a
+# different frontend, but by the time it runs the original command line is
+# gone. The shell integration sees the command line but is trivially bypassed.
+# Neither is sufficient alone.
+pkgname=sakura-terminal-assist
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Stops commands that would break a SakuraOS system, and explains why"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+depends=('python' 'sakura-settings-core')
+source=('alpm-check' '00-sakura-terminal-assist.hook' 'profile.sh')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+    install -Dm755 "$srcdir/alpm-check" \
+        "$pkgdir/usr/lib/sakura/terminal-assist/alpm-check"
+    install -Dm644 "$srcdir/00-sakura-terminal-assist.hook" \
+        "$pkgdir/usr/share/libalpm/hooks/00-sakura-terminal-assist.hook"
+    install -Dm644 "$srcdir/profile.sh" \
+        "$pkgdir/etc/profile.d/sakura-terminal-assist.sh"
+}

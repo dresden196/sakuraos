@@ -1,0 +1,19 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# The settings file every other component reads. Kept in its own package so
+# that policy and the things enforcing it can be installed independently, and
+# so the System Settings module has exactly one file to bind to.
+pkgname=sakura-settings-core
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SakuraOS system settings schema"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+backup=('etc/sakura/sakura.conf')
+source=('sakura.conf')
+sha256sums=('SKIP')
+
+package() {
+    install -Dm644 "$srcdir/sakura.conf" "$pkgdir/etc/sakura/sakura.conf"
+}
