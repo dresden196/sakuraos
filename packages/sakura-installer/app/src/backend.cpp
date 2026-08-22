@@ -8,6 +8,7 @@
 #include <QRegularExpression>
 #include <QTextStream>
 #include <QTimeZone>
+#include <QUrl>
 
 namespace {
 
@@ -135,13 +136,19 @@ QVariantList Backend::keyboardLayouts() const
 QStringList Backend::avatars() const
 {
     QStringList out;
-    for (const QString &dir : {QStringLiteral("/usr/share/sddm/faces"),
-                               QStringLiteral("/usr/share/pixmaps/faces")}) {
+    // Plasma ships a set of these and plasma-workspace is already pulled in,
+    // so there is nothing to draw or package. /usr/share/sddm/faces is a
+    // different thing entirely -- it holds per-user login pictures and on a
+    // fresh system contains only root.face.icon.
+    for (const QString &dir : {QStringLiteral("/usr/share/plasma/avatars"),
+                               QStringLiteral("/usr/share/sddm/faces")}) {
         QDir d(dir);
         const auto files = d.entryList({QStringLiteral("*.png"), QStringLiteral("*.face.icon")},
                                        QDir::Files, QDir::Name);
         for (const QString &f : files) {
-            out.append(QString(QStringLiteral("file://") + d.absoluteFilePath(f)));
+            // Several of these have spaces in the filename, so the URL has to
+            // be built properly rather than by string concatenation.
+            out.append(QUrl::fromLocalFile(d.absoluteFilePath(f)).toString());
         }
     }
     return out;

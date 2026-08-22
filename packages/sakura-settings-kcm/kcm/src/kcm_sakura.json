@@ -2,7 +2,7 @@
     "KPlugin": {
         "Description": "Terminal Assist, AUR safety, and automatic updates",
         "Icon": "preferences-system",
-        "Name": "Sakura",
+        "Name": "SakuraOS",
         "Category": "System Administration"
     },
     "X-KDE-System-Settings-Parent-Category": "system-administration",
