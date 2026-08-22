@@ -1,0 +1,11 @@
+{
+    "KPlugin": {
+        "Description": "Terminal Assist, AUR safety, and automatic updates",
+        "Icon": "preferences-system",
+        "Name": "Sakura",
+        "Category": "System Administration"
+    },
+    "X-KDE-System-Settings-Parent-Category": "system-administration",
+    "X-KDE-Weight": 5,
+    "X-KDE-Keywords": "sakura,terminal assist,aur,updates,malware,security"
+}

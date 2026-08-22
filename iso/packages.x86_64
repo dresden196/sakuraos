@@ -170,6 +170,9 @@ noto-fonts-emoji
 # --- SakuraOS packages from sakura-core ------------------------------------
 sakura-keyring
 sakura-branding
+sakura-settings-core
+sakura-terminal-assist
+sakura-settings-kcm
 
 # --- SakuraOS target-system tooling ----------------------------------------
 # Present on the live media because the installer drives them. btrfs-progs,

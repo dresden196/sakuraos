@@ -43,6 +43,13 @@ docker run --rm --privileged \
                 | xargs -r pacman-key --lsign-key
         fi
 
+        # Our own packages keep the same version string across rebuilds, so a
+        # cached copy from an earlier build would be used in preference to the
+        # one just built -- and would fail signature verification outright if
+        # the signing key has been rotated since. Upstream packages are left
+        # cached; they are versioned properly and are the slow part to fetch.
+        rm -f /var/cache/pacman/pkg/sakura-*.pkg.tar.zst*
+
         rm -rf /tmp/work
         mkarchiso -v -w /tmp/work -o /build/out /build/iso
         # mkarchiso writes as root; hand the artifacts back to the caller so the

@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""Write /etc/sakura/sakura.conf on behalf of the System Settings module.
+
+Runs as root under pkexec, taking input from an unprivileged process. It
+therefore trusts nothing it is sent -- not the key names, not the values, and
+not the number of lines. The caller being our own KCM is not a reason to skip
+validation; that assumption is exactly what turns a settings helper into a
+privilege escalation.
+
+Reads `Section.Key=value` lines on stdin. Keys not in the schema are rejected
+outright rather than ignored, so a typo surfaces instead of silently doing
+nothing.
+"""
+from __future__ import annotations
+
+import os
+import re
+import sys
+import tempfile
+
+CONFIG = os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf")
+
+BOOL = ("true", "false")
+
+# Every accepted setting, and what counts as a valid value. Anything not
+# listed here cannot be written, whatever the caller says.
+SCHEMA: dict[tuple[str, str], object] = {
+    ("TerminalAssist", "Mode"): ("block", "warn", "off"),
+    ("AUR", "Enabled"): BOOL,
+    ("AUR", "ReviewBeforeInstall"): BOOL,
+    ("AUR", "KnownCampaignScanning"): BOOL,
+    ("AUR", "Helper"): ("yay", "none"),
+    ("Updates", "AutoApply"): BOOL,
+    ("Updates", "RequireCanaryEvidence"): BOOL,
+    ("Updates", "RequireACPower"): BOOL,
+    ("Updates", "Window"): re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$"),
+}
+
+MAX_LINES = 200  # far above the schema size; bounds a hostile caller
+
+
+def fail(message: str) -> "None":
+    print(f"sakura-settings-write: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def parse_input(stream) -> dict[tuple[str, str], str]:
+    updates: dict[tuple[str, str], str] = {}
+    for index, raw in enumerate(stream):
+        if index >= MAX_LINES:
+            fail("too many settings supplied")
+        line = raw.strip()
+        if not line:
+            continue
+        if "=" not in line or "." not in line.split("=", 1)[0]:
+            fail(f"malformed line: {line!r}")
+
+        name, _, value = line.partition("=")
+        section, _, key = name.partition(".")
+        section, key, value = section.strip(), key.strip(), value.strip()
+
+        rule = SCHEMA.get((section, key))
+        if rule is None:
+            fail(f"not a writable setting: {section}.{key}")
+
+        if isinstance(rule, tuple):
+            if value not in rule:
+                fail(f"{section}.{key} must be one of {', '.join(rule)}, got {value!r}")
+        elif not rule.match(value):
+            fail(f"{section}.{key} has an invalid value: {value!r}")
+
+        updates[(section, key)] = value
+    return updates
+
+
+def rewrite(existing: list[str], updates: dict[tuple[str, str], str]) -> list[str]:
+    """Update values in place, leaving comments and layout alone.
+
+    The file ships with explanatory comments that are worth more than the
+    convenience of regenerating it, and an admin who edited it by hand should
+    not lose their notes because someone opened System Settings.
+    """
+    out: list[str] = []
+    section = ""
+    written: set[tuple[str, str]] = set()
+
+    for raw in existing:
+        line = raw.rstrip("\n")
+        stripped = line.strip()
+
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section = stripped[1:-1]
+            out.append(line)
+            continue
+
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
+            if (section, key) in updates:
+                out.append(f"{key}={updates[(section, key)]}")
+                written.add((section, key))
+                continue
+
+        out.append(line)
+
+    # Anything the file did not already contain gets appended under its
+    # section, creating the section if this config predates the setting.
+    missing = {k: v for k, v in updates.items() if k not in written}
+    for (sect, key), value in missing.items():
+        header = f"[{sect}]"
+        if header in (l.strip() for l in out):
+            insert_at = len(out)
+            in_section = False
+            for i, l in enumerate(out):
+                s = l.strip()
+                if s == header:
+                    in_section = True
+                elif in_section and s.startswith("[") and s.endswith("]"):
+                    insert_at = i
+                    break
+            else:
+                insert_at = len(out)
+            out.insert(insert_at, f"{key}={value}")
+        else:
+            out.extend(["", header, f"{key}={value}"])
+
+    return out
+
+
+def main() -> int:
+    updates = parse_input(sys.stdin)
+    if not updates:
+        return 0
+
+    try:
+        with open(CONFIG, encoding="utf-8") as handle:
+            existing = handle.readlines()
+    except FileNotFoundError:
+        existing = []
+    except OSError as error:
+        fail(f"cannot read {CONFIG}: {error}")
+
+    lines = rewrite(existing, updates)
+
+    # Write atomically. A half-written config is not merely a lost setting:
+    # the pacman hook fails closed on an unparseable file, so a torn write
+    # would block every package operation on the system.
+    directory = os.path.dirname(CONFIG) or "/"
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".sakura.conf.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write("\n".join(lines).rstrip("\n") + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, CONFIG)
+    except OSError as error:
+        os.unlink(tmp)
+        fail(f"cannot write {CONFIG}: {error}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -32,6 +32,8 @@ docker run --rm --privileged \
             /usr/lib/sakura/terminal-assist/alpm-check
         install -Dm644 /build/packages/sakura-terminal-assist/profile.sh \
             /etc/profile.d/sakura-terminal-assist.sh
+        install -Dm755 /build/packages/sakura-settings-kcm/kcm/helper/sakura-settings-write \
+            /usr/lib/sakura/settings/sakura-settings-write
 
         rc=0
         bash /build/tests/test-rollback.sh || rc=1
@@ -39,5 +41,7 @@ docker run --rm --privileged \
         bash /build/tests/test-boot-entries.sh || rc=1
         echo
         bash /build/tests/test-terminal-assist.sh || rc=1
+        echo
+        bash /build/tests/test-settings-write.sh || rc=1
         exit $rc
     '
