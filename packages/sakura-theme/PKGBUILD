@@ -1,23 +1,38 @@
 # Maintainer: SakuraOS <dev@sakuraos.invalid>
 #
-# Appearance, versioned separately from the meta package so the look can be
-# changed without touching anything that affects how the system behaves.
+# Appearance, versioned separately from the meta package so the look can change
+# without touching anything that affects how the system behaves.
 #
-# Currently this only selects sane defaults from what Plasma already ships.
-# The cherry-blossom Plasma style, wallpapers, SDDM theme and Plymouth theme
-# land here as they are built.
+# The accent differs between the two schemes, deliberately. The literal cherry
+# blossom pink measures 1.60:1 against a light background -- far below the
+# 3.0:1 that focus rings and controls need -- but 10.24:1 against a dark one.
+# So light uses a deep rose and dark uses the real blossom pink. Both read as
+# Sakura; each is legible on its own ground. Decorative pink (wallpaper, login,
+# splash, logo) is unconstrained, because contrast rules bind only on text and
+# controls.
 pkgname=sakura-theme
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
-pkgdesc="SakuraOS appearance defaults"
+pkgdesc="SakuraOS appearance: colour schemes, global themes, defaults"
 arch=('any')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
-depends=('sddm' 'plasma-desktop')
+depends=('sddm' 'plasma-desktop' 'sakura-wallpapers' 'breeze' 'breeze-icons')
 backup=('etc/sddm.conf.d/20-sakura.conf')
-source=('20-sakura.conf')
-sha256sums=('SKIP')
+source=('20-sakura.conf' 'kdeglobals')
+sha256sums=('SKIP' 'SKIP')
 
 package() {
     install -Dm644 "$srcdir/20-sakura.conf" "$pkgdir/etc/sddm.conf.d/20-sakura.conf"
+
+    # Defaults for new users only; a user's own config always wins.
+    install -Dm644 "$srcdir/kdeglobals" "$pkgdir/etc/xdg/kdeglobals"
+
+    install -d "$pkgdir/usr/share/color-schemes"
+    install -m644 "$startdir/color-schemes/"*.colors "$pkgdir/usr/share/color-schemes/"
+
+    install -d "$pkgdir/usr/share/plasma/look-and-feel"
+    cp -r "$startdir/look-and-feel/"* "$pkgdir/usr/share/plasma/look-and-feel/"
+    find "$pkgdir/usr/share/plasma/look-and-feel" -type f -exec chmod 644 {} +
+    find "$pkgdir/usr/share/plasma/look-and-feel" -type d -exec chmod 755 {} +
 }

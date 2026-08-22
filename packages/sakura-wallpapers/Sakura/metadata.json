@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Id": "Sakura",
+        "Name": "Sakura",
+        "Description": "Cherry blossoms over the Meguro river, Tokyo",
+        "License": "Unsplash License",
+        "Authors": [
+            {
+                "Name": "Crystal Kay"
+            }
+        ]
+    }
+}

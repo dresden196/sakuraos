@@ -1,0 +1,11 @@
+{
+    "KPlugin": {
+        "Id": "org.sakura.dark.desktop",
+        "Name": "Sakura Dark",
+        "Description": "SakuraOS dark theme",
+        "License": "GPL-3.0-or-later",
+        "Authors": [{ "Name": "SakuraOS" }],
+        "Category": "Plasma Look And Feel"
+    },
+    "KPackageStructure": "Plasma/LookAndFeel"
+}
