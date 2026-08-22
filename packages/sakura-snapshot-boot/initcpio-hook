@@ -1,0 +1,18 @@
+#!/usr/bin/ash
+# mkinitcpio runtime hook: hand control to the recovery picker.
+
+run_hook() {
+    # The normal boot image carries this hook too, so the flag is what
+    # distinguishes the two. Without it, boot proceeds untouched.
+    local arg
+    for arg in $(cat /proc/cmdline); do
+        case "$arg" in
+            sakura.recovery|sakura.recovery=*)
+                # Never returns: the picker reboots either way, so a failure
+                # here cannot fall through into mounting a root filesystem
+                # that the user just asked to replace.
+                /usr/lib/sakura/snapshot-boot/sakura-recovery-menu
+                ;;
+        esac
+    done
+}

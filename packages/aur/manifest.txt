@@ -7,6 +7,7 @@
 # which is the entire rollback story.
 #
 # Format: <aur-package-name>
-limine-snapper-sync
-limine-mkinitcpio-hook
-limine-entry-tool
+# Replaced by sakura-snapshot-boot (see packages/sakura-snapshot-boot).
+# limine-snapper-sync
+# limine-mkinitcpio-hook
+# limine-entry-tool

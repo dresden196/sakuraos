@@ -1,0 +1,26 @@
+#!/bin/bash
+# mkinitcpio install hook: build the SakuraOS recovery environment.
+
+build() {
+    add_binary btrfs
+    add_binary findfs
+    add_binary mountpoint
+    add_binary sync
+
+    add_file /usr/lib/sakura/snapshot-boot/lib.sh
+    add_file /usr/lib/sakura/snapshot-boot/sakura-rollback
+    add_file /usr/lib/sakura/snapshot-boot/sakura-recovery-menu
+
+    add_runscript
+}
+
+help() {
+    cat <<'HELPEOF'
+Provides the SakuraOS recovery picker.
+
+Only activates when the kernel command line contains sakura.recovery, which is
+set on the recovery image and never on the normal one. Including this hook in
+the normal image is therefore harmless, and keeping the two images built from
+one preset is what stops them drifting apart.
+HELPEOF
+}

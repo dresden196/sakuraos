@@ -21,9 +21,17 @@ pacman transaction. The subvolume layout (`@`, `@home`, `@log`, `@pkg`,
 `@snapshots`) is an implementation detail the user should never see or hear
 named. This exists so that "a bad update" is a reboot, not a live USB.
 
-**limine + Unified Kernel Images.** `limine-snapper-sync` writes snapshot
-entries into the boot menu, which is the only rollback path that works when the
-system won't boot. UKIs make Secure Boot signing a single operation.
+**limine + Unified Kernel Images.** UKIs make Secure Boot signing a single
+operation. The catch is that a UKI embeds its kernel command line and
+`systemd-stub` ignores any loader-supplied replacement while Secure Boot is on,
+so snapshots *cannot* appear as individual boot entries — such entries would
+silently boot the current system while claiming to boot a snapshot.
+
+Instead there are exactly two entries, and rollback replaces what the `@`
+subvolume *is* rather than pointing the kernel somewhere else. The command line
+is therefore constant forever, which is what lets it stay embedded and signed.
+Snapshot selection happens inside a signed recovery image, working identically
+with Secure Boot on or off. See `packages/sakura-snapshot-boot/`.
 
 **Secure Boot via `sbctl`.** The installer generates machine-local keys, signs
 the boot chain, and enrolls them when firmware is in Setup Mode. Every other
@@ -102,15 +110,16 @@ build rather than only in production.
 **M0 — live ISO.** Boots to a Plasma Wayland session as an unprivileged `sakura`
 user via SDDM autologin. No custom installer yet; `archinstall` is on the media.
 
-**M1 — sakura-core.** Signed repo with a signed database. `sakura-keyring`,
-`sakura-branding` (the system identifies as SakuraOS) and the `sakura-desktop`
-meta package build, sign, publish, and install. Two things are still open:
+**M1 — sakura-core.** Signed repo with a signed database. Everything builds,
+signs, publishes, and installs: `sakura-desktop` resolves a 481-package
+transaction with signatures verified against our own key.
 
-- The signing key is a **development** key. See `keys/README.md`.
-- The three AUR limine packages **do not build** — Arch's `gradle` 9.7.0 is
-  missing a module all three need. `sakura-desktop` depends on them, so it
-  cannot currently be installed. See `packages/aur/README.md`.
+**M2 — snapshot rollback.** `sakura-snapshot-boot` replaces the three AUR
+GraalVM/Kotlin limine packages with shell and tests. Rollback logic is verified
+against a real btrfs filesystem; the recovery initramfs itself cannot be tested
+end to end until there is an installer to produce an installed system.
 
-Next: resolve the snapshot-boot tooling, then Terminal Assist, the update
-manager KCM, the store, and the installer last — its requirements are the most
-determined by everything else.
+Open: the signing key is still a **development** key. See `keys/README.md`.
+
+Next: Terminal Assist, the update manager KCM, the store, and the installer
+last — its requirements are the most determined by everything else.

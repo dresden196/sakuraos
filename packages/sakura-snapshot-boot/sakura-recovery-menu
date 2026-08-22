@@ -1,0 +1,120 @@
+#!/bin/sh
+# The SakuraOS recovery picker.
+#
+# Runs inside the recovery initramfs, before any root filesystem is mounted.
+# Everything here has to work with busybox and btrfs-progs only, on a console
+# with no fonts, no compositor, and a user who is already having a bad day.
+set -u
+
+. /usr/lib/sakura/snapshot-boot/lib.sh
+
+TOP=/sakura-top
+
+say() { printf '%s\n' "$*" > /dev/console; }
+
+# Resolve the filesystem holding the system. The recovery image is built with
+# sakura.root= naming the same filesystem the normal image boots from.
+find_root_device() {
+    for _arg in $(cat /proc/cmdline); do
+        case "$_arg" in
+            sakura.root=*) printf '%s' "${_arg#sakura.root=}"; return 0 ;;
+        esac
+    done
+    return 1
+}
+
+resolve_device() {
+    case "$1" in
+        UUID=*|LABEL=*|PARTUUID=*) findfs "$1" 2>/dev/null ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+main() {
+    say ""
+    say "  SakuraOS Recovery"
+    say "  ================="
+    say ""
+
+    _spec=$(find_root_device) || {
+        say "  Could not tell which disk holds your system."
+        say "  (no sakura.root= on the kernel command line)"
+        return 1
+    }
+
+    _dev=$(resolve_device "$_spec")
+    [ -n "$_dev" ] && [ -b "$_dev" ] || {
+        say "  Could not find the disk holding your system ($_spec)."
+        return 1
+    }
+
+    mkdir -p "$TOP"
+    # subvolid=5 is the btrfs top level, which is the only place the root
+    # subvolume can be renamed from.
+    mount -t btrfs -o subvolid=5 "$_dev" "$TOP" || {
+        say "  Could not open the disk holding your system."
+        return 1
+    }
+
+    _list=$(sakura_list_snapshots "$TOP/$SAKURA_SNAPSHOT_SUBVOL")
+    if [ -z "$_list" ]; then
+        say "  No restore points were found on this system."
+        say ""
+        umount "$TOP"
+        return 1
+    fi
+
+    say "  Something wrong with your system?"
+    say "  Pick a point to go back to:"
+    say ""
+
+    _n=0
+    # Printing to console and reading the list twice keeps this working under
+    # busybox sh, which has no arrays.
+    echo "$_list" | while IFS="$(printf '\t')" read -r num type date desc; do
+        _n=$((_n + 1))
+        printf '    %d)  %s  %s\n' "$_n" "$date" "$desc" > /dev/console
+    done
+    say ""
+    say "    c)  Cancel and restart normally"
+    say ""
+
+    printf '  Choice: ' > /dev/console
+    read -r _choice < /dev/console
+
+    case "$_choice" in
+        c|C|'') umount "$TOP"; return 2 ;;
+        *[!0-9]*|'') say "  Not a valid choice."; umount "$TOP"; return 2 ;;
+    esac
+
+    _target=$(echo "$_list" | sed -n "${_choice}p" | cut -f1)
+    [ -n "$_target" ] || { say "  Not a valid choice."; umount "$TOP"; return 2; }
+
+    _desc=$(echo "$_list" | sed -n "${_choice}p" | cut -f3,4)
+    say ""
+    say "  Going back to: $_desc"
+    say ""
+
+    if /usr/lib/sakura/snapshot-boot/sakura-rollback "$TOP" "$_target" > /dev/console 2>&1; then
+        say ""
+        say "  Done. Your system has been restored to that point."
+        say "  Nothing was deleted -- the state you just replaced was kept."
+        say ""
+    else
+        say ""
+        say "  Restore failed. Your system was left exactly as it was."
+        say ""
+    fi
+
+    umount "$TOP"
+    return 0
+}
+
+main
+_rc=$?
+
+say "  Press Enter to restart."
+read -r _ < /dev/console
+# Sync before the reset; the initramfs has no shutdown path to flush for us.
+sync
+reboot -f 2>/dev/null || echo b > /proc/sysrq-trigger
