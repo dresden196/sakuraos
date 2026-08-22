@@ -29,6 +29,20 @@ docker run --rm --privileged \
     -w /build \
     "$IMAGE" \
     bash -euo pipefail -c '
+        # Trust our own signing key before pacstrap runs, so the ISO build
+        # verifies sakura-core signatures the same way a user machine will.
+        # SigLevel in iso/pacman.conf is Required, so a missing key fails the
+        # build loudly instead of silently shipping unverified packages.
+        if [[ -f /build/packages/sakura-keyring/sakura.gpg ]]; then
+            pacman-key --init >/dev/null 2>&1
+            pacman-key --populate archlinux >/dev/null 2>&1
+            pacman-key --add /build/packages/sakura-keyring/sakura.gpg
+            awk -F: "/^fpr:/ {print \$10; exit}" \
+                <(gpg --with-colons --import-options show-only --import \
+                      /build/packages/sakura-keyring/sakura.gpg) \
+                | xargs -r pacman-key --lsign-key
+        fi
+
         rm -rf /tmp/work
         mkarchiso -v -w /tmp/work -o /build/out /build/iso
         # mkarchiso writes as root; hand the artifacts back to the caller so the

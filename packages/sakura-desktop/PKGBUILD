@@ -1,0 +1,82 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# This meta package defines the INSTALLED system. It is deliberately separate
+# from iso/packages.x86_64, which defines the LIVE MEDIA. Conflating the two is
+# how a distro ends up shipping its installer's dependencies onto every user's
+# machine.
+pkgname=sakura-desktop
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SakuraOS desktop system"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+groups=('sakura')
+depends=(
+    # Identity and trust
+    'sakura-branding'
+    'sakura-keyring'
+
+    # Base system
+    'base'
+    'linux'
+    'linux-firmware'
+    'sudo'
+
+    # Boot chain: limine + UKI, with snapshot entries and Secure Boot signing
+    'limine'
+    'limine-snapper-sync'
+    'limine-mkinitcpio-hook'
+    'sbctl'
+    'efibootmgr'
+    'mkinitcpio'
+
+    # Filesystem and the rollback story
+    'btrfs-progs'
+    'snapper'
+    'snap-pac'
+
+    # Plasma
+    'plasma-desktop'
+    'kwin'
+    'sddm'
+    'qt6-wayland'
+    'xorg-xwayland'
+    'xdg-desktop-portal-kde'
+    'plasma-nm'
+    'plasma-pa'
+    'kscreen'
+    'bluedevil'
+
+    # Services
+    'networkmanager'
+    'power-profiles-daemon'
+
+    # Audio
+    'pipewire'
+    'pipewire-alsa'
+    'pipewire-pulse'
+    'wireplumber'
+
+    # Applications
+    'konsole'
+    'dolphin'
+    'kate'
+    'ark'
+
+    # Fonts, otherwise the session renders as tofu
+    'noto-fonts'
+    'noto-fonts-emoji'
+
+    # The store needs Flatpak present; AppStream metadata drives its listings
+    'flatpak'
+    'archlinux-appstream-data'
+
+    # Update manager helpers
+    'pacman-contrib'
+)
+
+package() {
+    install -d "$pkgdir/usr/share/sakura"
+    echo "$pkgver" > "$pkgdir/usr/share/sakura/desktop-version"
+}

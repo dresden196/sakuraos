@@ -1,0 +1,17 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+pkgname=sakura-keyring
+pkgver=20260822
+pkgrel=1
+pkgdesc="SakuraOS PGP keyring"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+install="$pkgname.install"
+source=('sakura.gpg' 'sakura-trusted' 'sakura-revoked')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+    install -Dm644 "$srcdir/sakura.gpg"     "$pkgdir/usr/share/pacman/keyrings/sakura.gpg"
+    install -Dm644 "$srcdir/sakura-trusted" "$pkgdir/usr/share/pacman/keyrings/sakura-trusted"
+    install -Dm644 "$srcdir/sakura-revoked" "$pkgdir/usr/share/pacman/keyrings/sakura-revoked"
+}

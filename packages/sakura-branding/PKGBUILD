@@ -1,0 +1,20 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+pkgname=sakura-branding
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SakuraOS system identity and repository configuration"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+depends=('sakura-keyring')
+install="$pkgname.install"
+backup=('etc/os-release' 'etc/pacman.d/sakura-core.conf')
+source=('os-release' 'sakura-core.conf')
+sha256sums=('SKIP' 'SKIP')
+
+package() {
+    # os-release(5): /etc wins over /usr/lib, so shipping this here avoids
+    # forking the filesystem package just to change a few strings.
+    install -Dm644 "$srcdir/os-release" "$pkgdir/etc/os-release"
+    install -Dm644 "$srcdir/sakura-core.conf" "$pkgdir/etc/pacman.d/sakura-core.conf"
+}

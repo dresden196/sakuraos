@@ -167,6 +167,10 @@ ark
 noto-fonts
 noto-fonts-emoji
 
+# --- SakuraOS packages from sakura-core ------------------------------------
+sakura-keyring
+sakura-branding
+
 # --- SakuraOS target-system tooling ----------------------------------------
 # Present on the live media because the installer drives them. btrfs-progs,
 # efibootmgr and archinstall already come from the releng list above.

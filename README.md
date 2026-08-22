@@ -82,12 +82,35 @@ Subsequent builds reuse the `sakura-pkgcache` docker volume and are far faster.
 The test VM has its own 60 GB qcow2 in `out/` and its own copy of the OVMF NVRAM
 vars. It cannot see the host's disks.
 
+## Packages
+
+```bash
+./build/make-dev-key.sh      # one-time: throwaway signing key (see keys/README.md)
+./build/build-packages.sh    # build + sign everything into repo/sakura-core
+```
+
+`packages/` holds our own PKGBUILDs; `packages/aur/manifest.txt` lists AUR
+packages rebuilt into the repo because the installed system depends on them and
+`pacman` cannot build from the AUR during an install.
+
+The ISO build trusts the signing key and consumes the repo with
+`SigLevel = Required`, so signature verification is exercised on every local
+build rather than only in production.
+
 ## Status
 
 **M0 — live ISO.** Boots to a Plasma Wayland session as an unprivileged `sakura`
 user via SDDM autologin. No custom installer yet; `archinstall` is on the media.
 
-Next: `sakura-core` (signed package repo, branding, rebuilds of the AUR-only
-limine snapshot tooling), then Terminal Assist, the update manager KCM, the
-store, and the installer last — its requirements are the most determined by
-everything else.
+**M1 — sakura-core.** Signed repo with a signed database. `sakura-keyring`,
+`sakura-branding` (the system identifies as SakuraOS) and the `sakura-desktop`
+meta package build, sign, publish, and install. Two things are still open:
+
+- The signing key is a **development** key. See `keys/README.md`.
+- The three AUR limine packages **do not build** — Arch's `gradle` 9.7.0 is
+  missing a module all three need. `sakura-desktop` depends on them, so it
+  cannot currently be installed. See `packages/aur/README.md`.
+
+Next: resolve the snapshot-boot tooling, then Terminal Assist, the update
+manager KCM, the store, and the installer last — its requirements are the most
+determined by everything else.

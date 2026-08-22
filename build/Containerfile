@@ -1,11 +1,17 @@
-# Build environment for SakuraOS ISO images.
+# Build environment for SakuraOS ISO images and packages.
 #
-# mkarchiso needs an Arch host, root, and loop devices. Running it in a
-# throwaway container keeps all of that off the developer's machine — nothing
-# in this file touches the host system.
+# mkarchiso needs an Arch host, root, and loop devices; makepkg needs
+# base-devel and refuses to run as root. Running both in a throwaway container
+# keeps all of that off the developer's machine.
 FROM archlinux:latest
 
-RUN pacman -Syu --noconfirm archiso git && \
+RUN pacman -Syu --noconfirm archiso base-devel git sudo && \
     pacman -Scc --noconfirm
+
+# makepkg will not run as root, so packages build as this user. It needs
+# passwordless pacman to install build dependencies.
+RUN useradd -m -s /bin/bash builder && \
+    echo 'builder ALL=(ALL) NOPASSWD: /usr/bin/pacman' > /etc/sudoers.d/builder && \
+    chmod 440 /etc/sudoers.d/builder
 
 WORKDIR /build
