@@ -1,0 +1,26 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# The installer's backend. The graphical installer drives this rather than
+# reimplementing partitioning and boot setup, so there is exactly one
+# implementation of the risky part and it is the one under test.
+pkgname=sakura-install
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SakuraOS system installer backend"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+depends=(
+    'arch-install-scripts'
+    'btrfs-progs'
+    'dosfstools'
+    'gptfdisk'
+    'util-linux'
+    'efibootmgr'
+)
+source=('sakura-install')
+sha256sums=('SKIP')
+
+package() {
+    install -Dm755 "$srcdir/sakura-install" "$pkgdir/usr/bin/sakura-install"
+}

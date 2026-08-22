@@ -7,6 +7,8 @@
 #   ./build/test-vm.sh              boot the newest ISO in out/
 #   ./build/test-vm.sh --secboot    same, with Secure Boot firmware
 #   ./build/test-vm.sh --reset      wipe the scratch disk and NVRAM first
+#   ./build/test-vm.sh --reset-nvram  clear firmware boot entries, keep the disk
+#   ./build/test-vm.sh --installed  boot the installed system, not the ISO
 #   ./build/test-vm.sh --headless   no window (screenshots still work)
 #   ./build/test-vm.sh --gl         virgl acceleration; disables screenshots
 #
@@ -23,21 +25,32 @@ QGA_SOCK="$REPO_ROOT/out/qga.sock"
 secboot=0
 headless=0
 reset=0
+reset_nvram=0
 gl=0
+installed=0
 for arg in "$@"; do
     case "$arg" in
         --secboot)  secboot=1 ;;
         --headless) headless=1 ;;
         --reset)    reset=1 ;;
+        --reset-nvram) reset_nvram=1 ;;
         --gl)       gl=1 ;;
+        --installed) installed=1 ;;
         *) echo "unknown flag: $arg" >&2; exit 1 ;;
     esac
 done
 
 ISO="$(ls -t "$REPO_ROOT"/out/*.iso 2>/dev/null | head -1 || true)"
-[[ -n "$ISO" ]] || { echo "no ISO in out/ — run build/build-iso.sh first" >&2; exit 1; }
+if (( ! installed )); then
+    [[ -n "$ISO" ]] || { echo "no ISO in out/ — run build/build-iso.sh first" >&2; exit 1; }
+fi
 
 if (( reset )); then rm -f "$DISK" "$NVRAM"; fi
+# After an install, the firmware boot entry the installer wrote outranks the
+# optical drive, so attaching the ISO is not enough to boot it again. Clearing
+# just the NVRAM gets back to the live environment without losing the install
+# that is under test.
+if (( reset_nvram )); then rm -f "$NVRAM"; fi
 
 if (( secboot )); then
     CODE="$OVMF_DIR/OVMF_CODE.secboot.4m.fd"
@@ -51,6 +64,15 @@ fi
 [[ -f "$DISK" ]]  || qemu-img create -f qcow2 "$DISK" 60G >/dev/null
 
 rm -f "$QMP_SOCK" "$QGA_SOCK"
+
+# --installed leaves the ISO out entirely rather than just reordering boot:
+# with the media still attached, a firmware that prefers optical would quietly
+# boot the live environment again and the test would prove nothing.
+if (( installed )); then
+    media_args=(-boot order=c)
+else
+    media_args=(-drive "file=$ISO,media=cdrom,readonly=on" -boot order=d)
+fi
 
 # Default to plain virtio-vga: with virgl the framebuffer lives on the host GPU
 # via dmabuf, so QMP screendump returns "no surface" and every screenshot-based
@@ -74,8 +96,7 @@ exec qemu-system-x86_64 \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$CODE" \
     -drive if=pflash,format=raw,unit=1,file="$NVRAM" \
     -drive file="$DISK",if=virtio,format=qcow2 \
-    -drive file="$ISO",media=cdrom,readonly=on \
-    -boot order=d \
+    "${media_args[@]}" \
     -device qemu-xhci -device usb-tablet \
     -netdev user,id=net0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=net0 \
     -qmp "unix:$QMP_SOCK,server,nowait" \

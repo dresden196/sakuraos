@@ -5,3 +5,5 @@ work/
 *.fd
 keys/dev-gnupg/
 repo/
+iso/airootfs/usr/share/sakura/
+iso/airootfs/etc/pacman.conf

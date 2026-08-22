@@ -22,6 +22,26 @@ fi
 # this path rather than one inside the work directory.
 docker volume create "$CACHE_VOLUME" >/dev/null
 
+# Stage our repo onto the live media. An installer ISO has to carry the
+# packages it installs -- file:///build only exists inside the build
+# container, so without this an install from the booted media cannot resolve
+# sakura-core at all. Upstream Arch packages still come from the network.
+STAGED_REPO="$REPO_ROOT/iso/airootfs/usr/share/sakura/repo"
+LIVE_PACMAN_CONF="$REPO_ROOT/iso/airootfs/etc/pacman.conf"
+cleanup_staging() { rm -rf "$STAGED_REPO" "$LIVE_PACMAN_CONF"; }
+trap cleanup_staging EXIT
+
+if [[ -d "$REPO_ROOT/repo" ]]; then
+    mkdir -p "$STAGED_REPO"
+    cp -r "$REPO_ROOT/repo/." "$STAGED_REPO/"
+    # The live system needs the same repo definition as the build, pointed at
+    # the on-media copy. Deriving it from iso/pacman.conf keeps the two from
+    # drifting apart.
+    sed 's#file:///build/repo/#file:///usr/share/sakura/repo/#' \
+        "$REPO_ROOT/iso/pacman.conf" > "$LIVE_PACMAN_CONF"
+    echo ">> staged $(find "$STAGED_REPO" -name '*.pkg.tar.zst' | wc -l) packages onto the live media"
+fi
+
 echo ">> running mkarchiso"
 docker run --rm --privileged \
     -v "$REPO_ROOT:/build" \

@@ -107,6 +107,21 @@ PRESERVED=$(find "$TOP" -maxdepth 1 -name '@rollback-*' | head -1)
 check "previous root preserved"      "broken" "$(cat "$PRESERVED/state" 2>/dev/null)"
 
 echo
+echo "== rolling back twice does not collide =="
+# The initramfs has no date(1), so both rollbacks fall back to the same base
+# name. The second must find a free one rather than failing halfway.
+echo "second" > "$TOP/@/state"
+PATH_NO_DATE=$(mktemp -d)
+for cmd in btrfs mv rm mkdir cat awk sed grep head sort ls test; do
+    src=$(command -v $cmd 2>/dev/null) && ln -sf "$src" "$PATH_NO_DATE/$cmd"
+done
+PATH="$PATH_NO_DATE" /usr/lib/sakura/snapshot-boot/sakura-rollback "$TOP" 2 2>&1 | sed 's/^/  | /'
+check "second rollback succeeded" "also good" "$(cat "$TOP/@/state")"
+check "both preserved roots kept" "2" \
+      "$(find "$TOP" -maxdepth 1 -name '@rollback-*' | grep -c . || true)"
+rm -rf "$PATH_NO_DATE"
+
+echo
 echo "== refuses a snapshot that does not exist =="
 if /usr/lib/sakura/snapshot-boot/sakura-rollback "$TOP" 99 >/dev/null 2>&1; then
     check "rollback to missing snapshot fails" "fails" "succeeded"

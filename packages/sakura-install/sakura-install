@@ -1,0 +1,243 @@
+#!/usr/bin/env bash
+# Lay down a SakuraOS system on a target disk.
+#
+# This is the installer's backend, not its face. The Qt installer drives this
+# rather than reimplementing it, so the partitioning, boot chain and Secure
+# Boot setup have exactly one implementation and it is the one under test.
+#
+#   sakura-install --disk /dev/vda --hostname sakura --user dresden
+#
+# DESTROYS EVERYTHING on the target disk.
+set -euo pipefail
+
+DISK=""
+HOSTNAME_="sakura"
+USERNAME=""
+USERPASS="sakura"
+ROOTPASS=""
+TIMEZONE="UTC"
+LOCALE="en_US.UTF-8"
+SECUREBOOT="auto"
+EXTRA_PACKAGES=""
+ASSUME_YES=0
+
+die() { printf '\n[sakura-install] %s\n\n' "$*" >&2; exit 1; }
+step() { printf '\n[sakura-install] == %s ==\n' "$*"; }
+info() { printf '[sakura-install] %s\n' "$*"; }
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --disk)       DISK="$2"; shift 2 ;;
+        --hostname)   HOSTNAME_="$2"; shift 2 ;;
+        --user)       USERNAME="$2"; shift 2 ;;
+        --password)   USERPASS="$2"; shift 2 ;;
+        --root-password) ROOTPASS="$2"; shift 2 ;;
+        --timezone)   TIMEZONE="$2"; shift 2 ;;
+        --locale)     LOCALE="$2"; shift 2 ;;
+        --secureboot) SECUREBOOT="$2"; shift 2 ;;   # auto | on | off
+        --extra-packages) EXTRA_PACKAGES="$2"; shift 2 ;;
+        --yes)        ASSUME_YES=1; shift ;;
+        *) die "unknown option: $1" ;;
+    esac
+done
+
+[[ $EUID -eq 0 ]] || die "must run as root"
+[[ -n "$DISK" ]] || die "--disk is required"
+[[ -b "$DISK" ]] || die "$DISK is not a block device"
+[[ -n "$USERNAME" ]] || die "--user is required"
+
+# Refuse to install onto the disk the live system is running from. Getting this
+# wrong destroys the machine you are installing from, and the check is cheap.
+LIVE_SRC=$(findmnt -no SOURCE / 2>/dev/null || true)
+if [[ -n "$LIVE_SRC" ]]; then
+    LIVE_DISK=$(lsblk -no PKNAME "$LIVE_SRC" 2>/dev/null | head -1 || true)
+    [[ -n "$LIVE_DISK" && "/dev/$LIVE_DISK" == "$DISK" ]] && \
+        die "$DISK is the disk this system is running from"
+fi
+
+if (( ! ASSUME_YES )); then
+    lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS "$DISK"
+    read -rp "Erase ALL data on $DISK? type ERASE to continue: " confirm
+    [[ "$confirm" == "ERASE" ]] || die "aborted"
+fi
+
+# Partition naming differs between /dev/sda2 and /dev/nvme0n1p2.
+partname() { [[ "$DISK" =~ [0-9]$ ]] && echo "${DISK}p$1" || echo "${DISK}$1"; }
+ESP=$(partname 1)
+ROOT=$(partname 2)
+
+step "Partitioning $DISK"
+# Anything still holding the disk makes partitioning silently not take effect.
+swapoff -a 2>/dev/null || true
+umount -R /mnt 2>/dev/null || true
+wipefs -af "$DISK" >/dev/null
+sgdisk --zap-all "$DISK" >/dev/null
+
+# 1 GiB ESP: a UKI is the kernel plus the whole initramfs, and there are two of
+# them (system and recovery). The usual 512 MiB runs out during a kernel
+# upgrade, which is the worst possible moment to discover it.
+sgdisk -n 1:0:+1G   -t 1:ef00 -c 1:"SAKURA_ESP"  "$DISK" >/dev/null
+sgdisk -n 2:0:0     -t 2:8304 -c 2:"SAKURA_ROOT" "$DISK" >/dev/null
+partprobe "$DISK"; udevadm settle
+
+step "Creating filesystems"
+mkfs.fat -F32 -n SAKURA_ESP "$ESP" >/dev/null
+mkfs.btrfs -f -L SAKURA "$ROOT" >/dev/null
+
+ROOT_UUID=$(blkid -s UUID -o value "$ROOT")
+info "root UUID: $ROOT_UUID"
+
+step "Creating subvolumes"
+mount "$ROOT" /mnt
+# @log and @pkg are separate subvolumes so a rollback of @ does not also roll
+# back the logs that explain what went wrong, or throw away the package cache
+# that a recovery might need.
+for sv in @ @home @log @pkg @snapshots; do
+    btrfs subvolume create "/mnt/$sv" >/dev/null
+done
+umount /mnt
+
+BTRFS_OPTS="noatime,compress=zstd:3,space_cache=v2"
+mount -o "$BTRFS_OPTS,subvol=@" "$ROOT" /mnt
+mkdir -p /mnt/{home,var/log,var/cache/pacman/pkg,.snapshots,boot}
+mount -o "$BTRFS_OPTS,subvol=@home"      "$ROOT" /mnt/home
+mount -o "$BTRFS_OPTS,subvol=@log"       "$ROOT" /mnt/var/log
+mount -o "$BTRFS_OPTS,subvol=@pkg"       "$ROOT" /mnt/var/cache/pacman/pkg
+mount -o "$BTRFS_OPTS,subvol=@snapshots" "$ROOT" /mnt/.snapshots
+mount "$ESP" /mnt/boot
+
+step "Installing packages"
+# shellcheck disable=SC2086  # deliberate word splitting of the extras list
+pacstrap -K /mnt sakura-desktop $EXTRA_PACKAGES
+
+step "Generating fstab"
+genfstab -U /mnt >> /mnt/etc/fstab
+# genfstab leaves the ESP world-readable. It holds the boot chain and, once
+# Secure Boot is set up, key material -- neither of which any other account
+# has business reading.
+sed -i 's/fmask=0022,dmask=0022/fmask=0077,dmask=0077/' /mnt/etc/fstab
+
+step "Configuring the system"
+echo "$HOSTNAME_" > /mnt/etc/hostname
+ln -sf "/usr/share/zoneinfo/$TIMEZONE" /mnt/etc/localtime
+echo "$LOCALE UTF-8" > /mnt/etc/locale.gen
+echo "LANG=$LOCALE" > /mnt/etc/locale.conf
+
+# The kernel command line never varies -- rollback replaces what @ *is* rather
+# than pointing the kernel at a different subvolume. That is what lets this
+# stay embedded in a signed UKI. See packages/sakura-snapshot-boot/README.md.
+mkdir -p /mnt/etc/kernel
+echo "root=UUID=$ROOT_UUID rootflags=subvol=@ rw quiet splash" > /mnt/etc/kernel/cmdline
+# Recovery never mounts a root filesystem: it mounts the btrfs top level,
+# swaps @, and reboots. So it gets no root= at all.
+echo "sakura.recovery sakura.root=UUID=$ROOT_UUID rw" > /mnt/etc/kernel/recovery-cmdline
+
+cat > /mnt/etc/mkinitcpio.d/linux.preset <<PRESET
+# Two images from one kernel: the system, and the recovery environment that
+# can put the system back. Both are UKIs so both can be Secure Boot signed.
+ALL_kver="/boot/vmlinuz-linux"
+
+PRESETS=('default' 'recovery')
+
+default_uki="/boot/EFI/sakura/sakura.efi"
+default_cmdline="/etc/kernel/cmdline"
+
+recovery_uki="/boot/EFI/sakura/sakura-recovery.efi"
+recovery_cmdline="/etc/kernel/recovery-cmdline"
+recovery_options="-A sakura-recovery"
+PRESET
+
+# btrfs needs to be in the initramfs to find root at all.
+sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block btrfs filesystems fsck)/' \
+    /mnt/etc/mkinitcpio.conf
+sed -i 's/^MODULES=.*/MODULES=(btrfs)/' /mnt/etc/mkinitcpio.conf
+
+arch-chroot /mnt /bin/bash -euo pipefail <<CHROOT
+locale-gen >/dev/null
+
+useradd -m -G wheel -s /bin/bash "$USERNAME"
+echo "$USERNAME:$USERPASS" | chpasswd
+if [ -n "$ROOTPASS" ]; then
+    echo "root:$ROOTPASS" | chpasswd
+else
+    passwd -l root >/dev/null
+fi
+echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/10-wheel
+chmod 440 /etc/sudoers.d/10-wheel
+
+systemctl enable sddm NetworkManager >/dev/null 2>&1
+
+mkdir -p /boot/EFI/sakura /boot/EFI/BOOT
+mkinitcpio -P
+
+# limine goes in the removable-media path so it boots without depending on an
+# NVRAM entry surviving. Firmware that forgets its boot order is common enough
+# that relying solely on efibootmgr is how a machine becomes unbootable.
+cp /usr/share/limine/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI
+cp /usr/share/limine/BOOTX64.EFI /boot/EFI/sakura/limine.efi
+
+sakura-boot-entries
+
+# snapper insists on creating /.snapshots itself and refuses when the
+# subvolume already exists -- which it does, because the layout puts snapshots
+# on their own subvolume so a rollback of @ cannot take them with it. So:
+# unmount it, let snapper build its config, throw away the subvolume snapper
+# made, and put ours back.
+#
+# This is deliberately not tolerant of failure. Without a snapper config,
+# snap-pac takes no pre-transaction snapshots, and the rollback story -- the
+# whole reason for this layout -- silently does not exist.
+umount /.snapshots
+rmdir /.snapshots
+snapper --no-dbus -c root create-config /
+btrfs subvolume delete /.snapshots
+mkdir /.snapshots
+mount /.snapshots
+chmod 750 /.snapshots
+
+snapper --no-dbus -c root set-config TIMELINE_CREATE=no NUMBER_LIMIT=10 NUMBER_LIMIT_IMPORTANT=5
+snapper --no-dbus -c root create --description "installation complete" --cleanup-algorithm number
+CHROOT
+
+step "Registering with firmware"
+efibootmgr --create --disk "$DISK" --part 1 \
+    --loader '\EFI\sakura\limine.efi' --label "SakuraOS" --unicode >/dev/null 2>&1 \
+    || info "efibootmgr entry not created; the removable path will still boot"
+
+if [[ "$SECUREBOOT" != "off" ]]; then
+    step "Secure Boot"
+    SETUP_MODE=$(arch-chroot /mnt sbctl status 2>/dev/null | grep -i "setup mode" || true)
+    if [[ "$SETUP_MODE" == *"Enabled"* ]]; then
+        arch-chroot /mnt /bin/bash -euo pipefail <<'SB'
+sbctl create-keys
+sbctl enroll-keys --microsoft
+sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
+sbctl sign -s /boot/EFI/sakura/limine.efi
+sbctl sign -s /boot/EFI/sakura/sakura.efi
+sbctl sign -s /boot/EFI/sakura/sakura-recovery.efi
+SB
+        info "Secure Boot keys enrolled and boot chain signed"
+    else
+        info "firmware is not in Setup Mode; skipping Secure Boot enrollment"
+        info "the system boots normally with Secure Boot disabled"
+    fi
+fi
+
+if [[ -z "$ROOTPASS" ]]; then
+    info "the root account is locked, as on Ubuntu and Fedora: use sudo."
+    info "note that this also makes systemd's emergency console unreachable --"
+    info "recovery goes through the Recovery entry in the boot menu instead."
+fi
+
+step "Done"
+# snapper's create-config leaves the .snapshots subvolume mounted from inside
+# the chroot, so the first unmount can find /mnt busy. Sync, retry, and fall
+# back to a lazy unmount rather than leaving the caller to guess whether the
+# install actually finished writing.
+sync
+if ! umount -R /mnt 2>/dev/null; then
+    sleep 2
+    umount -R /mnt 2>/dev/null || umount -Rl /mnt 2>/dev/null || true
+fi
+sync
+info "SakuraOS installed on $DISK"
