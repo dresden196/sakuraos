@@ -6,6 +6,7 @@
 #
 #   ./build/sendkeys.sh super-up          maximise the focused window
 #   ./build/sendkeys.sh pgdn pgdn         scroll down twice
+#   ./build/sendkeys.sh --type hello123   type a string
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,6 +33,41 @@ def cmd(name, **args):
 
 f.readline()  # greeting
 cmd("qmp_capabilities")
+
+# --type takes the rest as literal text. Only the characters an installer
+# actually needs: usernames, hostnames and passwords typed during a test run.
+if keys and keys[0] == "--type":
+    literal = " ".join(keys[1:])
+    SHIFTED = {c: c for c in ""}
+    out = []
+    for ch in literal:
+        if ch.islower() or ch.isdigit():
+            out.append((ch, False))
+        elif ch.isupper():
+            out.append((ch.lower(), True))
+        elif ch == " ":
+            out.append(("spc", False))
+        elif ch == ".":
+            out.append(("dot", False))
+        elif ch == "-":
+            out.append(("minus", False))
+        elif ch == "_":
+            out.append(("minus", True))
+        else:
+            sys.exit(f"unsupported character for --type: {ch!r}")
+    for code, shift in out:
+        events = []
+        if shift:
+            events.append({"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": "shift"}}})
+        events.append({"type": "key", "data": {"down": True, "key": {"type": "qcode", "data": code}}})
+        events.append({"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": code}}})
+        if shift:
+            events.append({"type": "key", "data": {"down": False, "key": {"type": "qcode", "data": "shift"}}})
+        r = cmd("input-send-event", events=events)
+        if "error" in r:
+            sys.exit(f"{code}: {r['error']['desc']}")
+        time.sleep(0.05)
+    raise SystemExit(0)
 
 for combo in keys:
     # "super-up" becomes a chord; a bare name is a single key.

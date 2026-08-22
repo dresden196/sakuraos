@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Install SakuraOS
+GenericName=System Installer
+Comment=Install SakuraOS on this computer
+Exec=sakura-installer
+Icon=system-software-install
+Terminal=false
+Categories=System;

@@ -1,0 +1,28 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# The installer's face. It collects answers and hands them to sakura-install,
+# which owns all the partitioning and boot setup. Two implementations of that
+# logic would mean only one of them was ever tested.
+pkgname=sakura-installer
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SakuraOS graphical installer"
+arch=('x86_64')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+depends=('sakura-install' 'qt6-base' 'qt6-declarative' 'kirigami' 'ki18n'
+         'qqc2-desktop-style' 'polkit' 'util-linux')
+makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools')
+
+build() {
+    cp -r "$startdir/app" "$srcdir/app-src"
+    cmake -S "$srcdir/app-src" -B "$srcdir/build" \
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build "$srcdir/build" --parallel
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+    install -Dm644 "$startdir/org.sakuraos.installer.desktop" \
+        "$pkgdir/usr/share/applications/org.sakuraos.installer.desktop"
+}
