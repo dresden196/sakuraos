@@ -50,6 +50,10 @@ depends=(
     'plasma-pa'
     'kscreen'
     'bluedevil'
+    # The Settings page for the login screen; without it there is no way to
+    # change the greeter from the GUI.
+    'sddm-kcm'
+    'sakura-theme'
 
     # Services
     'networkmanager'
