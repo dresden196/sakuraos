@@ -1,0 +1,170 @@
+#!/usr/bin/env python3
+"""SakuraOS Terminal Assist: the layer that cannot be bypassed.
+
+pacman runs ALPM hooks no matter which frontend started the transaction, so
+this catches a dangerous removal whether it came from the store, a terminal,
+yay, or a shell script somebody pasted. The shell integration in
+/etc/profile.d is the friendly warning on top; this is the actual guard.
+
+Reads targets on stdin (NeedsTargets) and exits non-zero to abort.
+"""
+from __future__ import annotations
+
+import os
+import re
+import sys
+from pathlib import Path
+
+CONFIG = Path(os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf"))
+LOCAL_DB = Path(os.environ.get("SAKURA_LOCAL_DB", "/var/lib/pacman/local"))
+
+# Removing any of these leaves a machine that cannot boot, cannot install
+# anything, or cannot authenticate. There is no legitimate reason to remove
+# one on a running system that is not better served by an explicit override.
+CRITICAL = {
+    "systemd": "the init system - the machine will not boot without it",
+    "glibc": "the C library - essentially every program depends on it",
+    "pacman": "the package manager - you could not install anything back",
+    "bash": "the system shell - install scripts and boot units need it",
+    "coreutils": "core utilities like ls, cp and rm",
+    "filesystem": "the base directory layout",
+    "sudo": "how you become root - you may lock yourself out",
+    "linux-firmware": "hardware firmware - wifi and graphics may stop working",
+    "mkinitcpio": "builds the boot image - future kernel updates would not boot",
+    "limine": "the bootloader - the machine will not boot",
+    "sakura-snapshot-boot": "snapshot rollback - you would lose the undo button",
+}
+
+# Removing the last kernel is separately fatal, and which package provides it
+# varies, so it is matched by shape rather than by name.
+KERNEL_RE = re.compile(r"^linux(-(lts|zen|hardened|rt|rt-lts))?$")
+
+
+def read_mode() -> str:
+    """Parse Mode out of the [TerminalAssist] section.
+
+    Deliberately hand-rolled rather than using configparser: this runs inside
+    every pacman transaction, and a config file that fails to parse must not
+    be able to take pacman down with a traceback.
+    """
+    try:
+        section = None
+        for raw in CONFIG.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                section = line[1:-1]
+            elif section == "TerminalAssist" and "=" in line:
+                key, _, value = line.partition("=")
+                if key.strip() == "Mode":
+                    return value.strip().lower()
+    except OSError:
+        pass
+    return "block"
+
+
+def installed_packages() -> set[str]:
+    """Package names from the local database.
+
+    Read straight off the filesystem rather than by shelling out to pacman:
+    this runs while pacman holds its own transaction, and adding a pacman
+    invocation inside a pacman hook is a deadlock waiting to be discovered.
+    """
+    names = set()
+    try:
+        for entry in LOCAL_DB.iterdir():
+            if not entry.is_dir():
+                continue
+            # Directories are <name>-<version>-<rel>; strip the two trailing
+            # hyphen-separated fields, since names themselves contain hyphens.
+            parts = entry.name.rsplit("-", 2)
+            if len(parts) == 3:
+                names.add(parts[0])
+    except OSError:
+        pass
+    return names
+
+
+def check(targets: list[str], installed: set[str]) -> list[tuple[str, str, str]]:
+    """Return (rule_id, target, explanation) for each problem found."""
+    problems = []
+    removing = set(targets)
+
+    for target in targets:
+        if target in CRITICAL:
+            problems.append(("remove-critical", target, CRITICAL[target]))
+
+    kernels = {p for p in installed if KERNEL_RE.match(p)}
+    removed_kernels = {p for p in removing if KERNEL_RE.match(p)}
+    if removed_kernels and not (kernels - removed_kernels):
+        problems.append((
+            "remove-last-kernel",
+            ", ".join(sorted(removed_kernels)),
+            "this is the only kernel installed - the machine would not boot",
+        ))
+
+    return problems
+
+
+def main() -> int:
+    mode = read_mode()
+    if mode == "off":
+        return 0
+
+    targets = [line.strip() for line in sys.stdin if line.strip()]
+    if not targets:
+        return 0
+
+    problems = check(targets, installed_packages())
+    if not problems:
+        return 0
+
+    # An override waives only the rules it names. Accepting any value would
+    # make SAKURA_ASSIST_OVERRIDE=1 a universal skeleton key, which is exactly
+    # the muscle-memory bypass this design is trying to avoid.
+    waived = {
+        r.strip()
+        for r in os.environ.get("SAKURA_ASSIST_OVERRIDE", "").split(",")
+        if r.strip()
+    }
+    if waived:
+        remaining = [p for p in problems if p[0] not in waived]
+        for rule in sorted({p[0] for p in problems} & waived):
+            print(f"  Terminal Assist: {rule} overridden.", file=sys.stderr)
+        unknown = waived - {p[0] for p in problems}
+        if unknown:
+            print(
+                f"  Terminal Assist: no such rule triggered: {', '.join(sorted(unknown))}",
+                file=sys.stderr,
+            )
+        problems = remaining
+        if not problems:
+            return 0
+
+    out = sys.stderr
+    print("", file=out)
+    print("  Sakura Terminal Assist", file=out)
+    print("", file=out)
+    for _rule, target, why in problems:
+        print(f"    Removing {target} would break this system.", file=out)
+        print(f"    {target} is {why}.", file=out)
+        print("", file=out)
+
+    if mode == "warn":
+        print("  Continuing anyway (Terminal Assist is set to warn).", file=out)
+        print("", file=out)
+        return 0
+
+    rules = ",".join(sorted({rule for rule, _, _ in problems}))
+    print("  This transaction has been stopped.", file=out)
+    print("", file=out)
+    print("  If you meant to do this, run it again like so:", file=out)
+    print("", file=out)
+    print(f"      sudo SAKURA_ASSIST_OVERRIDE={rules} <your command>", file=out)
+    print("", file=out)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

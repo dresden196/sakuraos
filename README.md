@@ -43,6 +43,12 @@ a schedule — that is what breaks AUR compatibility on Manjaro. Instead a fleet
 of canary VMs updates and boot-tests continuously, and the update manager
 consumes targeted hold advisories when a specific package set is shown to break.
 
+**AUR safety is named for what it does.** There is no "malware scanner",
+because nothing can deliver what that promises — a PKGBUILD is arbitrary shell
+fetching arbitrary source. A user who believes they are protected stops reading
+PKGBUILDs, which is the behaviour the feature exists to encourage. See
+`docs/settings.md`.
+
 **Store source priority: repos → Flatpak → AUR.** AUR is available but opt-in per
 package, with the PKGBUILD shown. An app store that silently builds unreviewed
 PKGBUILDs on a beginner's machine contradicts the entire premise.
@@ -121,5 +127,10 @@ end to end until there is an installer to produce an installed system.
 
 Open: the signing key is still a **development** key. See `keys/README.md`.
 
-Next: Terminal Assist, the update manager KCM, the store, and the installer
-last — its requirements are the most determined by everything else.
+**M3 — Terminal Assist.** Verified against real pacman: `pacman -Rdd bash` is
+stopped, explained, and told how to override deliberately. Overrides name the
+rule they waive, so a second problem in the same transaction still stops it.
+
+Next: the Sakura Settings module, AUR Assist, and Sakura Updates — designed in
+`docs/settings.md` and `docs/updates.md`. Then the store, and the installer
+last, since its requirements are the most determined by everything else.

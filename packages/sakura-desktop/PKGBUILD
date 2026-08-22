@@ -73,6 +73,10 @@ depends=(
 
     # Update manager helpers
     'pacman-contrib'
+
+    # Policy, and the layer that enforces it
+    'sakura-settings-core'
+    'sakura-terminal-assist'
 )
 
 package() {
