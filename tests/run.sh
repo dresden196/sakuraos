@@ -30,8 +30,14 @@ docker run --rm --privileged \
             /usr/bin/sakura-boot-entries
         install -Dm755 /build/packages/sakura-terminal-assist/alpm-check \
             /usr/lib/sakura/terminal-assist/alpm-check
-        install -Dm644 /build/packages/sakura-terminal-assist/profile.sh \
+        install -Dm644 /build/packages/sakura-terminal-assist/terminal-assist.sh \
+            /usr/share/sakura/terminal-assist.sh
+        install -Dm644 /build/packages/sakura-terminal-assist/profile.d.sh \
             /etc/profile.d/sakura-terminal-assist.sh
+        # Mirror what the package install scriptlet does to /etc/bash.bashrc.
+        printf "\n# SakuraOS Terminal Assist\n%s\n" \
+            "[ -r /usr/share/sakura/terminal-assist.sh ] && . /usr/share/sakura/terminal-assist.sh" \
+            >> /etc/bash.bashrc
         install -Dm755 /build/packages/sakura-settings-kcm/kcm/helper/sakura-settings-write \
             /usr/lib/sakura/settings/sakura-settings-write
 
@@ -43,5 +49,7 @@ docker run --rm --privileged \
         bash /build/tests/test-terminal-assist.sh || rc=1
         echo
         bash /build/tests/test-settings-write.sh || rc=1
+        echo
+        bash /build/tests/test-shell-assist.sh || rc=1
         exit $rc
     '
