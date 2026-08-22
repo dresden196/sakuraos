@@ -1,0 +1,20 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+pkgname=sakura-wallpapers
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SakuraOS wallpapers"
+arch=('any')
+url="https://sakuraos.org"
+license=('LicenseRef-Unsplash')
+source=()
+sha256sums=()
+
+package() {
+    install -d "$pkgdir/usr/share/wallpapers"
+    cp -r "$startdir/Sakura" "$pkgdir/usr/share/wallpapers/Sakura"
+    find "$pkgdir/usr/share/wallpapers/Sakura" -type f -exec chmod 644 {} +
+    find "$pkgdir/usr/share/wallpapers/Sakura" -type d -exec chmod 755 {} +
+
+    install -Dm644 "$startdir/ATTRIBUTION" \
+        "$pkgdir/usr/share/licenses/$pkgname/ATTRIBUTION"
+}

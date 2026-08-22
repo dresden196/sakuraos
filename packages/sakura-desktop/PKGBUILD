@@ -54,6 +54,7 @@ depends=(
     # change the greeter from the GUI.
     'sddm-kcm'
     'sakura-theme'
+    'sakura-wallpapers'
 
     # Services
     'networkmanager'

@@ -1,0 +1,15 @@
+# System-wide Plasma defaults for new users.
+#
+# Only defaults: anything a user changes lands in their own ~/.config and wins
+# over this. Changing an existing user's look on an update reads as a bug, so
+# nothing here is ever pushed onto a configured account.
+[General]
+ColorScheme=SakuraDark
+widgetStyle=Breeze
+
+[KDE]
+widgetStyle=Breeze
+LookAndFeelPackage=org.sakura.dark.desktop
+
+[Icons]
+Theme=breeze-dark
