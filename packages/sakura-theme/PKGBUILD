@@ -1,0 +1,23 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# Appearance, versioned separately from the meta package so the look can be
+# changed without touching anything that affects how the system behaves.
+#
+# Currently this only selects sane defaults from what Plasma already ships.
+# The cherry-blossom Plasma style, wallpapers, SDDM theme and Plymouth theme
+# land here as they are built.
+pkgname=sakura-theme
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SakuraOS appearance defaults"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+depends=('sddm' 'plasma-desktop')
+backup=('etc/sddm.conf.d/20-sakura.conf')
+source=('20-sakura.conf')
+sha256sums=('SKIP')
+
+package() {
+    install -Dm644 "$srcdir/20-sakura.conf" "$pkgdir/etc/sddm.conf.d/20-sakura.conf"
+}
