@@ -1,0 +1,12 @@
+NAME="SakuraOS"
+PRETTY_NAME="SakuraOS"
+ID=sakura
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="0;38;2;244;154;194"
+HOME_URL="https://sakuraos.org"
+DOCUMENTATION_URL="https://sakuraos.org/docs"
+SUPPORT_URL="https://sakuraos.org/support"
+BUG_REPORT_URL="https://sakuraos.org/bugs"
+PRIVACY_POLICY_URL="https://sakuraos.org/privacy"
+LOGO=sakura

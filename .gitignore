@@ -3,3 +3,5 @@ work/
 *.iso
 *.qcow2
 *.fd
+keys/dev-gnupg/
+repo/

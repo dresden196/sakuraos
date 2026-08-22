@@ -1,0 +1,12 @@
+# AUR packages rebuilt into sakura-core.
+#
+# A distro cannot build AUR packages during installation, so anything the
+# installed system depends on has to be rebuilt and served from our own repo.
+# These three are why sakura-core is a hard prerequisite for the installer
+# rather than an optimisation: without them there is no snapshot boot menu,
+# which is the entire rollback story.
+#
+# Format: <aur-package-name>
+limine-snapper-sync
+limine-mkinitcpio-hook
+limine-entry-tool

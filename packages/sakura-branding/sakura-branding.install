@@ -1,0 +1,18 @@
+# Arch leaves an unowned /etc/os-release symlink pointing at /usr/lib. pacman
+# refuses to overwrite unowned files, so it has to go before our real file
+# lands. Only remove it if it is still a symlink — never touch a real file
+# somebody may have edited.
+pre_install() {
+    if [ -L etc/os-release ]; then
+        rm -f etc/os-release
+    fi
+}
+
+post_install() {
+    cat <<'MSG'
+  SakuraOS repository configuration installed.
+
+  Add this line to /etc/pacman.conf, above [core]:
+      Include = /etc/pacman.d/sakura-core.conf
+MSG
+}

@@ -1,0 +1,12 @@
+# Importing the keys is what makes pacman trust the sakura-core repo. Without
+# this the repo's packages fail signature verification on every install.
+post_upgrade() {
+    if usr/bin/pacman-key -l >/dev/null 2>&1; then
+        usr/bin/pacman-key --populate sakura
+        usr/bin/pacman-key --updatedb
+    fi
+}
+
+post_install() {
+    post_upgrade
+}
