@@ -58,7 +58,7 @@ QQC2.ApplicationWindow {
         crashReports: false
     })
 
-    property int step: 0
+    property int step: -1
     readonly property var steps: [
         { title: "Keyboard",   blurb: "How your keys are laid out" },
         { title: "Time",       blurb: "Where you are, and how you read a clock" },
@@ -162,9 +162,109 @@ QQC2.ApplicationWindow {
     }
 
     // ---- layout ------------------------------------------------------------
+    // ---- welcome -----------------------------------------------------------
+    Item {
+        anchors.fill: parent
+        visible: root.step < 0
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            width: Math.min(560, parent.width - 100)
+            spacing: 0
+
+            Image {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 132
+                Layout.preferredHeight: 132
+                source: "qrc:/assets/sakura-mark.svg"
+                sourceSize: Qt.size(264, 264)
+                fillMode: Image.PreserveAspectFit
+            }
+
+            Item { Layout.preferredHeight: 26 }
+
+            QQC2.Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: "Welcome to SakuraOS"
+                color: root.text
+                font.pixelSize: 34
+                font.weight: Font.Light
+            }
+
+            Item { Layout.preferredHeight: 10 }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 10
+                Rectangle {
+                    Layout.preferredWidth: versionLabel.implicitWidth + 22
+                    Layout.preferredHeight: 26
+                    radius: 13
+                    color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.18)
+                    border.width: 1
+                    border.color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.5)
+                    QQC2.Label {
+                        id: versionLabel
+                        anchors.centerIn: parent
+                        text: "1.0  ·  Cherry Blossom"
+                        color: root.dark ? root.accent : "#a01449"
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                    }
+                }
+            }
+
+            Item { Layout.preferredHeight: 26 }
+
+            QQC2.Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: "Linux that looks after itself."
+                color: root.text
+                font.pixelSize: 19
+                font.weight: Font.Medium
+            }
+
+            Item { Layout.preferredHeight: 12 }
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: "It keeps itself up to date, takes a restore point before every change, and can put itself back if one goes wrong. Setting it up takes about a minute."
+                color: root.dim
+                font.pixelSize: 14
+                lineHeight: 1.35
+            }
+
+            Item { Layout.preferredHeight: 34 }
+
+            QQC2.Button {
+                Layout.alignment: Qt.AlignHCenter
+                text: "Get started"
+                padding: 13
+                leftPadding: 40
+                rightPadding: 40
+                onClicked: root.step = 0
+                contentItem: QQC2.Label {
+                    text: parent.text
+                    color: root.onAccent
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 9
+                    color: parent.down ? Qt.darker(root.accent, 1.15) : root.accent
+                }
+            }
+        }
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing: 0
+        visible: root.step >= 0
 
         // Step rail
         Rectangle {

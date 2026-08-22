@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="/">
     <file>qml/Main.qml</file>
+    <file>assets/sakura-mark.svg</file>
   </qresource>
 </RCC>
