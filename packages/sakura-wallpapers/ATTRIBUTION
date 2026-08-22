@@ -1,19 +1,31 @@
 Sakura wallpaper
 ================
 
-Photograph: "Cherry blossom trees in full bloom over a canal with pink
-lanterns", Meguro river, Tokyo, Japan.
+The same stretch of the Meguro river in Tokyo, by day and by night. Plasma
+picks between them automatically: contents/images is used with a light colour
+scheme, contents/images_dark with a dark one.
 
-Photographer: Crystal Kay (@xtalkay)
-Source:       https://unsplash.com/photos/7viWpO0fNss
-Licence:      Unsplash License -- https://unsplash.com/license
+Light  "Cherry blossom trees in full bloom over a canal with pink lanterns"
+       Crystal Kay (@xtalkay)
+       https://unsplash.com/photos/7viWpO0fNss
+
+Dark   "A canal bordered by cherry blossom trees", Meguro river
+       Sora Sagano
+       https://unsplash.com/photos/8sOZJ8JF0S8
+
+Licence for both: Unsplash License -- https://unsplash.com/license
 
 The Unsplash License permits commercial use and redistribution without
 permission or attribution. Attribution is recorded here anyway: it costs
 nothing, and a distribution that cannot say where its assets came from is a
 distribution nobody can audit.
 
-The shipped files are resized and cropped from the original. The 16:10 and
-4:3 variants are cropped toward the top of the frame rather than the centre,
-because the subject is the blossom canopy and a centre crop lands on the
-empty canal.
+The shipped files are resized and cropped from the originals.
+
+The day photograph is 16:9; its 16:10 and 4:3 variants are cropped toward the
+top of the frame, because the subject is the blossom canopy and a centre crop
+lands on empty canal.
+
+The night photograph is 3:2, so every 16:9 variant loses some top and bottom.
+Those are cropped centred, because the canal runs down the middle of that
+frame with the lanterns either side of it.

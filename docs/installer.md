@@ -18,6 +18,28 @@ a decision does not ask one.
 **1. Language and region.** Detect from the live session; confirm rather than
 ask.
 
+**1b. Keyboard.** Layout and variant, with a test field to type into. Detected
+from the live session where possible. This is one of the few screens where
+getting it wrong locks someone out of their own machine at the first login
+prompt, so the test field is not optional.
+
+**1c. Time.** Timezone, picked from a map or a search field, and 12- or
+24-hour format.
+
+The format setting has to be written in more than one place or it appears to
+half-work: Plasma's digital clock widget carries its own format setting
+independent of the locale, and the lock screen clock is a separate surface
+again. A user who picks 12-hour and sees a 24-hour clock on the lock screen
+will reasonably conclude the installer ignored them.
+
+**1d. Light or dark.** Two large previews, dark preselected. This is a
+first-class question, not something buried in Settings afterwards — it is the
+single biggest visual decision a user has, and they have an opinion about it
+before they have an opinion about anything else here.
+
+The wallpaper follows automatically: the same stretch of the Meguro river by
+day for light, by night for dark.
+
 **2. Disk.** One clear choice: use the whole disk, or choose partitions. The
 default path never shows the word "subvolume". Encryption is a checkbox here,
 not a separate screen.
