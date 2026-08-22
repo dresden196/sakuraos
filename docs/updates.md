@@ -48,6 +48,34 @@ Nightly in a configurable window, on mains power:
 6. Never reboot on the user's behalf. Say a restart is needed and let them pick
    the moment.
 
+## Its own page, not a section
+
+Updates get a dedicated page with tabs, not three checkboxes on a shared
+settings page. The reference point is Windows Update: people arriving from
+Windows already know where updates live and what they expect to find there,
+and meeting that expectation is worth more than inventing something.
+
+**Status** — the landing tab. Whether the system is current, when it last
+checked, what is waiting, and one button that does the obvious thing. If a
+restart is needed it says so here, in those words.
+
+**Available** — what is about to be installed, with the explanation below.
+Each entry expandable. A "why is this held?" line for anything the canaries
+have not cleared or that needs a manual step, with the actual reason.
+
+**History** — every past update transaction, what it contained, whether it
+needed a restart, and **Revert to before this update** on each row. This is
+the surface that makes rollback discoverable; a boot menu entry nobody knows
+about is not a safety net.
+
+**Schedule** — the time picker, frequency, "only when plugged in", "only on
+unmetered connections", and an explicit "pause updates until…" with a date.
+Pausing is a real need and people will otherwise achieve it by disabling
+updates permanently and forgetting.
+
+**Advanced** — mirror selection and ranking, cache size and clearing, and the
+tested-first toggle with a plain explanation of what it costs to switch off.
+
 ## Explaining what is being installed
 
 The gap nobody fills: "libjxl 0.12.0-1" means nothing to a normal person, so
