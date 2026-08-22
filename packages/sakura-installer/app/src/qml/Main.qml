@@ -14,17 +14,29 @@ QQC2.ApplicationWindow {
     title: "Install SakuraOS"
 
     // ---- palette -----------------------------------------------------------
-    // The dark scheme's accent, because the installer runs before the user has
-    // chosen light or dark and dark is the default.
-    readonly property color accent:     "#ffb7c5"
-    readonly property color accentDeep: "#d81b60"
-    readonly property color bg:         "#26161e"
-    readonly property color panel:      "#2f1f28"
-    readonly property color card:       "#3a2731"
-    readonly property color text:       "#f6eef2"
-    readonly property color dim:        "#bfa8b4"
+    // Bound to the appearance answer rather than fixed, so choosing light or
+    // dark on that screen repaints the installer itself. Showing someone the
+    // theme they picked beats describing it.
+    //
+    // The two accents differ for the same reason the shipped colour schemes
+    // do: the blossom pink measures 1.60:1 on a light background, well under
+    // the 3.0:1 controls need, but 10.24:1 on a dark one.
+    readonly property bool  dark:   answers.dark
+    readonly property color accent: dark ? "#ffb7c5" : "#d81b60"
+    readonly property color onAccent: dark ? "#3a2731" : "#ffffff"
+    readonly property color bg:     dark ? "#26161e" : "#faf6f8"
+    readonly property color panel:  dark ? "#2f1f28" : "#f1e7ec"
+    readonly property color card:   dark ? "#3a2731" : "#ffffff"
+    readonly property color text:   dark ? "#f6eef2" : "#2b1f25"
+    readonly property color dim:    dark ? "#bfa8b4" : "#6f5c66"
+    readonly property color line:   dark ? Qt.rgba(1,1,1,0.08) : Qt.rgba(0,0,0,0.10)
 
     color: bg
+    Behavior on color { ColorAnimation { duration: 180 } }
+
+    // One content width, centred, rather than every page picking its own
+    // max-width and hugging the left edge of a much wider pane.
+    readonly property int contentWidth: 620
 
     // ---- collected answers -------------------------------------------------
     property var answers: ({
@@ -97,11 +109,11 @@ QQC2.ApplicationWindow {
         signal picked()
 
         Layout.fillWidth: true
-        implicitHeight: inner.implicitHeight + 26
-        radius: 10
+        implicitHeight: inner.implicitHeight + 34
+        radius: 14
         color: selected ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.14) : root.card
         border.width: selected ? 2 : 1
-        border.color: selected ? root.accent : Qt.rgba(1, 1, 1, 0.07)
+        border.color: selected ? root.accent : root.line
 
         Behavior on color { ColorAnimation { duration: 110 } }
 
@@ -137,15 +149,15 @@ QQC2.ApplicationWindow {
         color: root.text
         placeholderTextColor: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.7)
         selectionColor: root.accent
-        selectedTextColor: "#1b1e20"
+        selectedTextColor: root.onAccent
         leftPadding: 12
         topPadding: 10
         bottomPadding: 10
         background: Rectangle {
-            radius: 8
+            radius: 10
             color: root.card
             border.width: parent.activeFocus ? 2 : 1
-            border.color: parent.activeFocus ? root.accent : Qt.rgba(1, 1, 1, 0.09)
+            border.color: parent.activeFocus ? root.accent : root.line
         }
     }
 
@@ -173,7 +185,7 @@ QQC2.ApplicationWindow {
                         QQC2.Label {
                             anchors.centerIn: parent
                             text: "✿"
-                            color: "#3a2731"
+                            color: root.onAccent
                             font.pixelSize: 17
                         }
                     }
@@ -206,7 +218,7 @@ QQC2.ApplicationWindow {
                                 QQC2.Label {
                                     anchors.centerIn: parent
                                     text: index < root.step ? "✓" : (index + 1)
-                                    color: index < root.step ? "#3a2731"
+                                    color: index < root.step ? root.onAccent
                                          : index === root.step ? root.accent : root.dim
                                     font.pixelSize: 11
                                     font.weight: Font.DemiBold
@@ -241,9 +253,14 @@ QQC2.ApplicationWindow {
                 clip: true
                 contentWidth: availableWidth
 
+                Item {
+                    width: parent.width
+                    implicitHeight: pageLoader.implicitHeight
+
                 Loader {
                     id: pageLoader
-                    width: parent.width
+                    width: Math.min(root.contentWidth, parent.width - 80)
+                    anchors.horizontalCenter: parent.horizontalCenter
                     sourceComponent: {
                         switch (root.step) {
                         case 0: return keyboardPage
@@ -259,12 +276,13 @@ QQC2.ApplicationWindow {
                         }
                     }
                 }
+                }
             }
 
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 1
-                color: Qt.rgba(1, 1, 1, 0.08)
+                color: root.line
             }
 
             RowLayout {
@@ -305,7 +323,7 @@ QQC2.ApplicationWindow {
                     onClicked: root.step++
                     contentItem: QQC2.Label {
                         text: parent.text
-                        color: parent.enabled ? "#3a2731" : root.dim
+                        color: parent.enabled ? root.onAccent : root.dim
                         font.pixelSize: 14
                         font.weight: Font.DemiBold
                         horizontalAlignment: Text.AlignHCenter
@@ -324,9 +342,8 @@ QQC2.ApplicationWindow {
     Component {
         id: keyboardPage
         ColumnLayout {
-            anchors.margins: 40
             spacing: 18
-            Item { Layout.preferredHeight: 22 }
+            Item { Layout.preferredHeight: 34 }
             Heading {
                 title: "Keyboard layout"
                 subtitle: "Type in the box below to check it before continuing. Getting this wrong locks you out at your first login prompt."
@@ -334,7 +351,6 @@ QQC2.ApplicationWindow {
             QQC2.ComboBox {
                 id: kb
                 Layout.fillWidth: true
-                Layout.maximumWidth: 460
                 model: backend.keyboardLayouts()
                 textRole: "name"
                 valueRole: "code"
@@ -349,14 +365,12 @@ QQC2.ApplicationWindow {
     Component {
         id: timePage
         ColumnLayout {
-            anchors.margins: 40
             spacing: 18
-            Item { Layout.preferredHeight: 22 }
+            Item { Layout.preferredHeight: 34 }
             Heading { title: "Time"; subtitle: "Used for your clock, and for checking that updates are signed correctly." }
             QQC2.Label { text: "Time zone"; color: root.dim; font.pixelSize: 13 }
             QQC2.ComboBox {
                 Layout.fillWidth: true
-                Layout.maximumWidth: 460
                 model: backend.timezones()
                 editable: true
                 Component.onCompleted: {
@@ -373,13 +387,11 @@ QQC2.ApplicationWindow {
             }
             QQC2.Label { text: "Clock"; color: root.dim; font.pixelSize: 13; topPadding: 10 }
             Choice {
-                Layout.maximumWidth: 460
                 heading: "24-hour"; detail: "19:44"
                 selected: root.answers.hour24
                 onPicked: { root.answers.hour24 = true; root.answersChanged() }
             }
             Choice {
-                Layout.maximumWidth: 460
                 heading: "12-hour"; detail: "7:44 PM"
                 selected: !root.answers.hour24
                 onPicked: { root.answers.hour24 = false; root.answersChanged() }
@@ -391,9 +403,8 @@ QQC2.ApplicationWindow {
     Component {
         id: themePage
         ColumnLayout {
-            anchors.margins: 40
             spacing: 18
-            Item { Layout.preferredHeight: 22 }
+            Item { Layout.preferredHeight: 34 }
             Heading { title: "Appearance"; subtitle: "You can change this at any time in System Settings." }
             RowLayout {
                 spacing: 18
@@ -448,9 +459,8 @@ QQC2.ApplicationWindow {
     Component {
         id: diskPage
         ColumnLayout {
-            anchors.margins: 40
             spacing: 16
-            Item { Layout.preferredHeight: 22 }
+            Item { Layout.preferredHeight: 34 }
             Heading {
                 title: "Where should SakuraOS go?"
                 subtitle: "Everything on the disk you choose will be erased."
@@ -459,7 +469,6 @@ QQC2.ApplicationWindow {
                 model: backend.disks()
                 delegate: Choice {
                     required property var modelData
-                    Layout.maximumWidth: 560
                     heading: (modelData.model !== "" ? modelData.model : "Disk") + "  ·  " + modelData.sizeText
                     detail: modelData.device + (modelData.removable ? "  ·  removable" : "")
                     selected: root.answers.disk === modelData.device
@@ -467,7 +476,6 @@ QQC2.ApplicationWindow {
                 }
             }
             QQC2.Label {
-                Layout.maximumWidth: 560
                 wrapMode: Text.WordWrap
                 color: root.dim
                 font.pixelSize: 13
@@ -480,14 +488,12 @@ QQC2.ApplicationWindow {
     Component {
         id: accountPage
         ColumnLayout {
-            anchors.margins: 40
             spacing: 14
-            Item { Layout.preferredHeight: 22 }
+            Item { Layout.preferredHeight: 34 }
             Heading { title: "Create your account" }
 
             Flow {
                 Layout.fillWidth: true
-                Layout.maximumWidth: 620
                 spacing: 10
                 Repeater {
                     model: backend.avatars()
@@ -567,27 +573,86 @@ QQC2.ApplicationWindow {
     Component {
         id: browserPage
         ColumnLayout {
-            anchors.margins: 40
             spacing: 14
-            Item { Layout.preferredHeight: 22 }
+            Item { Layout.preferredHeight: 34 }
             Heading {
                 title: "Pick a browser"
                 subtitle: "You can install any of the others later from the store. This just decides what is ready on first boot."
             }
-            Repeater {
-                model: [
-                    { pkg: "zen-browser-bin", name: "Zen", detail: "SakuraOS default. A Firefox-based browser built around tabs you actually keep." },
-                    { pkg: "firefox",         name: "Firefox", detail: "Independent engine, strong privacy defaults." },
-                    { pkg: "brave",           name: "Brave", detail: "Chromium-based, blocks ads and trackers by default." },
-                    { pkg: "google-chrome",   name: "Chrome", detail: "Chromium-based, by Google." }
-                ]
-                delegate: Choice {
-                    required property var modelData
-                    Layout.maximumWidth: 560
-                    heading: modelData.name
-                    detail: modelData.detail
-                    selected: root.answers.browser === modelData.pkg
-                    onPicked: { root.answers.browser = modelData.pkg; root.answersChanged() }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                columnSpacing: 14
+                rowSpacing: 14
+
+                Repeater {
+                    // Brand colours only, no logos. Shipping vendor marks is
+                    // fine as nominative use, but the assets have to come from
+                    // each vendor's brand pack under their own terms -- not
+                    // scraped off their site. Drop real icons in here once
+                    // that is checked; the layout does not change.
+                    model: [
+                        { pkg: "zen-browser-bin", name: "Zen",     tint: "#f76f53",
+                          detail: "SakuraOS default. Firefox-based, built around tabs you actually keep." },
+                        { pkg: "firefox",         name: "Firefox", tint: "#ff7139",
+                          detail: "Independent engine. Strong privacy defaults." },
+                        { pkg: "brave",           name: "Brave",   tint: "#fb542b",
+                          detail: "Chromium-based. Blocks ads and trackers by default." },
+                        { pkg: "google-chrome",   name: "Chrome",  tint: "#4285f4",
+                          detail: "Chromium-based, by Google." }
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        readonly property bool picked: root.answers.browser === modelData.pkg
+
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 148
+                        radius: 14
+                        color: picked ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.14)
+                                      : root.card
+                        border.width: picked ? 2 : 1
+                        border.color: picked ? root.accent : root.line
+                        Behavior on color { ColorAnimation { duration: 110 } }
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 8
+
+                            Rectangle {
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 40
+                                radius: 20
+                                color: modelData.tint
+                                QQC2.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.name.charAt(0)
+                                    color: "#ffffff"
+                                    font.pixelSize: 20
+                                    font.weight: Font.DemiBold
+                                }
+                            }
+                            QQC2.Label {
+                                text: modelData.name
+                                color: root.text
+                                font.pixelSize: 16
+                                font.weight: Font.DemiBold
+                            }
+                            QQC2.Label {
+                                text: modelData.detail
+                                color: root.dim
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: { root.answers.browser = modelData.pkg; root.answersChanged() }
+                        }
+                    }
                 }
             }
             Item { Layout.fillHeight: true }
@@ -597,22 +662,19 @@ QQC2.ApplicationWindow {
     Component {
         id: updatesPage
         ColumnLayout {
-            anchors.margins: 40
             spacing: 16
-            Item { Layout.preferredHeight: 22 }
+            Item { Layout.preferredHeight: 34 }
             Heading {
                 title: "Updates"
                 subtitle: "SakuraOS updates continuously rather than in big releases. Falling months behind is riskier than updating often, so this is on by default."
             }
             Choice {
-                Layout.maximumWidth: 560
                 heading: "Install updates automatically"
                 detail: "A restore point is taken first, so a bad update is one reboot from fixed."
                 selected: root.answers.autoUpdate
                 onPicked: { root.answers.autoUpdate = !root.answers.autoUpdate; root.answersChanged() }
             }
             Choice {
-                Layout.maximumWidth: 560
                 heading: "Only install updates that were tested first"
                 detail: "SakuraOS installs and restarts each update on its own machines before offering it to yours."
                 selected: root.answers.canaryOnly
@@ -622,10 +684,14 @@ QQC2.ApplicationWindow {
                 spacing: 12
                 QQC2.Label { text: "Install at"; color: root.dim; font.pixelSize: 13 }
                 Field {
-                    Layout.maximumWidth: 90
-                    text: root.answers.updateTime
+                    Layout.maximumWidth: 92
                     inputMask: "99:99"
-                    onTextChanged: { root.answers.updateTime = text; root.answersChanged() }
+                    // Set once rather than bound: binding text to the answer
+                    // while writing that answer back on every keystroke makes
+                    // the binding re-evaluate itself. Nothing validates this
+                    // field, so committing on edit-finished is enough.
+                    Component.onCompleted: text = root.answers.updateTime
+                    onEditingFinished: root.answers.updateTime = text
                 }
                 QQC2.Label { text: "and only when plugged in"; color: root.dim; font.pixelSize: 13 }
             }
@@ -636,9 +702,8 @@ QQC2.ApplicationWindow {
     Component {
         id: featuresPage
         ColumnLayout {
-            anchors.margins: 40
             spacing: 14
-            Item { Layout.preferredHeight: 22 }
+            Item { Layout.preferredHeight: 34 }
             Heading { title: "What SakuraOS does for you" }
             Repeater {
                 model: [
@@ -649,9 +714,8 @@ QQC2.ApplicationWindow {
                 delegate: Rectangle {
                     required property var modelData
                     Layout.fillWidth: true
-                    Layout.maximumWidth: 600
-                    implicitHeight: c.implicitHeight + 28
-                    radius: 10
+                    implicitHeight: c.implicitHeight + 34
+                    radius: 14
                     color: root.card
                     ColumnLayout {
                         id: c
@@ -681,17 +745,15 @@ QQC2.ApplicationWindow {
     Component {
         id: privacyPage
         ColumnLayout {
-            anchors.margins: 40
             spacing: 16
-            Item { Layout.preferredHeight: 22 }
+            Item { Layout.preferredHeight: 34 }
             Heading { title: "Privacy" }
             ColumnLayout {
-                Layout.maximumWidth: 600
                 spacing: 9
                 Repeater {
                     model: [
-                        "No telemetry is collected, and none is switched on behind your back.",
-                        "Nothing about this machine is sent anywhere unless you ask for it.",
+                        "SakuraOS collects nothing about you or this computer.",
+                        "Nothing is sent anywhere unless you ask for it.",
                         "There is no account to create and nothing to sign in to."
                     ]
                     delegate: RowLayout {
@@ -705,10 +767,24 @@ QQC2.ApplicationWindow {
                     }
                 }
             }
+            QQC2.Label {
+                text: "Help KDE improve Plasma"
+                color: root.text
+                font.pixelSize: 15
+                font.weight: Font.DemiBold
+                topPadding: 8
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: root.dim
+                font.pixelSize: 13
+                text: "This one is not ours. Plasma — the desktop SakuraOS uses — is made by KDE, and they can accept anonymous information about your hardware and which features you use, to find bugs. It goes to KDE, never to SakuraOS, and it is off unless you switch it on here."
+            }
             Choice {
-                Layout.maximumWidth: 600
-                heading: "Send crash reports"
-                detail: "Off unless you turn it on. A distribution that cannot see what breaks cannot fix it — but that is our problem, not a reason to take your data without asking."
+                heading: root.answers.crashReports ? "Sending basic information to KDE"
+                                                   : "Sending nothing to KDE"
+                detail: "You can change this later in System Settings under User Feedback."
                 selected: root.answers.crashReports
                 onPicked: { root.answers.crashReports = !root.answers.crashReports; root.answersChanged() }
             }
@@ -719,9 +795,8 @@ QQC2.ApplicationWindow {
     Component {
         id: installPage
         ColumnLayout {
-            anchors.margins: 40
             spacing: 20
-            Item { Layout.preferredHeight: 40 }
+            Item { Layout.preferredHeight: 48 }
             Heading {
                 title: backend.running ? "Installing SakuraOS"
                      : backend.percent === 100 ? "SakuraOS is installed"
@@ -730,7 +805,6 @@ QQC2.ApplicationWindow {
             }
             Rectangle {
                 Layout.fillWidth: true
-                Layout.maximumWidth: 600
                 Layout.preferredHeight: 6
                 radius: 3
                 color: root.card
@@ -744,7 +818,6 @@ QQC2.ApplicationWindow {
             }
             QQC2.ScrollView {
                 Layout.fillWidth: true
-                Layout.maximumWidth: 600
                 Layout.fillHeight: true
                 visible: backend.log !== ""
                 QQC2.TextArea {
