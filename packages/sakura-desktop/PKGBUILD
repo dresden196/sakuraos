@@ -22,6 +22,10 @@ depends=(
     'linux'
     'linux-firmware'
     'sudo'
+    # systemd fsck's the ESP on every boot because genfstab gives it passno 2.
+    # Without fsck.fat that unit fails, local-fs.target fails, and the machine
+    # drops to emergency mode -- where root is locked, so there is no way in.
+    'dosfstools'
 
     # Boot chain: limine + UKI, with recovery rollback and Secure Boot signing
     'limine'

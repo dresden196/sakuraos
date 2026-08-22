@@ -36,8 +36,25 @@ if awk -v sv="/$SAKURA_ROOT_SUBVOL" '
     exit 1
 fi
 
-STAMP=$(date -u +%Y%m%d-%H%M%S 2>/dev/null || echo manual)
-PREVIOUS="$TOP/@rollback-$STAMP"
+# The initramfs has no date(1), so a timestamp cannot be relied on for
+# uniqueness -- and a fixed fallback name means the second rollback collides
+# with the first and fails halfway. Find a free name instead.
+STAMP=$(date -u +%Y%m%d-%H%M%S 2>/dev/null || true)
+case "$STAMP" in
+    ????????-??????) BASE="$TOP/@rollback-$STAMP" ;;
+    *)               BASE="$TOP/@rollback-from-$NUM" ;;
+esac
+
+PREVIOUS="$BASE"
+_n=1
+while [ -e "$PREVIOUS" ]; do
+    PREVIOUS="$BASE-$_n"
+    _n=$((_n + 1))
+    if [ "$_n" -gt 100 ]; then
+        echo "too many preserved roots at $BASE*; clean some up first" >&2
+        exit 1
+    fi
+done
 
 # Keep the state we are replacing rather than deleting it. If the rollback was
 # the wrong call, the only copy of the "broken" system is the one thing that

@@ -131,6 +131,22 @@ Open: the signing key is still a **development** key. See `keys/README.md`.
 stopped, explained, and told how to override deliberately. Overrides name the
 rule they waive, so a second problem in the same transaction still stops it.
 
-Next: the Sakura Settings module, AUR Assist, and Sakura Updates — designed in
-`docs/settings.md` and `docs/updates.md`. Then the store, and the installer
-last, since its requirements are the most determined by everything else.
+**M4 — Sakura Settings.** A real page in System Settings, bound to
+`/etc/sakura/sakura.conf`, saving through a validating pkexec helper.
+
+**M5 — Install backend, and rollback proven end to end.** `sakura-install`
+lays down the real system: GPT + ESP, btrfs subvolumes, two UKIs, limine,
+snapper. The recovery path has now actually run, not just been unit-tested:
+
+    install -> break /etc/fstab -> reboot hangs -> pick Recovery
+    -> choose "before breaking things" -> restored, 0 failed units
+
+The replaced root is preserved as `@rollback-*` rather than deleted.
+
+Untested: Secure Boot enrollment. `sbctl` runs only when firmware is in Setup
+Mode, and putting OVMF into Setup Mode needs interactive firmware setup.
+`build/test-vm.sh --secboot` exists for when that is worth doing.
+
+Next: Sakura Updates and AUR Assist — designed in `docs/updates.md` and
+`docs/settings.md` — then the store, and the graphical installer, which drives
+`sakura-install` rather than reimplementing it.

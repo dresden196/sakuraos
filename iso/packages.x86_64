@@ -173,6 +173,7 @@ sakura-branding
 sakura-settings-core
 sakura-terminal-assist
 sakura-settings-kcm
+sakura-install
 
 # --- SakuraOS target-system tooling ----------------------------------------
 # Present on the live media because the installer drives them. btrfs-progs,
