@@ -485,10 +485,12 @@ QQC2.ApplicationWindow {
             Item { Layout.preferredHeight: 22 }
             Heading { title: "Create your account" }
 
-            RowLayout {
+            Flow {
+                Layout.fillWidth: true
+                Layout.maximumWidth: 620
                 spacing: 10
                 Repeater {
-                    model: backend.avatars().slice(0, 8)
+                    model: backend.avatars()
                     delegate: Rectangle {
                         required property string modelData
                         width: 54; height: 54; radius: 27
@@ -509,6 +511,8 @@ QQC2.ApplicationWindow {
                         }
                     }
                 }
+            }
+            RowLayout {
                 QQC2.Button {
                     text: "Choose a photo…"
                     padding: 9
