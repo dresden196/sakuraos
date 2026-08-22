@@ -1,0 +1,35 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+pkgname=sakura-settings-kcm
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SakuraOS page in System Settings"
+arch=('x86_64')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+depends=(
+    'sakura-settings-core'
+    'kcmutils'
+    'kconfig'
+    'ki18n'
+    'kirigami'
+    'qt6-declarative'
+    'polkit'
+    'python'
+)
+makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools')
+
+# The source tree lives beside the PKGBUILD in the monorepo. makepkg owns
+# $srcdir, so the tree is kept in kcm/ and copied in rather than being named
+# src/ and colliding with it.
+build() {
+    cp -r "$startdir/kcm" "$srcdir/kcm-src"
+    cmake -S "$srcdir/kcm-src" -B "$srcdir/build" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DBUILD_TESTING=OFF
+    cmake --build "$srcdir/build" --parallel
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+}

@@ -56,8 +56,16 @@ docker run --rm \
         WORK=/home/builder/work
         install -d -o builder -g builder "$WORK"
 
+        FAILED=""
+
         # Local packages first: the AUR rebuilds and the meta package depend on
         # them, and makepkg resolves dependencies against the repo as it grows.
+        #
+        # --nodeps is required because sakura-desktop is a meta package whose
+        # runtime dependencies include packages this very run is building. But
+        # --nodeps also skips installing makedepends, so those are installed
+        # explicitly first -- otherwise anything needing a compiler fails with
+        # "cmake: command not found".
         for dir in /build/packages/*/; do
             name=$(basename "$dir")
             [[ "$name" == "aur" ]] && continue
@@ -65,15 +73,41 @@ docker run --rm \
             echo ">>> building $name"
             cp -r "$dir" "$WORK/$name"
             chown -R builder:builder "$WORK/$name"
-            su builder -c "cd $WORK/$name && GNUPGHOME=/home/builder/.gnupg \
-                makepkg --syncdeps --noconfirm --clean --sign --key $SIGNER \
-                        --nodeps --skipinteg"
+
+            # Compiled packages need their runtime libraries present at build
+            # time too, so depends and makedepends are both installed. Anything
+            # this run is still building will not be in the sync database yet
+            # (sakura-desktop depends on its siblings), so unavailable names are
+            # filtered out rather than allowed to fail the whole install.
+            wanted=$(cd "$WORK/$name" && bash -c \
+                '"'"'source ./PKGBUILD 2>/dev/null
+                   printf "%s\n" "${makedepends[@]:-}" "${depends[@]:-}"'"'"' \
+                | sed '"'"'s/[<>=].*//'"'"' | grep -v "^$" | sort -u || true)
+
+            install_list=""
+            for dep in $wanted; do
+                pacman -Si "$dep" >/dev/null 2>&1 && install_list="$install_list $dep"
+            done
+            if [[ -n "$install_list" ]]; then
+                echo ">>>   build deps:$install_list"
+                pacman -S --needed --noconfirm --asdeps $install_list >/dev/null
+            fi
+
+            # One broken package must not silently take the whole repo down
+            # with it -- the same reasoning as the AUR rebuilds below.
+            if su builder -c "cd $WORK/$name && GNUPGHOME=/home/builder/.gnupg \
+                    makepkg --noconfirm --clean --sign --key $SIGNER \
+                            --nodeps --skipinteg"; then
+                echo ">>> $name ok"
+            else
+                echo ">>> $name FAILED"
+                FAILED="$FAILED $name"
+            fi
         done
 
         # An AUR package breaking upstream must not take the whole repo down
         # with it. Record the failure, publish everything that did build, and
         # report at the end -- a half-built repo you know about beats no repo.
-        FAILED=""
         while read -r pkg; do
             [[ -z "$pkg" || "$pkg" == \#* ]] && continue
             echo ">>> rebuilding AUR package $pkg"
