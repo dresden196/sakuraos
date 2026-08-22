@@ -12,14 +12,17 @@ arch=('any')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
 depends=('python' 'sakura-settings-core')
-source=('alpm-check' '00-sakura-terminal-assist.hook' 'profile.sh')
-sha256sums=('SKIP' 'SKIP' 'SKIP')
+install="$pkgname.install"
+source=('alpm-check' '00-sakura-terminal-assist.hook' 'terminal-assist.sh' 'profile.d.sh')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/alpm-check" \
         "$pkgdir/usr/lib/sakura/terminal-assist/alpm-check"
     install -Dm644 "$srcdir/00-sakura-terminal-assist.hook" \
         "$pkgdir/usr/share/libalpm/hooks/00-sakura-terminal-assist.hook"
-    install -Dm644 "$srcdir/profile.sh" \
+    install -Dm644 "$srcdir/terminal-assist.sh" \
+        "$pkgdir/usr/share/sakura/terminal-assist.sh"
+    install -Dm644 "$srcdir/profile.d.sh" \
         "$pkgdir/etc/profile.d/sakura-terminal-assist.sh"
 }

@@ -8,8 +8,21 @@
 # it runs before every interactive command. Spawning a helper here would add
 # latency to every prompt, and a safety feature people turn off is worth zero.
 
+# Sourced from both /etc/profile.d (login shells) and /etc/bash.bashrc
+# (interactive non-login shells, which is what a terminal window in a desktop
+# session actually is). A login shell hits both, so guard against loading the
+# hooks twice and stacking two DEBUG traps.
+[ -n "${SAKURA_ASSIST_LOADED:-}" ] && return 0
+SAKURA_ASSIST_LOADED=1
+
 [ -n "${BASH_VERSION:-}${ZSH_VERSION:-}" ] || return 0
-case $- in *i*) ;; *) return 0 ;; esac
+# Only interactive shells: scripts and system units must not be second-guessed
+# by a warning nobody is there to read. __sakura_force_interactive exists so
+# the matcher can be exercised by tests, which do not run on a terminal.
+case $- in
+    *i*) ;;
+    *) [ -n "${__sakura_force_interactive:-}" ] || return 0 ;;
+esac
 
 sakura_assist_mode() {
     # Cheap inline parse; this file is small and read rarely enough that the
@@ -116,4 +129,50 @@ if [ -n "${ZSH_VERSION:-}" ]; then
         sakura_assist_preexec "$1" || { kill -INT $$ 2>/dev/null; }
     }
     add-zsh-hook preexec sakura_assist_zsh_preexec 2>/dev/null
+
+elif [ -n "${BASH_VERSION:-}" ]; then
+    # bash has no preexec, so this is built from the DEBUG trap. Two details
+    # matter and both are easy to get wrong:
+    #
+    # extdebug is what gives the trap any power at all -- without it a
+    # non-zero return is ignored and the command runs anyway, which would
+    # make every warning here purely decorative.
+    #
+    # The DEBUG trap fires for every command, including each one inside a
+    # function, a loop, or a pipeline. Checking all of them would be slow and
+    # would warn repeatedly about a single typed line. The armed flag, reset
+    # from PROMPT_COMMAND, limits this to the first command after each prompt
+    # -- which is the line the user actually typed.
+    __sakura_assist_armed=0
+    __sakura_assist_arm() {
+        # extdebug must NOT be set here at startup: bash documents that
+        # enabling it "at shell invocation, or in a shell startup file" makes
+        # it try to run the bashdb debugger profile. That fails on a system
+        # without bashdb, prints a warning, and bash then turns extdebug back
+        # off -- leaving a DEBUG trap that can warn but cannot actually stop
+        # anything. Setting it from the first prompt, after startup has
+        # finished, avoids the debugger path entirely.
+        if [ -z "${__sakura_assist_ready:-}" ]; then
+            shopt -s extdebug
+            __sakura_assist_ready=1
+        fi
+        __sakura_assist_armed=1
+    }
+
+    # bash 5.1+ allows PROMPT_COMMAND to be an array; appending to it as a
+    # string in that case silently does nothing.
+    if [ "$(declare -p PROMPT_COMMAND 2>/dev/null | cut -c1-10)" = "declare -a" ]; then
+        PROMPT_COMMAND+=(__sakura_assist_arm)
+    else
+        PROMPT_COMMAND="__sakura_assist_arm${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+    fi
+
+    __sakura_assist_debug() {
+        [ "$__sakura_assist_armed" = 1 ] || return 0
+        # Tab completion runs commands through the same trap.
+        [ -n "${COMP_LINE:-}" ] && return 0
+        __sakura_assist_armed=0
+        sakura_assist_preexec "$BASH_COMMAND"
+    }
+    trap '__sakura_assist_debug' DEBUG
 fi
