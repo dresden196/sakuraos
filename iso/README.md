@@ -42,6 +42,11 @@ left inert, so there is no ambiguity about which stack is live.
 `snap-pac`, `pacman-contrib` — present because the installer drives them, not
 because the live session needs them.
 
+**Installer autostart.** `airootfs/etc/xdg/autostart` launches the installer
+when the live session comes up. It lives in the ISO profile rather than in the
+`sakura-installer` package because an installed system must not greet its
+owner with a disk-erasing wizard at every login.
+
 ## Deliberately not changed
 
 **Screen resolution in VMs is not an ISO problem.** Under QEMU the guest comes

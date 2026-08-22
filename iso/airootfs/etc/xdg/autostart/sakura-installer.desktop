@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Install SakuraOS
+Exec=sakura-installer
+Icon=system-software-install
+Terminal=false
+NoDisplay=true
+X-KDE-autostart-phase=2
