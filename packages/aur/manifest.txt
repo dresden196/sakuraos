@@ -23,3 +23,12 @@
 # asking for -dkms separately clones an empty AUR repo and fails with
 # "PKGBUILD does not exist" even though the package was already built.
 nvidia-580xx-utils
+
+# Snap support. snapd is not in Arch's repositories, so a store backend for it
+# would otherwise require the user to enable the AUR -- the very thing the
+# store exists to gate. Rebuilt here so Snap works without that loop.
+#
+# This is a standing commitment: we maintain snapd on Arch, including the
+# parts of its confinement that depend on AppArmor policies Arch does not
+# carry, which makes Snap sandboxing here weaker than it is on Ubuntu.
+snapd
