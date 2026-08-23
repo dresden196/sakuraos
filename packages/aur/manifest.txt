@@ -32,3 +32,9 @@ nvidia-580xx-utils
 # parts of its confinement that depend on AppArmor policies Arch does not
 # carry, which makes Snap sandboxing here weaker than it is on Ubuntu.
 snapd
+
+# AppImage delta updates. Arch's zsync is 0.6.6, which predates widespread
+# HTTPS and cannot read a control file over it -- and every real AppImage
+# update URL is https, so the packaged tool cannot update anything. zsync2 is
+# the maintained rewrite that speaks it.
+zsync2
