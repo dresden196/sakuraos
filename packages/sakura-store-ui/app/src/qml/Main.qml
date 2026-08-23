@@ -255,8 +255,9 @@ QQC2.ApplicationWindow {
                 implicitHeight: 66
                 color: root.bg
                 RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 26; anchors.rightMargin: 26
+                    anchors.centerIn: parent
+                    width: Math.min(940, parent.width) - 52
+                    height: parent.height
                     spacing: 12
                     QQC2.Button {
                         visible: root.view === "app"
@@ -309,7 +310,8 @@ QQC2.ApplicationWindow {
                     implicitHeight: pageLoader.implicitHeight
                 Loader {
                     id: pageLoader
-                    width: parent.width
+                    width: Math.min(940, parent.width)
+                    anchors.horizontalCenter: parent.horizontalCenter
                     sourceComponent: root.view === "app" ? appPage
                                    : root.view === "results" ? resultsPage
                                    : root.view === "installed" ? installedPage
@@ -575,9 +577,20 @@ QQC2.ApplicationWindow {
                         color: root.text; font.pixelSize: 32; font.weight: Font.Light
                         wrapMode: Text.WordWrap
                     }
-                    QQC2.Label {
-                        text: parent.parent.parent.a.developer || ""
-                        color: root.accent; font.pixelSize: 15
+                    RowLayout {
+                        spacing: 14
+                        QQC2.Label {
+                            text: parent.parent.parent.parent.a.developer || ""
+                            color: root.accent; font.pixelSize: 15
+                        }
+                        QQC2.Label {
+                            visible: !!parent.parent.parent.parent.a.rating
+                            text: root.stars(parent.parent.parent.parent.a.rating) + "  "
+                                  + (parent.parent.parent.parent.a.rating || "")
+                                  + "  ·  " + (parent.parent.parent.parent.a.rating_count || 0)
+                                  + " reviews"
+                            color: root.dim; font.pixelSize: 14
+                        }
                     }
                     QQC2.Label {
                         Layout.fillWidth: true
@@ -595,6 +608,9 @@ QQC2.ApplicationWindow {
                         }
                         Action {
                             text: "Permissions"; quiet: true
+                            // Meaningless for an app that is not installed --
+                            // there is no sandbox to adjust yet.
+                            visible: !!parent.parent.parent.parent.a.installed
                             onClicked: backend.openPermissions(parent.parent.parent.parent.a.id)
                         }
                         Chip {
