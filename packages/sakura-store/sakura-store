@@ -321,6 +321,70 @@ def read_config() -> dict:
 # --------------------------------------------------------------------------
 # commands
 # --------------------------------------------------------------------------
+def cmd_install(args) -> int:
+    import transaction as tx
+    with tx.transaction_lock():
+        if args.source == "flatpak":
+            rc = tx.install_flatpak(args.id)
+        elif args.source == "snap":
+            rc = tx.install_snap(args.id)
+        elif args.source == "appimage":
+            if not args.url:
+                tx.emit(tx.FAILED, error="--url is required for an AppImage.")
+                return 2
+            rc = tx.install_appimage(args.url, args.id, args.sha256 or "")
+        elif args.source == "aur":
+            rc = tx.install_aur(args.id)
+        else:
+            tx.emit(tx.FAILED, error=f"Unknown source: {args.source}")
+            return 2
+    if rc == 0:
+        tx.emit(tx.DONE, app=args.id, source=args.source)
+    return rc
+
+
+def cmd_remove(args) -> int:
+    import transaction as tx
+    with tx.transaction_lock():
+        if args.source == "flatpak":
+            rc = tx.remove_flatpak(args.id)
+        elif args.source == "snap":
+            rc = tx.remove_snap(args.id)
+        elif args.source == "appimage":
+            import appimage
+            path = appimage.APPS / f"{args.id}.AppImage"
+            desktop = (appimage.DESKTOP / f"sakura-appimage-{args.id}.desktop")
+            path.unlink(missing_ok=True)
+            desktop.unlink(missing_ok=True)
+            rc = 0
+        else:
+            tx.emit(tx.FAILED, error=f"Unknown source: {args.source}")
+            return 2
+    if rc == 0:
+        tx.emit(tx.DONE, app=args.id, source=args.source)
+    return rc
+
+
+def cmd_installed(args) -> int:
+    import appimage
+    rows = []
+    for s in SOURCES:
+        if not s.available():
+            continue
+        for sid, ver in s.installed().items():
+            rows.append({"source": s.name, "id": sid, "version": ver})
+    for a in appimage.installed():
+        rows.append({"source": "appimage", "id": a["name"],
+                     "version": "", "updatable": a["updatable"]})
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    for r in rows:
+        note = "" if r.get("updatable", True) else "   (cannot self-update)"
+        print(f"  {r['source']:<9} {r['id']}{note}")
+    return 0
+
+
 def cmd_sources(args) -> int:
     for s in SOURCES:
         state = "available" if s.available() else "unavailable"
@@ -373,6 +437,22 @@ def main() -> int:
 
     v = sub.add_parser("sources")
     v.set_defaults(fn=cmd_sources)
+
+    i = sub.add_parser("install")
+    i.add_argument("id")
+    i.add_argument("--source", required=True)
+    i.add_argument("--url", help="for appimage")
+    i.add_argument("--sha256", help="for appimage")
+    i.set_defaults(fn=cmd_install)
+
+    r = sub.add_parser("remove")
+    r.add_argument("id")
+    r.add_argument("--source", required=True)
+    r.set_defaults(fn=cmd_remove)
+
+    l = sub.add_parser("installed")
+    l.add_argument("--json", action="store_true")
+    l.set_defaults(fn=cmd_installed)
 
     args = p.parse_args()
     return args.fn(args)
