@@ -118,6 +118,15 @@ docker run --rm \
                && su builder -c "cd $WORK/$pkg && GNUPGHOME=/home/builder/.gnupg \
                     makepkg --syncdeps --noconfirm --clean --sign --key $SIGNER"; then
                 echo ">>> $pkg ok"
+                # Install what we just built into the build container. Some AUR
+                # packages depend on other AUR packages -- zsync2 needs cpr and
+                # args, neither of which is in any repo -- and makepkg
+                # --syncdeps can only resolve from repositories, so without
+                # this the dependent package fails with "target not found" no
+                # matter what order the manifest is in. The container is
+                # thrown away at the end of the build.
+                pacman -U --noconfirm --asdeps --needed \
+                    "$WORK/$pkg"/*.pkg.tar.zst >/dev/null 2>&1 || true
             else
                 echo ">>> $pkg FAILED"
                 FAILED="$FAILED $pkg"

@@ -215,6 +215,37 @@ sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect microcode modconf kms keyboard k
     /mnt/etc/mkinitcpio.conf
 sed -i 's/^MODULES=.*/MODULES=(btrfs)/' /mnt/etc/mkinitcpio.conf
 
+# pacstrap copies the live media's pacman.conf into the target, and that file
+# defines [sakura-core] against file:///usr/share/sakura/repo -- a path that
+# exists only on the ISO. sakura-branding then adds the network definition via
+# an Include, so the installed system declares the same repository twice and
+# every pacman run reports "could not register 'sakura-core' database
+# (database already registered)" while also pointing at a directory that is
+# not there. Drop the on-media block and let the Include be the only one.
+python3 - <<'PYCONF'
+import pathlib, sys
+p = pathlib.Path("/mnt/etc/pacman.conf")
+out, in_block, kept_include = [], False, False
+for line in p.read_text().splitlines(keepends=True):
+    stripped = line.strip()
+    if stripped.startswith("["):
+        in_block = stripped == "[sakura-core]"
+    if in_block:
+        # Anything sakura-branding appended lives on an Include line; keep it,
+        # drop the on-media Server and the duplicate section header.
+        if stripped.startswith("Include"):
+            out.append(line)
+            kept_include = True
+        continue
+    out.append(line)
+text = "".join(out)
+if text.count("[sakura-core]") or not kept_include:
+    print("pacman.conf de-duplication did not produce the expected result",
+          file=sys.stderr)
+    sys.exit(1)
+p.write_text(text)
+PYCONF
+
 arch-chroot /mnt /bin/bash -euo pipefail <<CHROOT
 locale-gen >/dev/null
 

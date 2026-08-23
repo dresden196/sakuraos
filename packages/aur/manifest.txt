@@ -33,6 +33,12 @@ nvidia-580xx-utils
 # carry, which makes Snap sandboxing here weaker than it is on Ubuntu.
 snapd
 
+# Build dependencies of zsync2, both AUR-only. They are listed ahead of it
+# because the build installs each package as it is produced, so order here is
+# the dependency order.
+args
+cpr
+
 # AppImage delta updates. Arch's zsync is 0.6.6, which predates widespread
 # HTTPS and cannot read a control file over it -- and every real AppImage
 # update URL is https, so the packaged tool cannot update anything. zsync2 is

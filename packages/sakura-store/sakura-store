@@ -154,6 +154,56 @@ class FlatpakSource(Source):
         return out
 
 
+class RepoSource(Source):
+    """Arch's own repositories.
+
+    The most obviously missing source on an Arch-based distribution: GIMP,
+    for one, is in extra and not in the AUR at all, so a store without this
+    simply could not find it. Reviewed, signed, built against the system
+    libraries, and updated by the same engine that handles everything else --
+    which is why the documented priority puts it ahead of Flatpak.
+    """
+    name = "repo"
+    label = "SakuraOS"
+
+    def available(self) -> bool:
+        return bool(run(["pacman", "--version"]))
+
+    def installed(self) -> dict[str, str]:
+        out = run(["pacman", "-Qn"])
+        return {l.split()[0]: l.split()[1]
+                for l in out.splitlines() if len(l.split()) == 2}
+
+    def search(self, query: str) -> list[App]:
+        out = run(["pacman", "-Ss", query])
+        have = self.installed()
+        apps: list[App] = []
+        header = None
+        for line in out.splitlines():
+            if not line.startswith((" ", "\t")):
+                # "extra/gimp 3.2.4-2 [installed]"
+                parts = line.split()
+                if not parts or "/" not in parts[0]:
+                    header = None
+                    continue
+                repo, _, pkg = parts[0].partition("/")
+                header = App(
+                    id=pkg, name=pkg, source=self.name, source_id=pkg,
+                    installed=pkg in have,
+                    version=have.get(pkg) or (parts[1] if len(parts) > 1 else ""),
+                    developer=repo,
+                )
+                apps.append(header)
+            elif header is not None:
+                header.summary = line.strip()
+                header = None
+        # pacman -Ss matches descriptions too, so a bare query can return
+        # hundreds. Name matches first, then the rest.
+        q = query.lower()
+        apps.sort(key=lambda a: (q not in a.name.lower(), a.name))
+        return apps[:25]
+
+
 class AurSource(Source):
     name = "aur"
     label = "AUR"
@@ -225,7 +275,7 @@ class SnapSource(Source):
         return out
 
 
-SOURCES = [FlatpakSource(), AurSource(), SnapSource()]
+SOURCES = [RepoSource(), FlatpakSource(), AurSource(), SnapSource()]
 
 
 # --------------------------------------------------------------------------
@@ -325,6 +375,61 @@ def read_config() -> dict:
 # --------------------------------------------------------------------------
 # commands
 # --------------------------------------------------------------------------
+def collection(name: str, limit: int = 12) -> list[App]:
+    """A real Flathub collection: popular, trending, recently-updated.
+
+    The front page previously ran a search for the word "editor" and labelled
+    the result "Popular right now", which was simply untrue. These endpoints
+    are what Flathub actually ranks by.
+    """
+    data = fetch(f"{FLATHUB_API}/collection/{name}?page=1&per_page={limit}",
+                 {}, tag="Flathub")
+    hits = (data.get("hits") if isinstance(data, dict) else None) or []
+    have = FlatpakSource().installed()
+    out = []
+    for h in hits:
+        app_id = h.get("app_id") or h.get("id") or ""
+        if not app_id:
+            continue
+        out.append(App(
+            id=app_id, name=h.get("name") or app_id,
+            summary=h.get("summary") or "",
+            developer=h.get("developer_name") or "",
+            icon=h.get("icon") or "",
+            source="flatpak", source_id=app_id,
+            installed=app_id in have, version=have.get(app_id, ""),
+            popularity={"installs": h.get("installs_last_month")}
+                        if h.get("installs_last_month") else {},
+        ))
+    return out
+
+
+def find_elsewhere(app_id: str, name: str) -> list[dict]:
+    """The same application from other sources.
+
+    Namespaces do not line up -- Flatpak uses reverse-DNS, the AUR and Snap
+    use bare names -- so the last component of the id is tried alongside the
+    display name. This is a heuristic and is presented as one: the app page
+    offers what it found rather than asserting they are the same build.
+    """
+    stem = app_id.rsplit(".", 1)[-1].lower()
+    words = {stem, name.lower().split()[0]} if name else {stem}
+    found = []
+    for src in SOURCES:
+        if src.name == "flatpak" or not src.available():
+            continue
+        try:
+            for hit in src.search(stem):
+                if hit.source_id.lower() in words or hit.name.lower() in words:
+                    found.append({"source": src.name, "id": hit.source_id,
+                                  "version": hit.version,
+                                  "popularity": hit.popularity})
+                    break
+        except Exception:
+            continue
+    return found
+
+
 def app_detail(app_id: str) -> dict:
     """Everything the app page needs, in one call.
 
@@ -361,10 +466,19 @@ def app_detail(app_id: str) -> dict:
 
     installed_here = FlatpakSource().installed()
 
+    releases = d.get("releases") or []
+    latest = releases[0] if releases else {}
+
     return {
         "id": app_id,
         "installed": app_id in installed_here,
-        "version": installed_here.get(app_id, ""),
+        # The version installed, and the version on offer. Showing only one of
+        # them leaves the user unable to tell whether they are behind.
+        "installed_version": installed_here.get(app_id, ""),
+        "version": latest.get("version") or "",
+        "released": latest.get("timestamp") or 0,
+        "source": (d.get("bundle") or {}).get("type") or "flatpak",
+        "also_from": find_elsewhere(app_id, d.get("name") or ""),
         "name": d.get("name") or app_id,
         "summary": d.get("summary") or "",
         # Flathub returns HTML; the interface renders it rather than showing
@@ -403,6 +517,18 @@ def odrs_reviews(app_id: str, limit: int = 8) -> list:
             "version": r.get("version") or "",
         })
     return out
+
+
+def cmd_collection(args) -> int:
+    apps = collection(args.name, args.limit)
+    attach_ratings(apps)
+    if args.json:
+        print(json.dumps({"apps": [asdict(a) for a in apps],
+                          "unavailable": FAILURES}, indent=2))
+        return 0
+    for a in apps:
+        print(f"  {a.name}" + (f"   {a.rating}★" if a.rating else ""))
+    return 0
 
 
 def cmd_info(args) -> int:
@@ -550,6 +676,13 @@ def main() -> int:
     r.add_argument("id")
     r.add_argument("--source", required=True)
     r.set_defaults(fn=cmd_remove)
+
+    c = sub.add_parser("collection")
+    c.add_argument("name", choices=["popular", "trending",
+                                    "recently-updated", "recently-added"])
+    c.add_argument("--limit", type=int, default=12)
+    c.add_argument("--json", action="store_true")
+    c.set_defaults(fn=cmd_collection)
 
     n = sub.add_parser("info")
     n.add_argument("id")

@@ -19,6 +19,7 @@ class Backend : public QObject
     Q_PROPERTY(bool loadingApp READ loadingApp NOTIFY stateChanged)
     Q_PROPERTY(QVariantList results READ results NOTIFY resultsChanged)
     Q_PROPERTY(QVariantList featured READ featured NOTIFY featuredChanged)
+    Q_PROPERTY(QVariantList popular READ popular NOTIFY featuredChanged)
     Q_PROPERTY(QVariantMap app READ app NOTIFY appChanged)
     Q_PROPERTY(QVariantMap unavailable READ unavailable NOTIFY resultsChanged)
     Q_PROPERTY(QString stage READ stage NOTIFY progressChanged)
@@ -34,6 +35,7 @@ public:
     bool loadingApp() const { return m_loadingApp; }
     QVariantList results() const { return m_results; }
     QVariantList featured() const { return m_featured; }
+    QVariantList popular() const { return m_popular; }
     QVariantMap app() const { return m_app; }
     QVariantMap unavailable() const { return m_unavailable; }
     QString stage() const { return m_stage; }
@@ -59,7 +61,9 @@ Q_SIGNALS:
 private:
     QProcess *run(const QStringList &args);
 
-    QVariantList m_results, m_featured;
+    void loadCollection(const QString &name, int limit, QVariantList &into);
+
+    QVariantList m_results, m_featured, m_popular;
     QVariantMap m_app, m_unavailable;
     QString m_stage, m_detail, m_error;
     int m_percent = 0;

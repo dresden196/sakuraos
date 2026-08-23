@@ -40,6 +40,20 @@ QQC2.ApplicationWindow {
     }
 
     // ---- shared -----------------------------------------------------------
+    // Where a package comes from is the single most consequential fact about
+    // it -- sandboxing, update path and trust model all follow from it -- so
+    // it gets a name and a colour rather than being left implicit.
+    function sourceLabel(s) {
+        return ({ repo: "SakuraOS", flatpak: "Flatpak",
+                  aur: "AUR", appimage: "AppImage", snap: "Snap" })[s] || s || ""
+    }
+    function sourceTint(s) {
+        // AUR is deliberately the only warm one: it is the only source that
+        // builds unreviewed code on the user's machine.
+        return ({ repo: root.accent, flatpak: "#4a90d9", aur: "#d98c3f",
+                  appimage: "#8e7cc3", snap: "#7ea67e" })[s] || root.dim
+    }
+
     component Chip : Rectangle {
         property string label
         property color tint: root.dim
@@ -117,6 +131,24 @@ QQC2.ApplicationWindow {
                 Item { Layout.fillHeight: true }
                 RowLayout {
                     spacing: 8
+                    // Which source a result came from, before you click it --
+                    // otherwise two identically-named rows are indistinguishable.
+                    Rectangle {
+                        visible: !!appData.source
+                        implicitWidth: sl.implicitWidth + 12
+                        implicitHeight: 17
+                        radius: 4
+                        color: Qt.rgba(root.sourceTint(appData.source).r,
+                                       root.sourceTint(appData.source).g,
+                                       root.sourceTint(appData.source).b, 0.16)
+                        QQC2.Label {
+                            id: sl
+                            anchors.centerIn: parent
+                            text: root.sourceLabel(appData.source)
+                            color: root.sourceTint(appData.source)
+                            font.pixelSize: 10; font.weight: Font.DemiBold
+                        }
+                    }
                     QQC2.Label {
                         visible: !!appData.rating
                         text: root.stars(appData.rating) + "  " + (appData.rating || "")
@@ -196,7 +228,10 @@ QQC2.ApplicationWindow {
                         font.letterSpacing: 1.4
                     }
                     Repeater {
+                        // Listed in the same order the engine resolves them,
+                        // so the sidebar reads as the priority it actually is.
                         model: [{k: "all", n: "Everything"},
+                                {k: "repo", n: "SakuraOS"},
                                 {k: "flatpak", n: "Flatpak"},
                                 {k: "appimage", n: "AppImage"},
                                 {k: "snap", n: "Snap"},
@@ -461,7 +496,7 @@ QQC2.ApplicationWindow {
                     Layout.preferredHeight: implicitHeight
                     spacing: 13
                     Repeater {
-                        model: backend.featured
+                        model: backend.popular
                         delegate: Tile {
                             required property var modelData
                             appData: modelData
@@ -544,6 +579,13 @@ QQC2.ApplicationWindow {
     Component {
         id: appPage
         ColumnLayout {
+            // The instantiated item needs its own id: `appPage` names the
+            // Component, which has no property `a`, so bindings through it
+            // threw a TypeError and QML silently left every `visible` at its
+            // default of true -- an empty source chip, an "Installed" badge on
+            // an app that is not installed, and an "Also available from"
+            // heading with nothing under it.
+            id: appRoot
             spacing: 22
             property var a: backend.app
 
@@ -555,7 +597,7 @@ QQC2.ApplicationWindow {
 
             // header
             RowLayout {
-                visible: !backend.loadingApp && !!parent.a.id
+                visible: !backend.loadingApp && !!appRoot.a.id
                 Layout.fillWidth: true
                 Layout.leftMargin: 26; Layout.rightMargin: 26
                 Layout.topMargin: 8
@@ -563,7 +605,7 @@ QQC2.ApplicationWindow {
                 Image {
                     Layout.preferredWidth: 96; Layout.preferredHeight: 96
                     Layout.alignment: Qt.AlignTop
-                    source: parent.parent.a.icon || ""
+                    source: appRoot.a.icon || ""
                     sourceSize: Qt.size(192, 192)
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
@@ -573,30 +615,73 @@ QQC2.ApplicationWindow {
                     spacing: 7
                     QQC2.Label {
                         Layout.fillWidth: true
-                        text: parent.parent.parent.a.name || ""
+                        text: appRoot.a.name || ""
                         color: root.text; font.pixelSize: 32; font.weight: Font.Light
                         wrapMode: Text.WordWrap
                     }
                     RowLayout {
                         spacing: 14
                         QQC2.Label {
-                            text: parent.parent.parent.parent.a.developer || ""
+                            text: appRoot.a.developer || ""
                             color: root.accent; font.pixelSize: 15
                         }
                         QQC2.Label {
-                            visible: !!parent.parent.parent.parent.a.rating
-                            text: root.stars(parent.parent.parent.parent.a.rating) + "  "
-                                  + (parent.parent.parent.parent.a.rating || "")
-                                  + "  ·  " + (parent.parent.parent.parent.a.rating_count || 0)
+                            visible: !!appRoot.a.rating
+                            text: root.stars(appRoot.a.rating) + "  "
+                                  + (appRoot.a.rating || "")
+                                  + "  ·  " + (appRoot.a.rating_count || 0)
                                   + " reviews"
                             color: root.dim; font.pixelSize: 14
                         }
                     }
                     QQC2.Label {
                         Layout.fillWidth: true
-                        text: parent.parent.parent.a.summary || ""
+                        text: appRoot.a.summary || ""
                         color: root.dim; font.pixelSize: 15
                         wrapMode: Text.WordWrap
+                    }
+                    // What you are actually about to install.
+                    RowLayout {
+                        Layout.topMargin: 2
+                        spacing: 10
+                        Chip {
+                            label: root.sourceLabel(appRoot.a.source)
+                            tint: root.sourceTint(appRoot.a.source)
+                            visible: !!appRoot.a.source
+                        }
+                        QQC2.Label {
+                            visible: !!appRoot.a.version
+                            // The installed version is the one that matters
+                            // when the two differ; say which is which.
+                            text: appRoot.a.installed && appRoot.a.installed_version
+                                  && appRoot.a.installed_version !== appRoot.a.version
+                                  ? appRoot.a.installed_version + "  →  " + appRoot.a.version
+                                  : (appRoot.a.version || "")
+                            color: root.dim; font.pixelSize: 14
+                        }
+                        QQC2.Label {
+                            visible: !!appRoot.a.installed
+                            text: "Installed"
+                            color: root.accent; font.pixelSize: 14; font.weight: Font.DemiBold
+                        }
+                    }
+                    // Cross-source matching is a heuristic on package names,
+                    // so it is offered rather than asserted.
+                    RowLayout {
+                        visible: (appRoot.a.also_from || []).length > 0
+                        spacing: 8
+                        QQC2.Label {
+                            text: "Also available from"
+                            color: root.dim; font.pixelSize: 13
+                        }
+                        Repeater {
+                            model: appRoot.a.also_from || []
+                            Chip {
+                                label: root.sourceLabel(modelData.source)
+                                      + (modelData.version ? "  " + modelData.version : "")
+                                tint: root.sourceTint(modelData.source)
+                            }
+                        }
                     }
                     RowLayout {
                         spacing: 12
@@ -604,18 +689,18 @@ QQC2.ApplicationWindow {
                         Action {
                             text: backend.busy ? "Installing…" : "Install"
                             enabled: !backend.busy
-                            onClicked: backend.install(parent.parent.parent.parent.a.id, "flatpak")
+                            onClicked: backend.install(appRoot.a.id, appRoot.a.source || "flatpak")
                         }
                         Action {
                             text: "Permissions"; quiet: true
                             // Meaningless for an app that is not installed --
                             // there is no sandbox to adjust yet.
-                            visible: !!parent.parent.parent.parent.a.installed
-                            onClicked: backend.openPermissions(parent.parent.parent.parent.a.id)
+                            visible: !!appRoot.a.installed
+                            onClicked: backend.openPermissions(appRoot.a.id)
                         }
                         Chip {
-                            visible: !!parent.parent.parent.parent.a.license
-                            label: parent.parent.parent.parent.a.license || ""
+                            visible: !!appRoot.a.license
+                            label: appRoot.a.license || ""
                         }
                     }
                 }
@@ -662,7 +747,7 @@ QQC2.ApplicationWindow {
 
             // screenshots
             ColumnLayout {
-                visible: (parent.a.screenshots || []).length > 0
+                visible: (appRoot.a.screenshots || []).length > 0
                 Layout.fillWidth: true
                 spacing: 11
                 QQC2.Label {
@@ -678,7 +763,7 @@ QQC2.ApplicationWindow {
                         spacing: 14
                         leftPadding: 26; rightPadding: 26
                         Repeater {
-                            model: parent.parent.parent.a.screenshots || []
+                            model: appRoot.a.screenshots || []
                             delegate: Rectangle {
                                 required property var modelData
                                 width: 470; height: 280
@@ -697,11 +782,11 @@ QQC2.ApplicationWindow {
 
             // description
             QQC2.Label {
-                visible: !!parent.a.description
+                visible: !!appRoot.a.description
                 Layout.fillWidth: true
                 Layout.leftMargin: 26; Layout.rightMargin: 26
                 Layout.maximumWidth: 720
-                text: parent.a.description || ""
+                text: appRoot.a.description || ""
                 textFormat: Text.RichText
                 color: root.dim; font.pixelSize: 15
                 wrapMode: Text.WordWrap
@@ -710,7 +795,7 @@ QQC2.ApplicationWindow {
 
             // ratings and reviews
             ColumnLayout {
-                visible: !!parent.a.rating || (parent.a.reviews || []).length > 0
+                visible: !!appRoot.a.rating || (appRoot.a.reviews || []).length > 0
                 Layout.fillWidth: true
                 Layout.leftMargin: 26; Layout.rightMargin: 26
                 spacing: 13
@@ -720,15 +805,15 @@ QQC2.ApplicationWindow {
                     ColumnLayout {
                         spacing: 2
                         QQC2.Label {
-                            text: (parent.parent.parent.parent.a.rating || "—").toString()
+                            text: (appRoot.a.rating || "—").toString()
                             color: root.text; font.pixelSize: 40; font.weight: Font.Light
                         }
                         QQC2.Label {
-                            text: root.stars(parent.parent.parent.parent.a.rating)
+                            text: root.stars(appRoot.a.rating)
                             color: root.accent; font.pixelSize: 15
                         }
                         QQC2.Label {
-                            text: (parent.parent.parent.parent.a.rating_count || 0) + " reviews"
+                            text: (appRoot.a.rating_count || 0) + " reviews"
                             color: root.dim; font.pixelSize: 12
                         }
                     }
@@ -750,7 +835,7 @@ QQC2.ApplicationWindow {
                 }
 
                 Repeater {
-                    model: parent.parent.a.reviews || []
+                    model: appRoot.a.reviews || []
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
