@@ -33,7 +33,10 @@ trap cleanup_staging EXIT
 
 if [[ -d "$REPO_ROOT/repo" ]]; then
     mkdir -p "$STAGED_REPO"
-    cp -r "$REPO_ROOT/repo/." "$STAGED_REPO/"
+    # Only sakura-core goes on the media. sakura-extra holds things that are
+    # too large to ship to every user for a minority of hardware, and is
+    # fetched over the network when the installer decides it is needed.
+    cp -r "$REPO_ROOT/repo/sakura-core" "$STAGED_REPO/"
     # The live system needs the same repo definition as the build, pointed at
     # the on-media copy. Deriving it from iso/pacman.conf keeps the two from
     # drifting apart.

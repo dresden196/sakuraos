@@ -68,8 +68,8 @@ docker run --rm \
         # "cmake: command not found".
         for dir in /build/packages/*/; do
             name=$(basename "$dir")
-            [[ "$name" == "aur" ]] && continue
-            [[ -f "$dir/PKGBUILD" ]] || continue
+            if [[ "$name" == "aur" ]]; then continue; fi
+            if [[ ! -f "$dir/PKGBUILD" ]]; then continue; fi
             echo ">>> building $name"
             cp -r "$dir" "$WORK/$name"
             chown -R builder:builder "$WORK/$name"
@@ -109,7 +109,10 @@ docker run --rm \
         # with it. Record the failure, publish everything that did build, and
         # report at the end -- a half-built repo you know about beats no repo.
         while read -r pkg; do
-            [[ -z "$pkg" || "$pkg" == \#* ]] && continue
+            # An if, not "[[ ... ]] && continue": under set -e a false test
+            # makes the && list return non-zero and kills the whole build,
+            # after it has already succeeded.
+            if [[ -z "$pkg" || "$pkg" == \#* ]]; then continue; fi
             echo ">>> rebuilding AUR package $pkg"
             if su builder -c "git clone --depth 1 https://aur.archlinux.org/$pkg.git $WORK/$pkg" \
                && su builder -c "cd $WORK/$pkg && GNUPGHOME=/home/builder/.gnupg \
@@ -121,15 +124,46 @@ docker run --rm \
             fi
         done < /build/packages/aur/manifest.txt
 
-        OUT=/build/repo/sakura-core/os/x86_64
-        install -d "$OUT"
-        find "$WORK" -name "*.pkg.tar.zst" -exec cp -f {} "$OUT/" \;
-        find "$WORK" -name "*.pkg.tar.zst.sig" -exec cp -f {} "$OUT/" \;
+        # Two repositories, split by whether a package is worth putting on
+        # every ISO. sakura-core ships on the media so an install works with
+        # no network; sakura-extra holds things only a minority of hardware
+        # needs -- the legacy NVIDIA userspace alone is ~900 MB installed --
+        # and is fetched over the network when the installer asks for it.
+        CORE=/build/repo/sakura-core/os/x86_64
+        EXTRA=/build/repo/sakura-extra/os/x86_64
+        # repo-add runs as builder and writes a lockfile beside the database,
+        # so the directories must be builder-writable rather than root-owned.
+        install -d -o builder -g builder "$CORE" "$EXTRA"
 
-        cd "$OUT"
-        rm -f sakura-core.db* sakura-core.files*
-        su builder -c "cd $OUT && GNUPGHOME=/home/builder/.gnupg \
-            repo-add --sign --key $SIGNER sakura-core.db.tar.gz *.pkg.tar.zst"
+        # Start from empty. repo-add happily keeps several versions of the
+        # same package, so without this the repo silently accumulates every
+        # build ever made and pacman may serve a stale one.
+        for d in "$CORE" "$EXTRA"; do
+            rm -f "$d"/*.pkg.tar.zst "$d"/*.pkg.tar.zst.sig "$d"/*.db* "$d"/*.files*
+        done
+
+        while IFS= read -r pkg; do
+            base=$(basename "$pkg")
+            # -debug packages are split output nobody installs; they are pure
+            # weight in a repo that ships on the ISO.
+            case "$base" in
+                *-debug-*) continue ;;
+                nvidia-580xx-*|opencl-nvidia-580xx-*) dest="$EXTRA" ;;
+                *) dest="$CORE" ;;
+            esac
+            cp -f "$pkg" "$dest/"
+            # Trailing && under set -e: a package without a signature would
+            # otherwise make the whole build report failure after succeeding.
+            [ -f "$pkg.sig" ] && cp -f "$pkg.sig" "$dest/" || true
+        done < <(find "$WORK" -name "*.pkg.tar.zst")
+
+        for d in "$CORE" "$EXTRA"; do
+            name=$(basename "$(dirname "$(dirname "$d")")")
+            if ls "$d"/*.pkg.tar.zst >/dev/null 2>&1; then
+                su builder -c "cd $d && GNUPGHOME=/home/builder/.gnupg \
+                    repo-add --sign --key $SIGNER $name.db.tar.gz *.pkg.tar.zst"
+            fi
+        done
 
         chown -R "$HOST_UID:$HOST_GID" /build/repo
 
@@ -139,6 +173,10 @@ docker run --rm \
             echo "!! the repo was published without them"
             exit 2
         fi
+
+        # Explicit: without it the script inherits the status of whatever ran
+        # last, which is not a statement about whether the build succeeded.
+        exit 0
     ' || rc=$?
 
 echo
