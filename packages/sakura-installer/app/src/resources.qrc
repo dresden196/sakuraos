@@ -2,5 +2,9 @@
   <qresource prefix="/">
     <file>qml/Main.qml</file>
     <file>assets/sakura-mark.svg</file>
+    <file>assets/browser-zen.png</file>
+    <file>assets/browser-firefox.png</file>
+    <file>assets/browser-brave.png</file>
+    <file>assets/browser-chrome.png</file>
   </qresource>
 </RCC>
