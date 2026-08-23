@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Sakura Store
+GenericName=Software Centre
+Comment=Find and install applications
+Exec=sakura-store-ui
+Icon=system-software-install
+Terminal=false
+Categories=System;PackageManager;
+Keywords=software;apps;install;flatpak;appimage;snap;aur;

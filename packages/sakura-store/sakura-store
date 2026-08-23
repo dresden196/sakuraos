@@ -25,6 +25,10 @@ import urllib.request
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
+# Installed beside the engine rather than on the default path, so the import
+# has to be told where to look.
+sys.path.insert(0, "/usr/lib/sakura/store")
+
 CONFIG = Path(os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf"))
 CACHE = Path(os.environ.get("SAKURA_STORE_CACHE", "/var/cache/sakura/store"))
 
@@ -321,6 +325,99 @@ def read_config() -> dict:
 # --------------------------------------------------------------------------
 # commands
 # --------------------------------------------------------------------------
+def app_detail(app_id: str) -> dict:
+    """Everything the app page needs, in one call.
+
+    Flathub carries the screenshots, the description, the licence and the
+    developer's own brand colours. Using the last of those means an app page
+    looks like the application rather than like a row in a database.
+    """
+    d = fetch(f"{FLATHUB_API}/appstream/{app_id}", {}, tag="Flathub") or {}
+    if not d:
+        return {}
+
+    shots = []
+    for sc in (d.get("screenshots") or []):
+        sizes = sc.get("sizes") or []
+        # Largest available, because these are shown full width and an
+        # upscaled 624px thumbnail looks worse than no screenshot at all.
+        best = max(sizes, key=lambda x: int(x.get("width") or 0), default=None)
+        if best and best.get("src"):
+            shots.append({"url": best["src"], "caption": sc.get("caption") or ""})
+
+    brand = ""
+    for b in (d.get("branding") or []):
+        if b.get("scheme_preference") in ("dark", None) and b.get("value"):
+            brand = b["value"]
+            if b.get("scheme_preference") == "dark":
+                break
+
+    ratings = odrs_ratings()
+    rating, count = (None, 0)
+    for key in (f"{app_id}.desktop", app_id):
+        if key in ratings:
+            rating, count = stars(ratings[key])
+            break
+
+    return {
+        "id": app_id,
+        "name": d.get("name") or app_id,
+        "summary": d.get("summary") or "",
+        # Flathub returns HTML; the interface renders it rather than showing
+        # tags, so it is passed through unchanged.
+        "description": d.get("description") or "",
+        "developer": d.get("developer_name") or "",
+        "license": d.get("project_license") or "",
+        "icon": d.get("icon") or "",
+        "brand": brand,
+        "screenshots": shots,
+        "urls": d.get("urls") or {},
+        "rating": rating,
+        "rating_count": count,
+        "reviews": odrs_reviews(app_id),
+    }
+
+
+def odrs_reviews(app_id: str, limit: int = 8) -> list:
+    """Recent reviews for one app.
+
+    Posted and read by GNOME Software and Discover as well, so this is the
+    same conversation rather than a private one we started.
+    """
+    body = {"app_id": f"{app_id}.desktop", "locale": "en_GB",
+            "distro": "SakuraOS", "limit": limit,
+            "user_hash": "0" * 40, "version": "1.0"}
+    data = fetch(f"{ODRS_API}/fetch", [], post=body, tag="ODRS")
+    out = []
+    for r in (data or [])[:limit]:
+        out.append({
+            "summary": r.get("summary") or "",
+            "text": r.get("description") or "",
+            "rating": (r.get("rating") or 0) // 20,   # ODRS stores 0-100
+            "author": r.get("user_display") or "Anonymous",
+            "date": r.get("date_created") or 0,
+            "version": r.get("version") or "",
+        })
+    return out
+
+
+def cmd_info(args) -> int:
+    d = app_detail(args.id)
+    if not d:
+        print("Not found.")
+        return 1
+    if args.json:
+        print(json.dumps(d, indent=2))
+        return 0
+    print(f"  {d['name']}  —  {d['developer']}")
+    print(f"  {d['summary']}")
+    if d["rating"]:
+        print(f"  {d['rating']}★ from {d['rating_count']} reviews")
+    print(f"  {len(d['screenshots'])} screenshots, {len(d['reviews'])} reviews, "
+          f"licence {d['license']}")
+    return 0
+
+
 def cmd_install(args) -> int:
     import transaction as tx
     with tx.transaction_lock():
@@ -449,6 +546,11 @@ def main() -> int:
     r.add_argument("id")
     r.add_argument("--source", required=True)
     r.set_defaults(fn=cmd_remove)
+
+    n = sub.add_parser("info")
+    n.add_argument("id")
+    n.add_argument("--json", action="store_true")
+    n.set_defaults(fn=cmd_info)
 
     l = sub.add_parser("installed")
     l.add_argument("--json", action="store_true")
