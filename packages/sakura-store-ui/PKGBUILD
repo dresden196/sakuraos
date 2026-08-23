@@ -1,0 +1,28 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# The window. Every decision about what a source is, what is installed and
+# what a rating means belongs to sakura-store; this draws the answer. Giving
+# the window its own opinion would make it the one people believe.
+pkgname=sakura-store-ui
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Sakura Store"
+arch=('x86_64')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+depends=('sakura-store' 'qt6-base' 'qt6-declarative' 'ki18n'
+         'qqc2-desktop-style' 'flatpak-kcm')
+makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools')
+
+build() {
+    cp -r "$startdir/app" "$srcdir/app-src"
+    cmake -S "$srcdir/app-src" -B "$srcdir/build" \
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build "$srcdir/build" --parallel
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+    install -Dm644 "$startdir/org.sakuraos.store.desktop" \
+        "$pkgdir/usr/share/applications/org.sakuraos.store.desktop"
+}
