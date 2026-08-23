@@ -253,10 +253,12 @@ QQC2.ApplicationWindow {
                         }
                     }
                     QQC2.Label {
-                        anchors.centerIn: parent
+                        anchors.fill: parent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                         text: backend.busy ? "" : (backend.updates.length ? backend.updates.length : "✓")
                         color: backend.updates.length ? root.accent : root.good
-                        font.pixelSize: backend.updates.length ? 26 : 32
+                        font.pixelSize: backend.updates.length ? 26 : 30
                         font.weight: Font.DemiBold
                         Behavior on opacity { NumberAnimation { duration: 200 } }
                     }
@@ -322,13 +324,22 @@ QQC2.ApplicationWindow {
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
-                        implicitHeight: 92
+                        // Sized from its content, because the caption wraps to
+                        // two or three lines depending on column width and a
+                        // fixed height pushed the last line outside the box.
+                        // fillHeight then squares the row off, so one taller
+                        // caption does not leave the row ragged.
+                        Layout.fillHeight: true
+                        implicitHeight: tile.implicitHeight + 30
                         radius: 12
                         color: root.card
                         ColumnLayout {
-                            anchors.fill: parent
+                            id: tile
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
                             anchors.margins: 15
-                            spacing: 1
+                            spacing: 2
                             QQC2.Label {
                                 text: modelData.v; color: root.text
                                 font.pixelSize: 26; font.weight: Font.Light
