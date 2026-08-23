@@ -38,3 +38,11 @@ echo " up"
 # Setting it after the fact is the only thing that actually works.
 echo ">> setting $MODE"
 as_live_user "kscreen-doctor output.Virtual-1.mode.$MODE" >/dev/null
+
+# Stop the VM blanking and locking mid-session. Screenshots taken after it
+# does come back "Display output is not active", which looks like the app
+# under test crashed rather than the screen having gone to sleep.
+as_live_user "kwriteconfig6 --file powerdevilrc --group AC --group Display --key TurnOffDisplayIdleTimeoutSec -1" >/dev/null 2>&1 || true
+as_live_user "kwriteconfig6 --file kscreenlockerrc --group Daemon --key Autolock false" >/dev/null 2>&1 || true
+as_live_user "qdbus6 org.kde.Solid.PowerManagement /org/kde/Solid/PowerManagement/Actions/DPMSControl stopIdle" >/dev/null 2>&1 || true
+"$REPO_ROOT/build/guest-run.sh" "loginctl unlock-sessions" >/dev/null 2>&1 || true
