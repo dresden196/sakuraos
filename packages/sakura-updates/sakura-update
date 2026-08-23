@@ -218,10 +218,36 @@ def cmd_check(args) -> int:
     return 0
 
 
-def cmd_apply(args) -> int:
-    if os.geteuid() != 0:
+HELPER = "/usr/lib/sakura/updates/sakura-update-helper"
+
+
+def elevate(verb: str) -> int:
+    """Ask for the password rather than telling the user to go and find sudo.
+
+    The same path serves the Update Centre and the command line, so a person
+    sees one familiar prompt whichever they used. The nightly timer already
+    runs as root and never reaches here -- an automatic update that stopped
+    to ask for a password at 3am would simply never happen.
+    """
+    if not os.path.exists(HELPER):
         print("sakura-update apply must run as root", file=sys.stderr)
         return 1
+    try:
+        return subprocess.call(["pkexec", HELPER, verb])
+    except FileNotFoundError:
+        print("sakura-update apply must run as root", file=sys.stderr)
+        return 1
+
+
+def cmd_apply(args) -> int:
+    if os.geteuid() != 0:
+        # 126 and 127 are pkexec's own codes for "dismissed" and "not
+        # authorised"; say so rather than leaving a bare number.
+        rc = elevate("apply")
+        if rc in (126, 127):
+            print("Updates were not installed: authentication was cancelled.",
+                  file=sys.stderr)
+        return rc
 
     ups = available()
     if not ups:
