@@ -174,5 +174,23 @@ KCM.SimpleKCM {
             checked: cfg.updatesRequireAC
             onToggled: cfg.updatesRequireAC = checked
         }
+
+        // These two settings are the whole of updates that belongs on a
+        // settings page. What is being installed, what is held back and why,
+        // and the restore points you can return to are a different question
+        // from configuration, and they get their own window.
+        QQC2.Button {
+            Kirigami.FormData.label: i18n("More:")
+            text: i18n("Open Update Center")
+            icon.name: "system-software-update"
+            onClicked: Qt.openUrlExternally("application:///org.sakuraos.updatecenter.desktop")
+        }
+
+        QQC2.Label {
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 24
+            wrapMode: Text.WordWrap
+            font: Kirigami.Theme.smallFont
+            text: i18n("The two settings above are all there is to configure. To see what is being installed, why anything is held back, and the restore points you can go back to, open the Update Center.")
+        }
     }
 }

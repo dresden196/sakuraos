@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Update Center
+GenericName=Software Updates
+Comment=See and manage system updates
+Exec=sakura-update-center
+Icon=system-software-update
+Terminal=false
+Categories=System;Settings;
+Keywords=update;upgrade;software;packages;
