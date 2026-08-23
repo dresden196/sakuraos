@@ -59,25 +59,28 @@ void Backend::search(const QString &query, const QString &source)
 
 void Backend::loadFeatured()
 {
-    // No editorial list yet, so the front page is drawn from what people
-    // actually install rather than from a hand-picked promo slot nobody has
-    // curated. Honest, and it stays useful without a human maintaining it.
-    auto *p = run({QStringLiteral("search"), QStringLiteral("editor"),
-                   QStringLiteral("--source"), QStringLiteral("flatpak"),
+    // Flathub publishes real collections. The front page used to run a search
+    // for the word "editor" and label the result "Popular right now", which
+    // was not true, and then reused those same six apps for the grid below the
+    // carousel -- so the page showed one list twice. Trending drives the
+    // carousel because it turns over; popular drives the grid because it does
+    // not. Both update themselves; nobody has to curate a promo slot.
+    loadCollection(QStringLiteral("trending"), 8, m_featured);
+    loadCollection(QStringLiteral("popular"), 12, m_popular);
+}
+
+void Backend::loadCollection(const QString &name, int limit, QVariantList &into)
+{
+    auto *p = run({QStringLiteral("collection"), name,
+                   QStringLiteral("--limit"), QString::number(limit),
                    QStringLiteral("--json")});
-    connect(p, &QProcess::finished, this, [this, p] {
+    connect(p, &QProcess::finished, this, [this, p, &into] {
         const QJsonObject root =
             QJsonDocument::fromJson(p->readAllStandardOutput()).object();
         p->deleteLater();
-        m_featured.clear();
+        into.clear();
         for (const QJsonValue &v : root[QStringLiteral("apps")].toArray()) {
-            const QVariantMap m = toMap(v.toObject());
-            if (m.value(QStringLiteral("rating_count")).toInt() > 15) {
-                m_featured.append(m);
-            }
-            if (m_featured.size() >= 6) {
-                break;
-            }
+            into.append(toMap(v.toObject()));
         }
         Q_EMIT featuredChanged();
     });
