@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Privileged half of the update engine.
+
+Runs as root under polkit, invoked by sakura-update when it finds itself
+unprivileged. It exists so the Update Centre and the command line share one
+elevation path rather than each inventing their own, and so nothing that
+draws a window ever runs as uid 0.
+
+It accepts a fixed set of verbs and no arbitrary arguments. A helper that
+takes a package name from an unprivileged caller and hands it to pacman is
+just a way to install anything as root.
+"""
+import os
+import subprocess
+import sys
+
+VERBS = {
+    # Only operations that move the system to already-published, signature
+    # verified versions. Installing a named package is deliberately not here.
+    "apply": ["/usr/bin/sakura-update", "apply"],
+}
+
+
+def main() -> int:
+    if len(sys.argv) != 2 or sys.argv[1] not in VERBS:
+        print(f"usage: sakura-update-helper <{'|'.join(VERBS)}>", file=sys.stderr)
+        return 2
+    if os.geteuid() != 0:
+        print("sakura-update-helper must run as root", file=sys.stderr)
+        return 1
+
+    # SAKURA_UPDATE_ELEVATED stops the child re-invoking pkexec and looping.
+    env = dict(os.environ, SAKURA_UPDATE_ELEVATED="1")
+    return subprocess.call(VERBS[sys.argv[1]], env=env)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

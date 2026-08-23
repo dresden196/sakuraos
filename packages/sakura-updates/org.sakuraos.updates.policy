@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>SakuraOS</vendor>
+  <vendor_url>https://sakuraos.org</vendor_url>
+
+  <!--
+    Applying pending updates is deliberately a narrower action than installing
+    software. It can only move packages to versions already published in a
+    repository whose signatures pacman verifies, and the same operation runs
+    unattended from a timer every night. It cannot install anything new.
+
+    auth_admin_keep, so applying updates and then restarting into them does
+    not ask twice. Relaxing this to <allow_active>yes</allow_active> is
+    defensible for the same reason: the machine already does this at 03:00
+    without asking. But a prompt people can predict is worth more than one
+    fewer click, and a password nobody is ever asked for is one they forget.
+  -->
+  <action id="org.sakuraos.updates.apply">
+    <description>Install pending system updates</description>
+    <message>Authentication is required to install updates</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/sakura/updates/sakura-update-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>
