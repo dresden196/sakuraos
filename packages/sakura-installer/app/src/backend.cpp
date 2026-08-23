@@ -172,6 +172,9 @@ void Backend::install(const QVariantMap &answers)
         QStringLiteral("--password"), answers[QStringLiteral("password")].toString(),
         QStringLiteral("--hostname"), answers[QStringLiteral("hostname")].toString(),
         QStringLiteral("--timezone"), answers[QStringLiteral("timezone")].toString(),
+        QStringLiteral("--theme"),
+        answers[QStringLiteral("dark")].toBool() ? QStringLiteral("dark")
+                                                 : QStringLiteral("light"),
         QStringLiteral("--yes"),
     };
 

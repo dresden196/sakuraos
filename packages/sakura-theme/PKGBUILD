@@ -19,14 +19,17 @@ url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
 depends=('sddm' 'plasma-desktop' 'sakura-wallpapers' 'breeze' 'breeze-icons')
 backup=('etc/sddm.conf.d/20-sakura.conf')
-source=('20-sakura.conf' 'kdeglobals')
-sha256sums=('SKIP' 'SKIP')
+source=('20-sakura.conf' 'kdeglobals' 'kdeglobals-dark' 'kdeglobals-light')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm644 "$srcdir/20-sakura.conf" "$pkgdir/etc/sddm.conf.d/20-sakura.conf"
 
     # Defaults for new users only; a user's own config always wins.
     install -Dm644 "$srcdir/kdeglobals" "$pkgdir/etc/xdg/kdeglobals"
+    # Both variants kept so the installer can apply the one the user picked.
+    install -Dm644 "$srcdir/kdeglobals-dark"  "$pkgdir/usr/share/sakura/theme/kdeglobals-dark"
+    install -Dm644 "$srcdir/kdeglobals-light" "$pkgdir/usr/share/sakura/theme/kdeglobals-light"
 
     install -d "$pkgdir/usr/share/color-schemes"
     install -m644 "$startdir/color-schemes/"*.colors "$pkgdir/usr/share/color-schemes/"

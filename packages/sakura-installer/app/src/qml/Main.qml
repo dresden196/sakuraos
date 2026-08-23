@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import QtQuick.Window
+import QtQuick.Dialogs
 
 QQC2.ApplicationWindow {
     id: root
@@ -596,7 +597,16 @@ QQC2.ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: 10
                 Repeater {
-                    model: backend.avatars()
+                    // A picture chosen from disk is prepended so it appears in
+                    // the ring already selected, rather than being recorded
+                    // invisibly with nothing on screen changing.
+                    model: {
+                        var list = backend.avatars()
+                        var chosen = root.answers.avatar
+                        if (chosen !== "" && list.indexOf(chosen) < 0)
+                            return [chosen].concat(list)
+                        return list
+                    }
                     delegate: Rectangle {
                         required property string modelData
                         width: 54; height: 54; radius: 27
@@ -619,8 +629,18 @@ QQC2.ApplicationWindow {
                 }
             }
             RowLayout {
+                FileDialog {
+                    id: avatarDialog
+                    title: "Choose a picture"
+                    nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
+                    onAccepted: {
+                        root.answers.avatar = selectedFile.toString()
+                        root.answersChanged()
+                    }
+                }
                 QQC2.Button {
                     text: "Choose a photo…"
+                    onClicked: avatarDialog.open()
                     padding: 9
                     leftPadding: 14
                     rightPadding: 14
