@@ -1,0 +1,18 @@
+[Unit]
+Description=Install SakuraOS updates
+Documentation=man:sakura-update(1)
+After=network-online.target
+Wants=network-online.target
+
+# Never run an unattended update on battery. A transaction interrupted by a
+# flat battery is exactly the half-upgraded state everything else here works
+# to prevent.
+ConditionACPower=true
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/sakura-update apply
+# The snapshot and the transaction must finish; killing this midway is worse
+# than never starting it.
+TimeoutStartSec=2h
+KillMode=mixed

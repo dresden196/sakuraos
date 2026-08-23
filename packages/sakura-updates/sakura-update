@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+"""SakuraOS update engine.
+
+Does the work; the Update Centre draws it. Kept as a separate command so the
+same logic serves the GUI, the nightly timer, and anyone who prefers a
+terminal -- three front ends over one implementation rather than three
+implementations that disagree.
+
+  sakura-update check    what is available, classified, in plain language
+  sakura-update apply    snapshot, then install what is not held
+  sakura-update status   one line: current, or not
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.request
+from dataclasses import dataclass, asdict, field
+from pathlib import Path
+
+CONFIG = Path(os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf"))
+STATE = Path(os.environ.get("SAKURA_STATE", "/var/lib/sakura/updates"))
+NEWS_URL = "https://archlinux.org/feeds/news/"
+
+# A package whose upgrade means the running system no longer matches what is
+# on disk. Nothing here can take effect until a restart, so saying so is the
+# difference between a system that is updated and one that only looks it.
+NEEDS_RESTART = {"linux", "linux-lts", "linux-zen", "linux-hardened",
+                 "systemd", "glibc", "dbus", "dbus-broker",
+                 "nvidia-open", "nvidia-utils", "mesa"}
+
+# Arch announces breaking changes in prose, not in package metadata. These are
+# the phrases that have historically meant "do something by hand first".
+INTERVENTION = re.compile(
+    r"manual intervention|requires? action|before upgrading|"
+    r"you (?:must|need to)|manually|breaking change",
+    re.I,
+)
+
+
+def run(args: list[str], **kw) -> str:
+    return subprocess.run(args, capture_output=True, text=True, **kw).stdout
+
+
+@dataclass
+class Update:
+    name: str
+    old: str
+    new: str
+    summary: str = ""
+    needed_by: list[str] = field(default_factory=list)
+    restart: bool = False
+    held: str = ""          # reason, empty when not held
+
+
+def read_config() -> dict:
+    """Parse the [Updates] section. Hand-rolled and tolerant: this runs from a
+    timer with no one watching, and an unparseable file must not stop updates
+    forever."""
+    out = {"AutoApply": "true", "RequireCanaryEvidence": "true",
+           "Window": "03:00", "RequireACPower": "true", "AutoReboot": "false"}
+    try:
+        section = ""
+        for raw in CONFIG.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                section = line[1:-1]
+            elif section == "Updates" and "=" in line:
+                k, _, v = line.partition("=")
+                out[k.strip()] = v.strip()
+    except OSError:
+        pass
+    return out
+
+
+def available() -> list[Update]:
+    """Pending upgrades.
+
+    checkupdates (pacman-contrib) syncs into a throwaway database rather than
+    the system one. That matters: a plain 'pacman -Sy' to see what is
+    available is itself the partial-upgrade footgun Terminal Assist exists to
+    stop.
+    """
+    out = run(["checkupdates"])
+    ups = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and parts[2] == "->":
+            ups.append(Update(name=parts[0], old=parts[1], new=parts[3]))
+    return ups
+
+
+def describe(ups: list[Update]) -> None:
+    """Turn version numbers into something a person can consent to.
+
+    'libjxl 0.12.0-1' tells you nothing. 'JPEG XL image support, needed by
+    Dolphin, Gwenview, Firefox' tells you whether you care.
+    """
+    for u in ups:
+        info = run(["pacman", "-Si", u.name])
+        for line in info.splitlines():
+            if line.startswith("Description"):
+                u.summary = line.split(":", 1)[1].strip()
+                break
+
+        # Reverse dependencies, filtered to things the user has heard of --
+        # the full tree is mostly libraries depending on libraries.
+        tree = run(["pactree", "-r", "-d1", "-u", u.name]).splitlines()[1:]
+        named = [t.strip() for t in tree if t.strip() and t.strip() != u.name]
+        u.needed_by = [n for n in named if not n.startswith("lib")][:4] or named[:3]
+        u.restart = u.name in NEEDS_RESTART
+
+
+def news_items() -> list[str]:
+    """Arch news headlines that read like they need a human first."""
+    try:
+        with urllib.request.urlopen(NEWS_URL, timeout=15) as r:
+            feed = r.read().decode("utf-8", "replace")
+    except Exception:
+        # No feed is not the same as no interventions, but refusing to update
+        # because a web request failed would strand a machine offline.
+        return []
+
+    items = []
+    for item in re.findall(r"<item>(.*?)</item>", feed, re.S)[:25]:
+        title = re.search(r"<title>(.*?)</title>", item, re.S)
+        if not title or not INTERVENTION.search(re.sub(r"<[^>]+>", " ", item)):
+            continue
+        t = re.sub(r"<[^>]+>", "", title.group(1))
+        items.append(re.sub(r"&[a-z]+;", " ", t).strip())
+    return items
+
+
+def _mentions(title: str, pkg: str) -> bool:
+    """Does this headline appear to be about this package?
+
+    Headlines name their package plainly -- "kea >= 1:3.0.3-6 requires manual
+    intervention", "Breaking changes for all users of `varnish`". Matching on
+    the name is what keeps the gate useful: Arch's intervention notices never
+    expire from the feed, so holding the whole transaction whenever any of
+    them is present would hold every update forever.
+    """
+    words = set(re.findall(r"[a-z0-9][a-z0-9._+-]*", title.lower()))
+    if pkg.lower() in words:
+        return True
+    # linux-firmware-nvidia should match a notice about nvidia; the reverse
+    # (a notice about "linux" matching every linux-* package) is why only the
+    # leading component is tried.
+    stem = pkg.lower().split("-")[0]
+    return len(stem) > 3 and stem in words
+
+
+def apply_holds(ups: list[Update], cfg: dict) -> list[tuple[str, str]]:
+    """Hold only the packages a notice is actually about."""
+    holds = []
+    for title in news_items():
+        matched = [u for u in ups if _mentions(title, u.name)]
+        if not matched:
+            continue
+        for u in matched:
+            u.held = "Arch published a manual step for this update."
+        holds.append((title, ", ".join(u.name for u in matched)))
+    return holds
+
+
+def snapshot(desc: str) -> bool:
+    r = subprocess.run(
+        ["snapper", "--no-dbus", "-c", "root", "create",
+         "--description", desc, "--cleanup-algorithm", "number"],
+        capture_output=True, text=True)
+    return r.returncode == 0
+
+
+def cmd_check(args) -> int:
+    cfg = read_config()
+    ups = available()
+    if ups:
+        describe(ups)
+    holds = apply_holds(ups, cfg)
+
+    if args.json:
+        print(json.dumps({
+            "updates": [asdict(u) for u in ups],
+            "holds": [{"title": t, "reason": r} for t, r in holds],
+            "restart_required": any(u.restart for u in ups),
+        }, indent=2))
+        return 0
+
+    if not ups:
+        print("Everything is up to date.")
+        return 0
+
+    held = [u for u in ups if u.held]
+    ready = [u for u in ups if not u.held]
+
+    if ready:
+        print(f"\n{len(ready)} update{'s' if len(ready) != 1 else ''} ready\n")
+        for u in ready:
+            print(f"  {u.name}  {u.old} → {u.new}")
+            if u.summary:
+                print(f"      {u.summary}")
+            if u.needed_by:
+                print(f"      Needed by: {', '.join(u.needed_by)}")
+            if u.restart:
+                print("      Needs a restart to take effect")
+        print()
+    if held:
+        print(f"{len(held)} held back, waiting for you\n")
+        for title, pkgs in holds:
+            print(f"  {pkgs}")
+            print(f"      Arch published a manual step: {title}\n")
+    return 0
+
+
+def cmd_apply(args) -> int:
+    if os.geteuid() != 0:
+        print("sakura-update apply must run as root", file=sys.stderr)
+        return 1
+
+    ups = available()
+    if not ups:
+        print("Everything is up to date.")
+        return 0
+
+    describe(ups)
+    holds = apply_holds(ups, read_config())
+    ready = [u for u in ups if not u.held]
+
+    if not ready:
+        print("All updates are held back:")
+        for title, pkgs in holds:
+            print(f"  {pkgs}: {title}")
+        return 0
+
+    # The snapshot is what makes an unattended update defensible at all. If it
+    # cannot be taken, do not proceed -- an automatic update with no way back
+    # is the thing this whole design exists to avoid.
+    if not snapshot(f"before installing {len(ready)} updates"):
+        print("could not take a restore point; refusing to update", file=sys.stderr)
+        return 1
+
+    r = subprocess.run(["pacman", "-Syu", "--noconfirm"])
+    if r.returncode != 0:
+        return r.returncode
+
+    if any(u.restart for u in ready):
+        print("\nA restart is needed to finish.")
+    return 0
+
+
+def cmd_status(args) -> int:
+    ups = available()
+    if not ups:
+        print("Up to date.")
+    else:
+        print(f"{len(ups)} update{'s' if len(ups) != 1 else ''} available.")
+    return 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(prog="sakura-update", description=__doc__)
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    c = sub.add_parser("check", help="what is available")
+    c.add_argument("--json", action="store_true")
+    c.set_defaults(fn=cmd_check)
+
+    a = sub.add_parser("apply", help="snapshot, then install")
+    a.set_defaults(fn=cmd_apply)
+
+    s = sub.add_parser("status", help="one line")
+    s.set_defaults(fn=cmd_status)
+
+    args = p.parse_args()
+    STATE.mkdir(parents=True, exist_ok=True)
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
