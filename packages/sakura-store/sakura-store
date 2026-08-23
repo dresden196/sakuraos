@@ -1,0 +1,382 @@
+#!/usr/bin/env python3
+"""SakuraOS app store engine.
+
+Sources are an interface, not special cases. Flatpak, Snap, AppImage, the AUR
+and the system repositories all answer the same small contract, so adding a
+source -- including a Sakura-hosted one later -- means implementing that
+contract rather than editing the interface.
+
+  sakura-store search <query>     across every enabled source
+  sakura-store info <id>          detail, ratings, and where else it exists
+  sakura-store install <id>
+  sakura-store list               what is installed, and from where
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass, asdict, field
+from pathlib import Path
+
+CONFIG = Path(os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf"))
+CACHE = Path(os.environ.get("SAKURA_STORE_CACHE", "/var/cache/sakura/store"))
+
+FLATHUB_API = "https://flathub.org/api/v2"
+ODRS_API = "https://odrs.gnome.org/1.0/reviews/api"
+AUR_RPC = "https://aur.archlinux.org/rpc/v5"
+TIMEOUT = 20
+
+
+# Sources that failed this run, so the difference between "nothing matched"
+# and "we could not ask" can be reported. Silent degradation is how a store
+# ends up showing an empty list and calling it an answer -- which is the
+# behaviour this store exists to be better than.
+FAILURES: dict[str, str] = {}
+
+
+def fetch(url: str, default=None, *, post: dict | None = None, tag: str = ""):
+    """Ask a service, degrade if it is unreachable, and record that it was.
+
+    An outage at Flathub must not take AUR results down with it, but it must
+    also not be indistinguishable from Flathub having no matches.
+    """
+    try:
+        data = json.dumps(post).encode() if post is not None else None
+        req = urllib.request.Request(
+            url, data=data,
+            headers={"User-Agent": "sakura-store/0.1",
+                     **({"Content-Type": "application/json"} if data else {})})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        FAILURES[tag or url] = f"HTTP {e.code}"
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        FAILURES[tag or url] = f"unreachable ({type(e).__name__})"
+    except ValueError:
+        FAILURES[tag or url] = "unreadable response"
+    return default
+
+
+def run(args: list[str]) -> str:
+    try:
+        return subprocess.run(args, capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+@dataclass
+class App:
+    id: str                       # canonical id, the Flatpak style where known
+    name: str
+    summary: str = ""
+    developer: str = ""
+    icon: str = ""
+    source: str = ""              # which source this particular result came from
+    source_id: str = ""           # the id THAT source knows it by
+    installed: bool = False
+    version: str = ""
+    # Reviews and popularity are kept apart on purpose: a star average and an
+    # install count are not the same kind of number and must never be blended.
+    rating: float | None = None
+    rating_count: int = 0
+    popularity: dict = field(default_factory=dict)
+    also_from: list = field(default_factory=list)
+
+
+# --------------------------------------------------------------------------
+# sources
+# --------------------------------------------------------------------------
+class Source:
+    """The whole contract. A new source implements these four."""
+    name = ""
+    label = ""
+
+    def available(self) -> bool:
+        raise NotImplementedError
+
+    def search(self, query: str) -> list[App]:
+        raise NotImplementedError
+
+    def installed(self) -> dict[str, str]:
+        """source_id -> version"""
+        return {}
+
+
+class FlatpakSource(Source):
+    name = "flatpak"
+    label = "Flathub"
+
+    def available(self) -> bool:
+        return bool(run(["flatpak", "--version"]))
+
+    def installed(self) -> dict[str, str]:
+        out = run(["flatpak", "list", "--app", "--columns=application,version"])
+        found = {}
+        for line in out.splitlines():
+            parts = line.split("\t")
+            if parts and parts[0]:
+                found[parts[0].strip()] = (parts[1].strip() if len(parts) > 1 else "")
+        return found
+
+    def search(self, query: str) -> list[App]:
+        data = fetch(f"{FLATHUB_API}/search", {}, post={"query": query}, tag="Flathub")
+        hits = data.get("hits", []) if isinstance(data, dict) else []
+        have = self.installed()
+        out = []
+        for h in hits[:40]:
+            app_id = h.get("app_id") or h.get("id") or ""
+            if not app_id:
+                continue
+            out.append(App(
+                id=app_id,
+                name=h.get("name") or app_id,
+                summary=h.get("summary") or "",
+                developer=h.get("developer_name") or "",
+                icon=h.get("icon") or "",
+                source=self.name,
+                source_id=app_id,
+                installed=app_id in have,
+                version=have.get(app_id, ""),
+                popularity={"installs": h.get("installs_last_month")}
+                            if h.get("installs_last_month") else {},
+            ))
+        return out
+
+
+class AurSource(Source):
+    name = "aur"
+    label = "AUR"
+
+    def available(self) -> bool:
+        # Gated on the setting, not on whether the network works. The AUR being
+        # switched off is a decision the user made, and results must not
+        # reappear because a config file failed to parse.
+        return read_config().get("AUR", {}).get("Enabled", "false") == "true"
+
+    def installed(self) -> dict[str, str]:
+        out = run(["pacman", "-Qm"])
+        return {l.split()[0]: l.split()[1] for l in out.splitlines() if len(l.split()) == 2}
+
+    def search(self, query: str) -> list[App]:
+        data = fetch(f"{AUR_RPC}/search/{urllib.parse.quote(query)}", {}, tag="AUR")
+        results = data.get("results", []) if isinstance(data, dict) else []
+        have = self.installed()
+        results.sort(key=lambda r: r.get("NumVotes", 0), reverse=True)
+        out = []
+        for r in results[:25]:
+            n = r.get("Name", "")
+            out.append(App(
+                id=n,
+                name=n,
+                summary=r.get("Description") or "",
+                developer=r.get("Maintainer") or "",
+                source=self.name,
+                source_id=n,
+                installed=n in have,
+                version=have.get(n, r.get("Version", "")),
+                popularity={"votes": r.get("NumVotes", 0)},
+            ))
+        return out
+
+
+class SnapSource(Source):
+    name = "snap"
+    label = "Snap Store"
+
+    def available(self) -> bool:
+        return bool(run(["snap", "version"]))
+
+    def installed(self) -> dict[str, str]:
+        out = run(["snap", "list"])
+        found = {}
+        for line in out.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 2:
+                found[parts[0]] = parts[1]
+        return found
+
+    def search(self, query: str) -> list[App]:
+        data = fetch(
+            "https://api.snapcraft.io/v2/snaps/find?q=" + urllib.parse.quote(query)
+            + "&fields=title,summary,publisher,version", {})
+        have = self.installed()
+        out = []
+        for r in (data.get("results", []) if isinstance(data, dict) else [])[:25]:
+            snap = r.get("snap", {})
+            n = r.get("name", "")
+            out.append(App(
+                id=n, name=snap.get("title") or n,
+                summary=snap.get("summary") or "",
+                developer=(snap.get("publisher") or {}).get("display-name", ""),
+                source=self.name, source_id=n,
+                installed=n in have, version=have.get(n, ""),
+            ))
+        return out
+
+
+SOURCES = [FlatpakSource(), AurSource(), SnapSource()]
+
+
+# --------------------------------------------------------------------------
+# ratings
+# --------------------------------------------------------------------------
+def odrs_ratings() -> dict:
+    """Star distributions for every app ODRS knows about.
+
+    One request for the lot, cached: this is ~10,700 entries and asking per
+    app would make every search a hundred round trips.
+    """
+    CACHE.mkdir(parents=True, exist_ok=True)
+    cached = CACHE / "odrs-ratings.json"
+    if cached.exists():
+        age = os.path.getmtime(cached)
+        import time
+        if time.time() - age < 21600:      # six hours
+            try:
+                return json.loads(cached.read_text())
+            except ValueError:
+                pass
+    data = fetch(f"{ODRS_API}/ratings", {}, tag="ODRS")
+    if data:
+        cached.write_text(json.dumps(data))
+    return data or {}
+
+
+def stars(dist: dict) -> tuple[float | None, int]:
+    """Weighted mean of a star distribution, with its sample size.
+
+    The count travels with the average everywhere. A 5.0 from two reviews and
+    a 4.3 from nine hundred are different claims, and showing only the number
+    hides which one you are looking at.
+    """
+    total = dist.get("total", 0)
+    if not total:
+        return None, 0
+    score = sum(dist.get(f"star{i}", 0) * i for i in range(6))
+    return round(score / total, 1), total
+
+
+def attach_ratings(apps: list[App]) -> None:
+    ratings = odrs_ratings()
+    for a in apps:
+        # ODRS keys are desktop-file ids; Flatpak app ids differ by the suffix.
+        for key in (f"{a.id}.desktop", a.id, f"{a.id}.desktop.desktop"):
+            if key in ratings:
+                a.rating, a.rating_count = stars(ratings[key])
+                break
+
+
+def merge(results: list[list[App]]) -> list[App]:
+    """One row per app, with the other sources listed on it.
+
+    Flatpak wins the primary slot where it exists, because that is the source
+    that works the same on every machine. The rest are offered on the app's
+    own page rather than as duplicate rows in a search.
+    """
+    order = {s.name: i for i, s in enumerate(SOURCES)}
+    by_key: dict[str, App] = {}
+    for group in results:
+        for app in group:
+            key = app.name.lower().strip()
+            if key not in by_key:
+                by_key[key] = app
+                continue
+            existing = by_key[key]
+            if order.get(app.source, 9) < order.get(existing.source, 9):
+                app.also_from = existing.also_from + [
+                    {"source": existing.source, "id": existing.source_id}]
+                by_key[key] = app
+            else:
+                existing.also_from.append(
+                    {"source": app.source, "id": app.source_id})
+    return list(by_key.values())
+
+
+def read_config() -> dict:
+    out: dict[str, dict] = {}
+    try:
+        section = ""
+        for raw in CONFIG.read_text().splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                section = line[1:-1]
+                out.setdefault(section, {})
+            elif "=" in line and section:
+                k, _, v = line.partition("=")
+                out[section][k.strip()] = v.strip()
+    except OSError:
+        pass
+    return out
+
+
+# --------------------------------------------------------------------------
+# commands
+# --------------------------------------------------------------------------
+def cmd_sources(args) -> int:
+    for s in SOURCES:
+        state = "available" if s.available() else "unavailable"
+        print(f"  {s.name:<9} {s.label:<14} {state}")
+    return 0
+
+
+def cmd_search(args) -> int:
+    wanted = [s for s in SOURCES
+              if (not args.source or s.name == args.source) and s.available()]
+    groups = [s.search(args.query) for s in wanted]
+    apps = merge(groups)
+    attach_ratings(apps)
+
+    apps.sort(key=lambda a: (a.rating_count, a.popularity.get("installs", 0)), reverse=True)
+
+    if args.json:
+        print(json.dumps({"apps": [asdict(a) for a in apps],
+                          "unavailable": FAILURES}, indent=2))
+        return 0
+
+    if not apps:
+        print("Nothing found.")
+    for tag, why in FAILURES.items():
+        print(f"  ({tag} could not be reached: {why})")
+    if not apps:
+        return 0
+    for a in apps[:20]:
+        line = f"  {a.name}"
+        if a.rating:
+            line += f"   {a.rating}★ ({a.rating_count})"
+        print(line)
+        if a.summary:
+            print(f"      {a.summary[:74]}")
+        extra = ", ".join(x["source"] for x in a.also_from)
+        print(f"      {a.source}" + (f" · also {extra}" if extra else "")
+              + (f" · installed" if a.installed else ""))
+    return 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(prog="sakura-store", description=__doc__)
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser("search")
+    s.add_argument("query")
+    s.add_argument("--source")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_search)
+
+    v = sub.add_parser("sources")
+    v.set_defaults(fn=cmd_sources)
+
+    args = p.parse_args()
+    return args.fn(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
