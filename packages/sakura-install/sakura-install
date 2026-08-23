@@ -218,6 +218,14 @@ sed -i 's/^MODULES=.*/MODULES=(btrfs)/' /mnt/etc/mkinitcpio.conf
 arch-chroot /mnt /bin/bash -euo pipefail <<CHROOT
 locale-gen >/dev/null
 
+# Trust our signing key inside the target. sakura-keyring's own scriptlet runs
+# during pacstrap, before the target keyring is usable, so the key ends up
+# shipped but never imported -- and the first pacman -Syu on the new system
+# fails with "key is unknown" on our own repository.
+pacman-key --init >/dev/null 2>&1
+pacman-key --populate archlinux sakura >/dev/null 2>&1
+pacman-key --updatedb >/dev/null 2>&1
+
 useradd -m -G wheel -s /bin/bash "$USERNAME"
 echo "$USERNAME:$USERPASS" | chpasswd
 if [ -n "$ROOTPASS" ]; then

@@ -8,11 +8,23 @@ pre_install() {
     fi
 }
 
-post_install() {
-    cat <<'MSG'
-  SakuraOS repository configuration installed.
+_activate_repos() {
+    # Do it, rather than print instructions telling the user to do it. A
+    # config file nothing includes is inert, and the previous version shipped
+    # a working repository definition that pacman never read.
+    grep -q 'sakura-core.conf' etc/pacman.conf 2>/dev/null && return 0
+    sed -i '/^\[core\]/i Include = /etc/pacman.d/sakura-core.conf\n' etc/pacman.conf
+}
 
-  Add this line to /etc/pacman.conf, above [core]:
-      Include = /etc/pacman.d/sakura-core.conf
-MSG
+post_install() {
+    pre_install
+    _activate_repos
+}
+
+post_upgrade() {
+    _activate_repos
+}
+
+pre_remove() {
+    sed -i '\|^Include = /etc/pacman.d/sakura-core.conf$|d' etc/pacman.conf 2>/dev/null || true
 }
