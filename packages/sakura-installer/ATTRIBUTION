@@ -1,0 +1,16 @@
+Browser icons
+=============
+
+The installer shows each browser's own icon, taken from the package that
+ships it, to identify which browser you are choosing. Using a mark to refer
+to the product it belongs to is ordinary nominative use, and it is what every
+software centre does.
+
+  Zen      app.zen_browser.zen (Flatpak)   MPL-2.0 project
+  Firefox  firefox                          Mozilla trademark, used to refer
+                                            to Firefox
+  Brave    brave-bin                        Brave Software trademark
+  Chrome   google-chrome                    Google trademark
+
+These are the vendors' marks, not ours. If any vendor objects, the icon comes
+out; the grid does not depend on them.

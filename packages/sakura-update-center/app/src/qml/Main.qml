@@ -27,7 +27,7 @@ QQC2.ApplicationWindow {
     property int tab: 0
     readonly property var tabs: ["Status", "Available", "History", "Schedule"]
 
-    Component.onCompleted: backend.check()
+    Component.onCompleted: { backend.check(); backend.loadHistory() }
 
     // ---- shared pieces -----------------------------------------------------
     component Head : ColumnLayout {
@@ -37,10 +37,10 @@ QQC2.ApplicationWindow {
         spacing: 5
         QQC2.Label {
             text: parent.title; color: root.text
-            font.pixelSize: 21; font.weight: Font.DemiBold
+            font.pixelSize: 25; font.weight: Font.DemiBold
         }
         QQC2.Label {
-            text: parent.subtitle; color: root.dim; font.pixelSize: 13
+            text: parent.subtitle; color: root.dim; font.pixelSize: 14
             wrapMode: Text.WordWrap; Layout.fillWidth: true
             visible: text !== ""
         }
@@ -57,7 +57,7 @@ QQC2.ApplicationWindow {
         border.color: Qt.rgba(tint.r, tint.g, tint.b, 0.45)
         QQC2.Label {
             id: t; anchors.centerIn: parent; text: label; color: tint
-            font.pixelSize: 10.0 ; font.weight: Font.DemiBold
+            font.pixelSize: 12 ; font.weight: Font.DemiBold
         }
     }
 
@@ -67,7 +67,7 @@ QQC2.ApplicationWindow {
         contentItem: QQC2.Label {
             text: parent.text
             color: parent.enabled ? (parent.quiet ? root.text : root.accentText) : root.dim
-            font.pixelSize: 13.0; font.weight: Font.DemiBold
+            font.pixelSize: 14; font.weight: Font.DemiBold
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
@@ -100,9 +100,9 @@ QQC2.ApplicationWindow {
                     spacing: 9
                     Rectangle {
                         width: 24; height: 24; radius: 12; color: root.accent
-                        QQC2.Label { anchors.centerIn: parent; text: "✿"; color: root.accentText; font.pixelSize: 14 }
+                        QQC2.Label { anchors.centerIn: parent; text: "✿"; color: root.accentText; font.pixelSize: 16 }
                     }
-                    QQC2.Label { text: "Updates"; color: root.text; font.pixelSize: 15; font.weight: Font.DemiBold }
+                    QQC2.Label { text: "Updates"; color: root.text; font.pixelSize: 16; font.weight: Font.DemiBold }
                 }
 
                 ColumnLayout {
@@ -126,7 +126,7 @@ QQC2.ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: modelData
                                     color: index === root.tab ? root.accent : root.dim
-                                    font.pixelSize: 13.0
+                                    font.pixelSize: 14
                                     font.weight: index === root.tab ? Font.DemiBold : Font.Normal
                                 }
                                 Pill {
@@ -145,7 +145,7 @@ QQC2.ApplicationWindow {
                 Item { Layout.fillHeight: true }
                 QQC2.Label {
                     text: backend.lastChecked === "" ? "" : "Checked " + backend.lastChecked
-                    color: root.dim; font.pixelSize: 11
+                    color: root.dim; font.pixelSize: 12
                     wrapMode: Text.WordWrap; Layout.fillWidth: true
                 }
             }
@@ -169,7 +169,7 @@ QQC2.ApplicationWindow {
                 QQC2.Label {
                     anchors.fill: parent; anchors.margins: 12
                     text: backend.error; color: "#ff9db0"
-                    font.pixelSize: 12.0; verticalAlignment: Text.AlignVCenter
+                    font.pixelSize: 14; verticalAlignment: Text.AlignVCenter
                     wrapMode: Text.WordWrap
                 }
             }
@@ -179,11 +179,33 @@ QQC2.ApplicationWindow {
                 Layout.fillHeight: true
                 clip: true
                 contentWidth: availableWidth
-                Loader {
+                Item {
                     width: parent.width
+                    implicitHeight: pageLoader.implicitHeight
+                Loader {
+                    id: pageLoader
+                    width: Math.min(660, parent.width - 72)
+                    anchors.horizontalCenter: parent.horizontalCenter
                     sourceComponent: root.tab === 0 ? statusPage
                                    : root.tab === 1 ? availablePage
                                    : root.tab === 2 ? historyPage : schedulePage
+
+                    // Each page fades and lifts as it is swapped in, so
+                    // moving between them reads as one window changing rather
+                    // than four unrelated screens.
+                    opacity: 0
+                    y: 10
+                    onSourceComponentChanged: swap.restart()
+                    Component.onCompleted: swap.start()
+                    NumberAnimation on opacity {
+                        id: swap
+                        running: false
+                        from: 0; to: 1; duration: 220
+                        easing.type: Easing.OutCubic
+                    }
+                    Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                    onOpacityChanged: if (opacity > 0.99) y = 0
+                }
                 }
             }
         }
@@ -193,24 +215,50 @@ QQC2.ApplicationWindow {
     Component {
         id: statusPage
         ColumnLayout {
-            anchors.margins: 28
             spacing: 20
-            Item { Layout.preferredHeight: 8 }
+            Item { Layout.preferredHeight: 30 }
 
             RowLayout {
                 spacing: 16
-                Rectangle {
-                    width: 54; height: 54; radius: 27
-                    color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b,
-                                   backend.updates.length ? 0.18 : 0.0)
-                    border.width: 2
-                    border.color: backend.updates.length ? root.accent : root.good
+                Item {
+                    width: 68; height: 68
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b,
+                                       backend.updates.length ? 0.16 : 0.0)
+                        border.width: 2
+                        border.color: backend.busy ? root.dim
+                                    : backend.updates.length ? root.accent : root.good
+                        Behavior on border.color { ColorAnimation { duration: 260 } }
+                        Behavior on color { ColorAnimation { duration: 260 } }
+                    }
+                    // A sweep round the ring while checking, rather than a
+                    // spinner bolted on beside it. The ring already is the
+                    // status; it should be the thing that moves.
+                    Item {
+                        anchors.fill: parent
+                        opacity: backend.busy ? 1 : 0
+                        visible: opacity > 0
+                        Behavior on opacity { NumberAnimation { duration: 220 } }
+                        RotationAnimator on rotation {
+                            running: backend.busy
+                            from: 0; to: 360; duration: 1200; loops: Animation.Infinite
+                        }
+                        Rectangle {
+                            width: 7; height: 7; radius: 3.5
+                            color: root.accent
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: -3
+                        }
+                    }
                     QQC2.Label {
                         anchors.centerIn: parent
-                        text: backend.updates.length ? backend.updates.length : "✓"
+                        text: backend.busy ? "" : (backend.updates.length ? backend.updates.length : "✓")
                         color: backend.updates.length ? root.accent : root.good
-                        font.pixelSize: backend.updates.length ? 20 : 24
+                        font.pixelSize: backend.updates.length ? 26 : 32
                         font.weight: Font.DemiBold
+                        Behavior on opacity { NumberAnimation { duration: 200 } }
                     }
                 }
                 ColumnLayout {
@@ -220,20 +268,19 @@ QQC2.ApplicationWindow {
                             : backend.updates.length === 0 ? "Everything is up to date"
                             : backend.updates.length === 1 ? "1 update available"
                             : backend.updates.length + " updates available"
-                        color: root.text; font.pixelSize: 24; font.weight: Font.Light
+                        color: root.text; font.pixelSize: 30; font.weight: Font.Light
                     }
                     QQC2.Label {
                         text: backend.updates.length
                             ? "A restore point is taken before anything is installed."
                             : "Updates install automatically overnight."
-                        color: root.dim; font.pixelSize: 13
+                        color: root.dim; font.pixelSize: 14
                     }
                 }
             }
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.maximumWidth: 560
                 implicitHeight: rr.implicitHeight + 26
                 radius: 11
                 visible: backend.restartRequired
@@ -243,10 +290,58 @@ QQC2.ApplicationWindow {
                 ColumnLayout {
                     id: rr
                     anchors.fill: parent; anchors.margins: 13; spacing: 3
-                    QQC2.Label { text: "A restart is needed"; color: root.warn; font.pixelSize: 14; font.weight: Font.DemiBold }
+                    QQC2.Label { text: "A restart is needed"; color: root.warn; font.pixelSize: 16; font.weight: Font.DemiBold }
                     QQC2.Label {
                         text: "Some of these replace parts of the running system. They install now and take effect when you restart."
-                        color: root.dim; font.pixelSize: 12.0; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                        color: root.dim; font.pixelSize: 14; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                    }
+                }
+            }
+
+            // Facts under the headline, so the landing screen states something
+            // rather than being a button with a sentence over it.
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                columns: width > 470 ? 3 : 1
+                columnSpacing: 12
+                rowSpacing: 12
+
+                Repeater {
+                    model: [
+                        { k: "Held back",
+                          v: backend.updates.filter(function(u){ return u.held !== "" }).length.toString(),
+                          d: "waiting on a manual step" },
+                        { k: "Needs a restart",
+                          v: backend.updates.filter(function(u){ return u.restart }).length.toString(),
+                          d: "replaces part of the running system" },
+                        { k: "Restore points",
+                          v: backend.history.length.toString(),
+                          d: "points you can go back to" }
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        implicitHeight: 92
+                        radius: 12
+                        color: root.card
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 15
+                            spacing: 1
+                            QQC2.Label {
+                                text: modelData.v; color: root.text
+                                font.pixelSize: 26; font.weight: Font.Light
+                            }
+                            QQC2.Label {
+                                text: modelData.k; color: root.text
+                                font.pixelSize: 13; font.weight: Font.DemiBold
+                            }
+                            QQC2.Label {
+                                text: modelData.d; color: root.dim; font.pixelSize: 12
+                                wrapMode: Text.WordWrap; Layout.fillWidth: true
+                            }
+                        }
                     }
                 }
             }
@@ -267,7 +362,6 @@ QQC2.ApplicationWindow {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.maximumWidth: 620
                 Layout.preferredHeight: 190
                 radius: 10
                 visible: backend.log !== ""
@@ -277,7 +371,7 @@ QQC2.ApplicationWindow {
                     anchors.fill: parent; anchors.margins: 10; clip: true
                     QQC2.TextArea {
                         readOnly: true; text: backend.log; color: root.dim
-                        font.family: "monospace"; font.pixelSize: 11
+                        font.family: "monospace"; font.pixelSize: 12
                         background: null; wrapMode: Text.NoWrap
                     }
                 }
@@ -290,9 +384,8 @@ QQC2.ApplicationWindow {
     Component {
         id: availablePage
         ColumnLayout {
-            anchors.margins: 28
             spacing: 16
-            Item { Layout.preferredHeight: 8 }
+            Item { Layout.preferredHeight: 30 }
             Head {
                 title: "What will be installed"
                 subtitle: "Version numbers tell you nothing on their own, so each one says what it is and what on this machine needs it."
@@ -301,7 +394,7 @@ QQC2.ApplicationWindow {
             QQC2.Label {
                 visible: backend.updates.length === 0 && !backend.busy
                 text: "Nothing to install."
-                color: root.dim; font.pixelSize: 14
+                color: root.dim; font.pixelSize: 16
             }
 
             Repeater {
@@ -309,7 +402,6 @@ QQC2.ApplicationWindow {
                 delegate: Rectangle {
                     required property var modelData
                     Layout.fillWidth: true
-                    Layout.maximumWidth: 640
                     implicitHeight: c.implicitHeight + 26
                     radius: 11
                     color: root.card
@@ -321,11 +413,11 @@ QQC2.ApplicationWindow {
                             spacing: 9
                             QQC2.Label {
                                 text: modelData.name; color: root.text
-                                font.pixelSize: 14; font.weight: Font.DemiBold
+                                font.pixelSize: 16; font.weight: Font.DemiBold
                             }
                             QQC2.Label {
                                 text: modelData.old + " → " + modelData["new"]
-                                color: root.dim; font.pixelSize: 11.0
+                                color: root.dim; font.pixelSize: 12
                                 font.family: "monospace"
                             }
                             Item { Layout.fillWidth: true }
@@ -335,17 +427,17 @@ QQC2.ApplicationWindow {
                         QQC2.Label {
                             visible: modelData.summary !== ""
                             text: modelData.summary; color: root.dim
-                            font.pixelSize: 12.0; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                            font.pixelSize: 14; wrapMode: Text.WordWrap; Layout.fillWidth: true
                         }
                         QQC2.Label {
                             visible: modelData.neededBy !== ""
                             text: "Needed by " + modelData.neededBy
                             color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.8)
-                            font.pixelSize: 11.0
+                            font.pixelSize: 12
                         }
                         QQC2.Label {
                             visible: modelData.held !== ""
-                            text: modelData.held; color: root.warn; font.pixelSize: 11.0
+                            text: modelData.held; color: root.warn; font.pixelSize: 12
                             wrapMode: Text.WordWrap; Layout.fillWidth: true
                         }
                     }
@@ -355,11 +447,10 @@ QQC2.ApplicationWindow {
             ColumnLayout {
                 visible: backend.holds.length > 0
                 Layout.fillWidth: true
-                Layout.maximumWidth: 640
                 spacing: 8
                 QQC2.Label {
                     text: "Why some are held"; color: root.text
-                    font.pixelSize: 14; font.weight: Font.DemiBold
+                    font.pixelSize: 16; font.weight: Font.DemiBold
                     topPadding: 8
                 }
                 Repeater {
@@ -368,7 +459,7 @@ QQC2.ApplicationWindow {
                         required property var modelData
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        color: root.dim; font.pixelSize: 12.0
+                        color: root.dim; font.pixelSize: 14
                         text: "Arch published a manual step: " + modelData.title
                     }
                 }
@@ -376,7 +467,7 @@ QQC2.ApplicationWindow {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.8)
-                    font.pixelSize: 11.0
+                    font.pixelSize: 12
                     text: "Everything else installs as normal. Held packages wait until the step has been done."
                 }
             }
@@ -388,9 +479,8 @@ QQC2.ApplicationWindow {
     Component {
         id: historyPage
         ColumnLayout {
-            anchors.margins: 28
             spacing: 16
-            Item { Layout.preferredHeight: 8 }
+            Item { Layout.preferredHeight: 30 }
             Head {
                 title: "Restore points"
                 subtitle: "One is taken before every change. To go back to one, restart and choose Recovery from the boot menu."
@@ -398,14 +488,13 @@ QQC2.ApplicationWindow {
             QQC2.Label {
                 visible: backend.history.length === 0
                 text: "No restore points yet."
-                color: root.dim; font.pixelSize: 14
+                color: root.dim; font.pixelSize: 16
             }
             Repeater {
                 model: backend.history
                 delegate: Rectangle {
                     required property var modelData
                     Layout.fillWidth: true
-                    Layout.maximumWidth: 640
                     implicitHeight: 58
                     radius: 10
                     color: root.card
@@ -419,15 +508,15 @@ QQC2.ApplicationWindow {
                             spacing: 2
                             QQC2.Label {
                                 text: modelData.description === "" ? "Restore point" : modelData.description
-                                color: root.text; font.pixelSize: 13.0
+                                color: root.text; font.pixelSize: 14
                             }
-                            QQC2.Label { text: modelData.date; color: root.dim; font.pixelSize: 11.0 }
+                            QQC2.Label { text: modelData.date; color: root.dim; font.pixelSize: 12 }
                         }
                         Item { Layout.fillWidth: true }
                         QQC2.Label {
                             text: "#" + modelData.number
                             color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.7)
-                            font.pixelSize: 11.0; font.family: "monospace"
+                            font.pixelSize: 12; font.family: "monospace"
                         }
                     }
                 }
@@ -440,10 +529,9 @@ QQC2.ApplicationWindow {
     Component {
         id: schedulePage
         ColumnLayout {
-            anchors.margins: 28
             spacing: 16
             property var s: backend.schedule()
-            Item { Layout.preferredHeight: 8 }
+            Item { Layout.preferredHeight: 30 }
             Head {
                 title: "When updates install"
                 subtitle: "These are the same settings as the SakuraOS page in System Settings — changing them here changes them there."
@@ -454,7 +542,7 @@ QQC2.ApplicationWindow {
                 text: "Install updates automatically"
                 checked: parent.s.autoApply
                 contentItem: QQC2.Label {
-                    text: parent.text; color: root.text; font.pixelSize: 13.0
+                    text: parent.text; color: root.text; font.pixelSize: 14
                     leftPadding: parent.indicator.width + 8
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -466,7 +554,7 @@ QQC2.ApplicationWindow {
                 checked: parent.s.canary
                 contentItem: QQC2.Label {
                     text: parent.text; color: parent.enabled ? root.text : root.dim
-                    font.pixelSize: 13.0
+                    font.pixelSize: 14
                     leftPadding: parent.indicator.width + 8
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -478,14 +566,14 @@ QQC2.ApplicationWindow {
                 checked: parent.s.acOnly
                 contentItem: QQC2.Label {
                     text: parent.text; color: parent.enabled ? root.text : root.dim
-                    font.pixelSize: 13.0
+                    font.pixelSize: 14
                     leftPadding: parent.indicator.width + 8
                     verticalAlignment: Text.AlignVCenter
                 }
             }
             RowLayout {
                 spacing: 10
-                QQC2.Label { text: "Install at"; color: root.dim; font.pixelSize: 13.0 }
+                QQC2.Label { text: "Install at"; color: root.dim; font.pixelSize: 14 }
                 QQC2.TextField {
                     id: timeField
                     enabled: autoBox.checked

@@ -712,13 +712,15 @@ QQC2.ApplicationWindow {
                     // scraped off their site. Drop real icons in here once
                     // that is checked; the layout does not change.
                     model: [
-                        { pkg: "zen-browser-bin", name: "Zen",     tint: "#f76f53",
+                        { pkg: "zen-browser-bin", name: "Zen", icon: "zen",
                           detail: "SakuraOS default. Firefox-based, built around tabs you actually keep." },
-                        { pkg: "firefox",         name: "Firefox", tint: "#ff7139",
+                        { pkg: "firefox",         name: "Firefox", icon: "firefox",
                           detail: "Independent engine. Strong privacy defaults." },
-                        { pkg: "brave",           name: "Brave",   tint: "#fb542b",
+                        { pkg: "brave",           name: "Brave", icon: "brave",
                           detail: "Chromium-based. Blocks ads and trackers by default." },
-                        { pkg: "google-chrome",   name: "Chrome",  tint: "#4285f4",
+                        // Named in full: "Chrome" alone reads as Chromium to
+                        // exactly the audience most likely to confuse them.
+                        { pkg: "google-chrome",   name: "Google Chrome", icon: "chrome",
                           detail: "Chromium-based, by Google." }
                     ]
                     delegate: Rectangle {
@@ -739,18 +741,12 @@ QQC2.ApplicationWindow {
                             anchors.margins: 16
                             spacing: 8
 
-                            Rectangle {
+                            Image {
                                 Layout.preferredWidth: 40
                                 Layout.preferredHeight: 40
-                                radius: 20
-                                color: modelData.tint
-                                QQC2.Label {
-                                    anchors.centerIn: parent
-                                    text: modelData.name.charAt(0)
-                                    color: "#ffffff"
-                                    font.pixelSize: 20
-                                    font.weight: Font.DemiBold
-                                }
+                                source: "qrc:/assets/browser-" + modelData.icon + ".png"
+                                sourceSize: Qt.size(96, 96)
+                                fillMode: Image.PreserveAspectFit
                             }
                             QQC2.Label {
                                 text: modelData.name
