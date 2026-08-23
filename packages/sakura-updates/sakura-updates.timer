@@ -1,0 +1,14 @@
+[Unit]
+Description=Nightly SakuraOS update check
+
+[Timer]
+# The time is a default the user can change in Update Centre; it is written
+# back here rather than kept in a second place that could disagree.
+OnCalendar=*-*-* 03:00:00
+# A machine that was asleep at 03:00 still gets its update, rather than
+# silently going a day further behind every time it is closed at night.
+Persistent=true
+RandomizedDelaySec=20m
+
+[Install]
+WantedBy=timers.target

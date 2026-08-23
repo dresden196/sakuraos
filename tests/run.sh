@@ -40,6 +40,7 @@ docker run --rm --privileged \
             >> /etc/bash.bashrc
         install -Dm755 /build/packages/sakura-settings-kcm/kcm/helper/sakura-settings-write \
             /usr/lib/sakura/settings/sakura-settings-write
+        install -Dm755 /build/packages/sakura-updates/sakura-update /usr/bin/sakura-update
 
         rc=0
         bash /build/tests/test-rollback.sh || rc=1
@@ -51,5 +52,7 @@ docker run --rm --privileged \
         bash /build/tests/test-settings-write.sh || rc=1
         echo
         bash /build/tests/test-shell-assist.sh || rc=1
+        echo
+        bash /build/tests/test-updates.sh || rc=1
         exit $rc
     '

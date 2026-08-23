@@ -1,0 +1,25 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# One implementation of the update logic, three front ends: the Update Centre
+# draws it, the timer runs it unattended, and a terminal can drive it
+# directly. Three implementations would eventually disagree about what is
+# held and why.
+pkgname=sakura-updates
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="SakuraOS update engine"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+depends=('python' 'pacman-contrib' 'snapper' 'sakura-settings-core')
+source=('sakura-update' 'sakura-updates.service' 'sakura-updates.timer')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+    install -Dm755 "$srcdir/sakura-update" "$pkgdir/usr/bin/sakura-update"
+    install -Dm644 "$srcdir/sakura-updates.service" \
+        "$pkgdir/usr/lib/systemd/system/sakura-updates.service"
+    install -Dm644 "$srcdir/sakura-updates.timer" \
+        "$pkgdir/usr/lib/systemd/system/sakura-updates.timer"
+    install -d "$pkgdir/var/lib/sakura/updates"
+}

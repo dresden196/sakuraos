@@ -84,8 +84,9 @@ depends=(
     'flatpak'
     'archlinux-appstream-data'
 
-    # Update manager helpers
+    # Updates
     'pacman-contrib'
+    'sakura-updates'
 
     # Policy, and the layer that enforces it
     'sakura-settings-core'
