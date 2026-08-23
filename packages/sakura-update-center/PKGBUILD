@@ -1,0 +1,29 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# The face of sakura-update. It runs the engine and draws what comes back --
+# it does not decide anything itself, because a window and a timer that
+# disagreed about what was held would leave the window as the thing people
+# believed.
+pkgname=sakura-update-center
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="See and manage SakuraOS updates"
+arch=('x86_64')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+depends=('sakura-updates' 'qt6-base' 'qt6-declarative' 'ki18n'
+         'qqc2-desktop-style' 'polkit')
+makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools')
+
+build() {
+    cp -r "$startdir/app" "$srcdir/app-src"
+    cmake -S "$srcdir/app-src" -B "$srcdir/build" \
+        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build "$srcdir/build" --parallel
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+    install -Dm644 "$startdir/org.sakuraos.updatecenter.desktop" \
+        "$pkgdir/usr/share/applications/org.sakuraos.updatecenter.desktop"
+}

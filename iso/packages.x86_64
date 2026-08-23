@@ -177,6 +177,8 @@ sakura-install
 sakura-installer
 sakura-theme
 sakura-wallpapers
+sakura-updates
+sakura-update-center
 sddm-kcm
 
 # --- SakuraOS target-system tooling ----------------------------------------

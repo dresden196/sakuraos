@@ -87,6 +87,7 @@ depends=(
     # Updates
     'pacman-contrib'
     'sakura-updates'
+    'sakura-update-center'
 
     # Policy, and the layer that enforces it
     'sakura-settings-core'

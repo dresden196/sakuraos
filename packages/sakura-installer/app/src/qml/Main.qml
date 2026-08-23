@@ -24,7 +24,7 @@ QQC2.ApplicationWindow {
     // the 3.0:1 controls need, but 10.24:1 on a dark one.
     readonly property bool  dark:   answers.dark
     readonly property color accent: dark ? "#ffb7c5" : "#d81b60"
-    readonly property color onAccent: dark ? "#3a2731" : "#ffffff"
+    readonly property color accentText: dark ? "#3a2731" : "#ffffff"
     readonly property color bg:     dark ? "#26161e" : "#faf6f8"
     readonly property color panel:  dark ? "#2f1f28" : "#f1e7ec"
     readonly property color card:   dark ? "#3a2731" : "#ffffff"
@@ -150,7 +150,7 @@ QQC2.ApplicationWindow {
         color: root.text
         placeholderTextColor: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.7)
         selectionColor: root.accent
-        selectedTextColor: root.onAccent
+        selectedTextColor: root.accentText
         leftPadding: 12
         topPadding: 10
         bottomPadding: 10
@@ -248,7 +248,7 @@ QQC2.ApplicationWindow {
                 onClicked: root.step = 0
                 contentItem: QQC2.Label {
                     text: parent.text
-                    color: root.onAccent
+                    color: root.accentText
                     font.pixelSize: 15
                     font.weight: Font.DemiBold
                     horizontalAlignment: Text.AlignHCenter
@@ -286,7 +286,7 @@ QQC2.ApplicationWindow {
                         QQC2.Label {
                             anchors.centerIn: parent
                             text: "✿"
-                            color: root.onAccent
+                            color: root.accentText
                             font.pixelSize: 17
                         }
                     }
@@ -319,7 +319,7 @@ QQC2.ApplicationWindow {
                                 QQC2.Label {
                                     anchors.centerIn: parent
                                     text: index < root.step ? "✓" : (index + 1)
-                                    color: index < root.step ? root.onAccent
+                                    color: index < root.step ? root.accentText
                                          : index === root.step ? root.accent : root.dim
                                     font.pixelSize: 11
                                     font.weight: Font.DemiBold
@@ -424,7 +424,7 @@ QQC2.ApplicationWindow {
                     onClicked: root.step++
                     contentItem: QQC2.Label {
                         text: parent.text
-                        color: parent.enabled ? root.onAccent : root.dim
+                        color: parent.enabled ? root.accentText : root.dim
                         font.pixelSize: 14
                         font.weight: Font.DemiBold
                         horizontalAlignment: Text.AlignHCenter
