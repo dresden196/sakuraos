@@ -11,3 +11,15 @@
 # limine-snapper-sync
 # limine-mkinitcpio-hook
 # limine-entry-tool
+
+# NVIDIA 590 dropped Pascal and Maxwell, and the only driver those cards have
+# left lives in the AUR. A distro cannot build from the AUR during an install,
+# so it is rebuilt here -- and once it is here, SakuraOS owns it, because
+# upstream never will again. It is DKMS: it recompiles on every kernel bump
+# and will eventually stop building against a kernel nobody will fix it for.
+#
+# List the PKGBASE, never an individual split package. nvidia-580xx-utils is
+# one pkgbase that produces -utils, -dkms and opencl-nvidia-580xx together;
+# asking for -dkms separately clones an empty AUR repo and fails with
+# "PKGBUILD does not exist" even though the package was already built.
+nvidia-580xx-utils
