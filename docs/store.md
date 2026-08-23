@@ -46,6 +46,20 @@ the system exactly.
 | Repo / AUR | Already handled by the update engine | AUR needs a rebuild on soname bumps |
 | **AppImage** | Embedded zsync update information | **Opt-in by the developer.** An AppImage without it has no way to know it is stale. |
 
+Two things had to be established by testing rather than assumption:
+
+The update string is not always a URL. `zsync|https://...` is one form;
+`gh-releases-zsync|OWNER|REPO|RELEASE|pattern.zsync` is the other, and it is a
+pattern that has to be resolved against the GitHub releases API first. Only
+the literal tag `latest` means the latest-release endpoint — `continuous` is
+an ordinary rolling tag, and asking for `/releases/latest` returns a different
+release entirely.
+
+Arch's `zsync` is version 0.6.6, which predates widespread HTTPS and cannot
+read a control file over it. Every real AppImage update URL is https, so the
+packaged tool cannot update anything at all. `zsync2` is the maintained
+rewrite and is rebuilt into sakura-core alongside snapd.
+
 The AppImage gap is real and cannot be engineered away for apps whose authors
 did not add update information. Where it is absent, the honest options are to
 watch the origin the file came from, or to say plainly that this one cannot
@@ -88,6 +102,24 @@ sandboxing on Arch is weaker than it appears. And the Arch community's opinion
 of Snap is not neutral.
 
 Including it is defensible; it should be a decision rather than an assumption.
+
+## Flatpak permissions and AppImage management
+
+Neither needs a third-party application.
+
+Plasma already ships `flatpak-kcm`, which is Flatseal's job done natively in
+Qt and already present in our build. The store links to it per application
+rather than duplicating it — the control belongs where the user is already
+thinking about that app, not in a separate GTK window.
+
+AppImage handling follows the approach AppManager
+(github.com/kem-a/AppManager, GPL-3.0) worked out: zsync delta updates from
+the file's own embedded update information, checksum verification before
+anything is made executable, and desktop integration so an AppImage behaves
+like an installed application. Reimplemented rather than shipped, because
+AppManager is GTK4/libadwaita on a Plasma desktop and because managing
+applications in two separate places is the confusion this store exists to
+remove. The protocol work is not ours — zsync2 does the delta transfer.
 
 ## Developer uploads
 
