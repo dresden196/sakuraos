@@ -18,6 +18,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OVMF_DIR=/usr/share/edk2/x64
 DISK="$REPO_ROOT/out/sakura-test.qcow2"
+DISK2="$REPO_ROOT/out/sakura-test2.qcow2"
 NVRAM="$REPO_ROOT/out/OVMF_VARS.fd"
 QMP_SOCK="$REPO_ROOT/out/qmp.sock"
 QGA_SOCK="$REPO_ROOT/out/qga.sock"
@@ -45,7 +46,7 @@ if (( ! installed )); then
     [[ -n "$ISO" ]] || { echo "no ISO in out/ — run build/build-iso.sh first" >&2; exit 1; }
 fi
 
-if (( reset )); then rm -f "$DISK" "$NVRAM"; fi
+if (( reset )); then rm -f "$DISK" "$DISK2" "$NVRAM"; fi
 # After an install, the firmware boot entry the installer wrote outranks the
 # optical drive, so attaching the ISO is not enough to boot it again. Clearing
 # just the NVRAM gets back to the live environment without losing the install
@@ -62,6 +63,9 @@ fi
 # /usr/share is read-only and holds no per-machine Secure Boot state.
 [[ -f "$NVRAM" ]] || cp "$OVMF_DIR/OVMF_VARS.4m.fd" "$NVRAM"
 [[ -f "$DISK" ]]  || qemu-img create -f qcow2 "$DISK" 60G >/dev/null
+# A second disk, so disk selection is exercised rather than assumed:
+# with one disk the picker looks right whether or not it enumerates.
+[[ -f "$DISK2" ]] || qemu-img create -f qcow2 "$DISK2" 32G >/dev/null
 
 rm -f "$QMP_SOCK" "$QGA_SOCK"
 
@@ -96,6 +100,7 @@ exec qemu-system-x86_64 \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$CODE" \
     -drive if=pflash,format=raw,unit=1,file="$NVRAM" \
     -drive file="$DISK",if=virtio,format=qcow2 \
+    -drive file="$DISK2",if=virtio,format=qcow2 \
     "${media_args[@]}" \
     -device qemu-xhci -device usb-tablet \
     -netdev user,id=net0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=net0 \

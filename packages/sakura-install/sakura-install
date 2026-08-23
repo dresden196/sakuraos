@@ -18,6 +18,7 @@ ROOTPASS=""
 TIMEZONE="UTC"
 LOCALE="en_US.UTF-8"
 SECUREBOOT="auto"
+THEME="dark"
 EXTRA_PACKAGES=""
 ASSUME_YES=0
 
@@ -36,7 +37,8 @@ while [[ $# -gt 0 ]]; do
         --locale)     LOCALE="$2"; shift 2 ;;
         --secureboot) SECUREBOOT="$2"; shift 2 ;;   # auto | on | off
         --extra-packages) EXTRA_PACKAGES="$2"; shift 2 ;;
-        --graphics) GRAPHICS="$2"; shift 2 ;;   # auto | nvidia-open | nvidia-580xx | nouveau | none
+        --graphics) GRAPHICS="$2"; shift 2 ;;
+        --theme) THEME="$2"; shift 2 ;;         # dark | light   # auto | nvidia-open | nvidia-580xx | nouveau | none
         --yes)        ASSUME_YES=1; shift ;;
         *) die "unknown option: $1" ;;
     esac
@@ -227,6 +229,12 @@ echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/10-wheel
 chmod 440 /etc/sudoers.d/10-wheel
 
 systemctl enable sddm NetworkManager >/dev/null 2>&1
+
+# Apply the appearance the user chose. Without this the answer is collected in
+# the installer and silently thrown away, and every machine boots dark.
+if [ -f "/usr/share/sakura/theme/kdeglobals-$THEME" ]; then
+    install -Dm644 "/usr/share/sakura/theme/kdeglobals-$THEME" /etc/xdg/kdeglobals
+fi
 
 mkdir -p /boot/EFI/sakura /boot/EFI/BOOT
 mkinitcpio -P

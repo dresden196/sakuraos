@@ -27,6 +27,10 @@ depends=(
     # drops to emergency mode -- where root is locked, so there is no way in.
     'dosfstools'
 
+    # Compressed swap in RAM. Without any swap the kernel has nowhere to put
+    # cold pages and responds to memory pressure by killing something.
+    'zram-generator'
+
     # Boot chain: limine + UKI, with recovery rollback and Secure Boot signing
     'limine'
     'sakura-snapshot-boot'

@@ -10,10 +10,12 @@ pkgdesc="SakuraOS system settings schema"
 arch=('any')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
-backup=('etc/sakura/sakura.conf')
-source=('sakura.conf')
-sha256sums=('SKIP')
+backup=('etc/sakura/sakura.conf' 'etc/systemd/zram-generator.conf')
+source=('sakura.conf' 'zram-generator.conf' '99-sakura-zram.conf')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm644 "$srcdir/sakura.conf" "$pkgdir/etc/sakura/sakura.conf"
+    install -Dm644 "$srcdir/zram-generator.conf" "$pkgdir/etc/systemd/zram-generator.conf"
+    install -Dm644 "$srcdir/99-sakura-zram.conf" "$pkgdir/etc/sysctl.d/99-sakura-zram.conf"
 }
