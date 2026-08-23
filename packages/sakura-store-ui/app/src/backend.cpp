@@ -179,9 +179,14 @@ void Backend::remove(const QString &id, const QString &source)
 
 void Backend::openPermissions(const QString &id)
 {
-    // Plasma already ships this. Linking to it puts the control where the
-    // user is thinking about the app, without a second application that does
-    // the same job in a different toolkit.
+    // Plasma already ships this, so linking to it puts the control where the
+    // user is thinking about the app rather than in a second application that
+    // does the same job in another toolkit.
+    //
+    // systemsettings takes module arguments through --args; passing the id
+    // positionally is read as a second module name and silently ignored,
+    // which is why the button appeared to do nothing.
     QProcess::startDetached(QStringLiteral("systemsettings"),
-                            {QStringLiteral("kcm_app-permissions"), id});
+                            {QStringLiteral("--args"), id,
+                             QStringLiteral("kcm_app-permissions")});
 }

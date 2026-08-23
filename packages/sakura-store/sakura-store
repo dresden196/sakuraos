@@ -359,8 +359,12 @@ def app_detail(app_id: str) -> dict:
             rating, count = stars(ratings[key])
             break
 
+    installed_here = FlatpakSource().installed()
+
     return {
         "id": app_id,
+        "installed": app_id in installed_here,
+        "version": installed_here.get(app_id, ""),
         "name": d.get("name") or app_id,
         "summary": d.get("summary") or "",
         # Flathub returns HTML; the interface renders it rather than showing
