@@ -7,7 +7,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="${1:?usage: qmp-screendump.sh <output.png>}"
 [[ "$OUT" = /* ]] || OUT="$PWD/$OUT"
 
-exec python3 - "$REPO_ROOT/out/qmp.sock" "$OUT" <<'PY'
+exec python3 - "$REPO_ROOT/out/qmp-${SAKURA_VM:-test}.sock" "$OUT" <<'PY'
 import json, socket, sys
 
 sock_path, out = sys.argv[1], sys.argv[2]

@@ -12,7 +12,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [[ $# -gt 0 ]] || { echo "usage: sendkeys.sh <key> [key...]" >&2; exit 1; }
 
-exec python3 - "$REPO_ROOT/out/qmp.sock" "$@" <<'PY'
+exec python3 - "$REPO_ROOT/out/qmp-${SAKURA_VM:-test}.sock" "$@" <<'PY'
 import json, socket, sys, time
 
 sock_path, keys = sys.argv[1], sys.argv[2:]

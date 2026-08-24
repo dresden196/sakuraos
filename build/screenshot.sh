@@ -48,7 +48,7 @@ trap - EXIT
 echo "$OUT"
 exit 0
 
-exec python3 - "$REPO_ROOT/out/qmp.sock" "$OUT" <<'PY'
+exec python3 - "$REPO_ROOT/out/qmp-${SAKURA_VM:-test}.sock" "$OUT" <<'PY'
 import json, socket, sys
 
 sock_path, out = sys.argv[1], sys.argv[2]

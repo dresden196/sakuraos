@@ -17,7 +17,7 @@ Y="${2:?usage: scroll.sh <x> <y> [up|down] [notches]}"
 DIR="${3:-down}"
 N="${4:-5}"
 
-exec python3 - "$REPO_ROOT/out/qmp.sock" "$WIDTH" "$HEIGHT" "$X" "$Y" "$DIR" "$N" <<'PY'
+exec python3 - "$REPO_ROOT/out/qmp-${SAKURA_VM:-test}.sock" "$WIDTH" "$HEIGHT" "$X" "$Y" "$DIR" "$N" <<'PY'
 import json, socket, sys, time
 
 sock_path, width, height, x, y, direction, notches = sys.argv[1:]

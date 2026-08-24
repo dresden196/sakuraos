@@ -13,7 +13,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WIDTH="${SAKURA_VM_WIDTH:-1920}"
 HEIGHT="${SAKURA_VM_HEIGHT:-1080}"
 
-exec python3 - "$REPO_ROOT/out/qmp.sock" "$WIDTH" "$HEIGHT" "$@" <<'PY'
+exec python3 - "$REPO_ROOT/out/qmp-${SAKURA_VM:-test}.sock" "$WIDTH" "$HEIGHT" "$@" <<'PY'
 import json, socket, sys, time
 
 sock_path, width, height, *coords = sys.argv[1:]
