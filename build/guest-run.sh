@@ -11,7 +11,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CMD="${1:?usage: guest-run.sh <shell command>}"
 
-exec python3 - "$REPO_ROOT/out/qga.sock" "$CMD" <<'PY'
+exec python3 - "$REPO_ROOT/out/qga-${SAKURA_VM:-test}.sock" "$CMD" <<'PY'
 import base64, json, socket, sys, time
 
 sock_path, command = sys.argv[1], sys.argv[2]

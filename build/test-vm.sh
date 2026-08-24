@@ -17,11 +17,17 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OVMF_DIR=/usr/share/edk2/x64
-DISK="$REPO_ROOT/out/sakura-test.qcow2"
-DISK2="$REPO_ROOT/out/sakura-test2.qcow2"
-NVRAM="$REPO_ROOT/out/OVMF_VARS.fd"
-QMP_SOCK="$REPO_ROOT/out/qmp.sock"
-QGA_SOCK="$REPO_ROOT/out/qga.sock"
+
+# A named instance gets its own disks, firmware variables and sockets, so a
+# second machine -- a clean install to test against, say -- can run beside the
+# one already up instead of fighting it for the same paths. Every helper in
+# build/ reads the same variable.
+VM="${SAKURA_VM:-test}"
+DISK="$REPO_ROOT/out/sakura-$VM.qcow2"
+DISK2="$REPO_ROOT/out/sakura-$VM-2.qcow2"
+NVRAM="$REPO_ROOT/out/OVMF_VARS-$VM.fd"
+QMP_SOCK="$REPO_ROOT/out/qmp-$VM.sock"
+QGA_SOCK="$REPO_ROOT/out/qga-$VM.sock"
 
 secboot=0
 headless=0
