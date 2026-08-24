@@ -9,17 +9,21 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="${SAKURA_VM_MODE:-1920x1080@60}"
+# The live media autologins "sakura"; an installed system has whatever user
+# was created during install. Waiting for the wrong name means waiting forever
+# on a machine that booted perfectly well.
+SESSION_USER="${SAKURA_VM_USER:-sakura}"
 DEADLINE=$(( SECONDS + ${SAKURA_VM_TIMEOUT:-600} ))
 
 as_live_user() {
     "$REPO_ROOT/build/guest-run.sh" \
-        "runuser -u sakura -- env XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 $1"
+        "runuser -u $SESSION_USER -- env XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 $1"
 }
 
 echo -n ">> waiting for the live session"
 until "$REPO_ROOT/build/guest-run.sh" \
-        'loginctl list-sessions --no-legend | grep -q " sakura .*seat0"' >/dev/null 2>&1; do
-    (( SECONDS < DEADLINE )) || { echo; echo "timed out waiting for a sakura session" >&2; exit 1; }
+        "loginctl list-sessions --no-legend | grep -q \" $SESSION_USER .*seat0\"" >/dev/null 2>&1; do
+    (( SECONDS < DEADLINE )) || { echo; echo "timed out waiting for a $SESSION_USER session" >&2; exit 1; }
     echo -n .
     sleep 5
 done

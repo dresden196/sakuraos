@@ -19,11 +19,14 @@ url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
 depends=('sddm' 'plasma-desktop' 'sakura-wallpapers' 'breeze' 'breeze-icons')
 backup=('etc/sddm.conf.d/20-sakura.conf')
-source=('20-sakura.conf' 'kdeglobals' 'kdeglobals-dark' 'kdeglobals-light' 'kwinrulesrc')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+source=('20-sakura.conf' 'kdeglobals' 'kdeglobals-dark' 'kdeglobals-light' 'kwinrulesrc' 'sddm-breeze-theme.conf.user')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm644 "$srcdir/20-sakura.conf" "$pkgdir/etc/sddm.conf.d/20-sakura.conf"
+    # The greeter's own background. See the file for why it lives here.
+    install -Dm644 "$srcdir/sddm-breeze-theme.conf.user" \
+        "$pkgdir/usr/share/sddm/themes/breeze/theme.conf.user"
 
     # Defaults for new users only; a user's own config always wins.
     install -Dm644 "$srcdir/kdeglobals" "$pkgdir/etc/xdg/kdeglobals"
