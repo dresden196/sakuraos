@@ -102,19 +102,25 @@ QQC2.ApplicationWindow {
 
     // Centred spinner with a line of text under it, for a whole page that has
     // nothing to show yet.
-    component Loading : ColumnLayout {
+    //
+    // An Item with an anchored Column rather than a ColumnLayout: relying on
+    // Layout.fillWidth reaching a custom inline component left the spinner
+    // pinned to the left edge, and anchoring inside a plain Item does not
+    // depend on the attached property propagating at all.
+    component Loading : Item {
         id: loadingRoot
         property string label: ""
-        spacing: 16
-        Item { Layout.fillHeight: true }
-        Spinner { Layout.alignment: Qt.AlignHCenter }
-        QQC2.Label {
-            Layout.alignment: Qt.AlignHCenter
-            text: loadingRoot.label
-            visible: !!loadingRoot.label
-            color: root.dim; font.pixelSize: 14
+        Column {
+            anchors.centerIn: parent
+            spacing: 14
+            Spinner { anchors.horizontalCenter: parent.horizontalCenter }
+            QQC2.Label {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: loadingRoot.label
+                visible: !!loadingRoot.label
+                color: root.dim; font.pixelSize: 14
+            }
         }
-        Item { Layout.fillHeight: true }
     }
 
     component Chip : Rectangle {
@@ -1014,6 +1020,9 @@ QQC2.ApplicationWindow {
                 visible: !!appRoot.a.description
                 Layout.fillWidth: true
                 Layout.leftMargin: 26; Layout.rightMargin: 26
+                // Deliberate, unlike the cap that used to be on the review
+                // cards: this is running prose, and ~90 characters a line is
+                // where it stays readable.
                 Layout.maximumWidth: 720
                 text: appRoot.a.description || ""
                 textFormat: Text.RichText
@@ -1068,7 +1077,9 @@ QQC2.ApplicationWindow {
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
-                        Layout.maximumWidth: 720
+                        // No width cap: capped at 720 inside a ~890px column
+                        // these sat against the left edge with a wide empty
+                        // strip beside them, which is what read as off-centre.
                         implicitHeight: rv.implicitHeight + 26
                         radius: 11
                         color: root.card

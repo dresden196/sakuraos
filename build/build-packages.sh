@@ -5,7 +5,23 @@
 # build box. Signing uses whatever key SAKURA_GPGHOME points at, so switching
 # from the development key to a production one is an environment change, not a
 # pipeline change.
+#
+#   ./build/build-packages.sh              everything, including AUR rebuilds
+#   ./build/build-packages.sh --skip-aur   only our own packages
+#
+# The AUR rebuilds are the expensive part -- args, cpr, zsync2 and snapd
+# together dominate the wall clock -- and they change only when their upstream
+# PKGBUILD does. When iterating on our own code, --skip-aur reuses the
+# already-built copies from the previous run instead of compiling them again.
 set -euo pipefail
+
+SKIP_AUR=0
+for arg in "$@"; do
+    case "$arg" in
+        --skip-aur) SKIP_AUR=1 ;;
+        *) echo "unknown flag: $arg" >&2; exit 1 ;;
+    esac
+done
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE=sakura-build
@@ -39,6 +55,7 @@ docker run --rm \
     -v "$GPGHOME:/gpg:ro" \
     -v "$CACHE_VOLUME:/var/cache/pacman/pkg" \
     -e "SIGNER=$SIGNER" \
+    -e "SKIP_AUR=$SKIP_AUR" \
     -e "HOST_UID=$(id -u)" \
     -e "HOST_GID=$(id -g)" \
     -w /build \
@@ -122,7 +139,35 @@ docker run --rm \
         # makepkg flags for that one package. Per-package rather than global
         # so that weakening a check stays visible next to the package it
         # applies to, with the reason in a comment above it.
+        # Reuse what a previous run already built. The repo directory is
+        # emptied further down, so the packages have to be copied out first --
+        # otherwise --skip-aur would publish a repo with our packages and
+        # nothing else, which is worse than a slow build.
+        REUSE=/home/builder/reuse
+        install -d -o builder -g builder "$REUSE"
+        if (( SKIP_AUR )); then
+            while read -r pkg flags; do
+                if [[ -z "$pkg" || "$pkg" == \#* ]]; then continue; fi
+                found=0
+                for d in /build/repo/sakura-core/os/x86_64 \
+                         /build/repo/sakura-extra/os/x86_64; do
+                    for f in "$d/$pkg"-[0-9]*.pkg.tar.zst; do
+                        [[ -e "$f" ]] || continue
+                        cp "$f" "$f.sig" "$REUSE/" 2>/dev/null || cp "$f" "$REUSE/"
+                        found=1
+                    done
+                done
+                if (( found )); then
+                    echo ">>> reusing AUR package $pkg"
+                else
+                    echo ">>> warning: --skip-aur but no previous build of $pkg"
+                    FAILED="$FAILED $pkg"
+                fi
+            done < /build/packages/aur/manifest.txt
+        fi
+
         while read -r pkg flags; do
+            if (( SKIP_AUR )); then continue; fi
             # An if, not "[[ ... ]] && continue": under set -e a false test
             # makes the && list return non-zero and kills the whole build,
             # after it has already succeeded.
@@ -183,7 +228,10 @@ docker run --rm \
             # Trailing && under set -e: a package without a signature would
             # otherwise make the whole build report failure after succeeding.
             [ -f "$pkg.sig" ] && cp -f "$pkg.sig" "$dest/" || true
-        done < <(find "$WORK" -name "*.pkg.tar.zst")
+        # $REUSE holds AUR packages carried over from a previous run under
+        # --skip-aur; without it here the repo would be published with our
+        # packages alone and every AUR dependency silently missing.
+        done < <(find "$WORK" "$REUSE" -name "*.pkg.tar.zst" 2>/dev/null)
 
         for d in "$CORE" "$EXTRA"; do
             name=$(basename "$(dirname "$(dirname "$d")")")
