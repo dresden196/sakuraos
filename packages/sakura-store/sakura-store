@@ -56,7 +56,8 @@ TIMEOUT = 20
 FAILURES: dict[str, str] = {}
 
 
-def fetch(url: str, default=None, *, post: dict | None = None, tag: str = ""):
+def fetch(url: str, default=None, *, post: dict | None = None, tag: str = "",
+          headers: dict | None = None):
     """Ask a service, degrade if it is unreachable, and record that it was.
 
     An outage at Flathub must not take AUR results down with it, but it must
@@ -67,7 +68,8 @@ def fetch(url: str, default=None, *, post: dict | None = None, tag: str = ""):
         req = urllib.request.Request(
             url, data=data,
             headers={"User-Agent": "sakura-store/0.1",
-                     **({"Content-Type": "application/json"} if data else {})})
+                     **({"Content-Type": "application/json"} if data else {}),
+                     **(headers or {})})
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
@@ -449,7 +451,16 @@ class SnapSource(Source):
     def search(self, query: str) -> list[App]:
         data = fetch(
             "https://api.snapcraft.io/v2/snaps/find?q=" + urllib.parse.quote(query)
-            + "&fields=title,summary,publisher,version", {})
+            # No version field: find/ ignores it and returns only title,
+            # summary and publisher. A snap's version comes from info/, one
+            # request per snap, which is not worth it for a result list --
+            # so version is filled in below only for what is installed.
+            + "&fields=title,summary,publisher", {},
+            # Snapcraft rejects any request without this -- every search was a
+            # 400, so Snap has never returned a result. 16 is the only series
+            # there has ever been; snapd itself reports it in `snap version`.
+            headers={"Snap-Device-Series": "16"},
+            tag="Snap Store")
         have = self.installed()
         out = []
         for r in (data.get("results", []) if isinstance(data, dict) else [])[:25]:
