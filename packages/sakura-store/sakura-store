@@ -929,13 +929,32 @@ def cmd_install(args) -> int:
     return rc
 
 
+def cmd_remove_plan(args) -> int:
+    """What uninstalling would do, so the confirmation can state it."""
+    import transaction as tx
+    plan = tx.removal_plan(args.id, args.source)
+    if args.json:
+        print(json.dumps(plan, indent=2))
+        return 0
+    if plan["blocked"]:
+        print(f"  cannot remove: {plan['reason']}")
+        return 2
+    for pkg in plan["packages"]:
+        print(f"  {pkg}")
+    if plan["reason"]:
+        print(f"\n  {plan['reason']}")
+    return 0
+
+
 def cmd_remove(args) -> int:
     import transaction as tx
     with tx.transaction_lock():
         if args.source == "flatpak":
-            rc = tx.remove_flatpak(args.id)
-        elif args.source == "repo":
-            rc = tx.remove_repo(args.id)
+            rc = tx.remove_flatpak(args.id, delete_data=args.delete_data)
+        elif args.source in ("repo", "aur"):
+            # An installed AUR package is an ordinary pacman package; the
+            # removal path and its safety check are identical.
+            rc = tx.remove_repo(args.id, args.source)
         elif args.source == "snap":
             rc = tx.remove_snap(args.id)
         elif args.source == "appimage":
@@ -1040,9 +1059,17 @@ def main() -> int:
     i.add_argument("--sha256", help="for appimage")
     i.set_defaults(fn=cmd_install)
 
+    rp = sub.add_parser("remove-plan")
+    rp.add_argument("id")
+    rp.add_argument("--source", required=True)
+    rp.add_argument("--json", action="store_true")
+    rp.set_defaults(fn=cmd_remove_plan)
+
     r = sub.add_parser("remove")
     r.add_argument("id")
     r.add_argument("--source", required=True)
+    r.add_argument("--delete-data", action="store_true",
+                   help="also remove the application's settings and data")
     r.set_defaults(fn=cmd_remove)
 
     cats = sub.add_parser("categories")
