@@ -481,9 +481,37 @@ QQC2.ApplicationWindow {
                 contentWidth: availableWidth
                 Item {
                     width: parent.width
-                    implicitHeight: pageLoader.implicitHeight
+                    implicitHeight: pageLoader.implicitHeight + failures.height
+                // Anything the engine could not do, on every page rather than
+                // only on search results. A blank Discover with no explanation
+                // is indistinguishable from a broken store.
+                Column {
+                    id: failures
+                    width: Math.min(940, parent.width)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.top: parent.top
+                    spacing: 4
+                    Repeater {
+                        model: Object.keys(backend.unavailable)
+                        delegate: QQC2.Label {
+                            required property var modelData
+                            width: failures.width - 52
+                            x: 26
+                            topPadding: 8
+                            wrapMode: Text.WordWrap
+                            text: modelData === "engine"
+                                  ? "The store ran into a problem: "
+                                    + backend.unavailable[modelData]
+                                  : modelData + " could not be reached ("
+                                    + backend.unavailable[modelData]
+                                    + "). Its results are missing."
+                            color: root.warn; font.pixelSize: 13
+                        }
+                    }
+                }
                 Loader {
                     id: pageLoader
+                    anchors.top: failures.bottom
                     width: Math.min(940, parent.width)
                     anchors.horizontalCenter: parent.horizontalCenter
                     sourceComponent: root.view === "app" ? appPage

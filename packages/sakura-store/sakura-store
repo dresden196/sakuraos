@@ -19,6 +19,7 @@ import json
 import os
 import re
 import subprocess
+import time
 import sys
 import urllib.error
 import urllib.parse
@@ -33,7 +34,14 @@ from pathlib import Path
 sys.path.insert(0, "/usr/lib/sakura/store")
 
 CONFIG = Path(os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf"))
-CACHE = Path(os.environ.get("SAKURA_STORE_CACHE", "/var/cache/sakura/store"))
+# Per user, not /var/cache. The store runs as whoever is logged in, and a
+# system-wide path means the first command run as root leaves root-owned files
+# that the user can then neither read nor replace -- which is exactly what
+# happened: one `sakura-store install` as root and every page went blank.
+CACHE = Path(os.environ.get("SAKURA_STORE_CACHE")
+             or os.environ.get("XDG_CACHE_HOME")
+             and f"{os.environ['XDG_CACHE_HOME']}/sakura/store"
+             or os.path.expanduser("~/.cache/sakura/store"))
 
 FLATHUB_API = "https://flathub.org/api/v2"
 ODRS_API = "https://odrs.gnome.org/1.0/reviews/api"
@@ -473,19 +481,26 @@ def odrs_ratings() -> dict:
     One request for the lot, cached: this is ~10,700 entries and asking per
     app would make every search a hundred round trips.
     """
-    CACHE.mkdir(parents=True, exist_ok=True)
     cached = CACHE / "odrs-ratings.json"
-    if cached.exists():
-        age = os.path.getmtime(cached)
-        import time
-        if time.time() - age < 21600:      # six hours
-            try:
-                return json.loads(cached.read_text())
-            except ValueError:
-                pass
+    # Every cache operation is best-effort. A cache that cannot be read or
+    # written is a slow store, never a broken one -- an unguarded write here
+    # took down the entire application with a PermissionError.
+    try:
+        if cached.exists() and time.time() - os.path.getmtime(cached) < 21600:
+            return json.loads(cached.read_text())
+    except (OSError, ValueError):
+        pass
     data = fetch(f"{ODRS_API}/ratings", {}, tag="ODRS")
     if data:
-        cached.write_text(json.dumps(data))
+        try:
+            CACHE.mkdir(parents=True, exist_ok=True)
+            # Write then rename, so a crash mid-write cannot leave a truncated
+            # file that every later run has to fail on and re-fetch.
+            tmp = cached.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data))
+            tmp.replace(cached)
+        except OSError as exc:
+            FAILURES.setdefault("cache", f"could not cache ratings ({exc})")
     return data or {}
 
 
@@ -1057,7 +1072,24 @@ def main() -> int:
     l.set_defaults(fn=cmd_installed)
 
     args = p.parse_args()
-    return args.fn(args)
+    try:
+        return args.fn(args)
+    except Exception as exc:
+        # A traceback on stdout is not JSON, so the UI parsed nothing and drew
+        # an empty page -- the store looked broken with no indication of why.
+        # Anything unhandled is reported in the shape the caller expects, and
+        # the detail still goes to stderr for a person reading the log.
+        import traceback
+        traceback.print_exc()
+        if getattr(args, "json", False):
+            print(json.dumps({
+                "apps": [], "unavailable": dict(
+                    FAILURES, engine=f"{type(exc).__name__}: {exc}"),
+            }))
+        else:
+            print(f"  the store failed: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
