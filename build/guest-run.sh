@@ -10,11 +10,16 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CMD="${1:?usage: guest-run.sh <shell command>}"
+# Some guest commands are legitimately slow -- syncing four pacman databases
+# over a NAT link, for one -- and a fixed ceiling turns those into failures
+# that look like the guest is broken.
+WAIT="${SAKURA_GUEST_TIMEOUT:-60}"
 
-exec python3 - "$REPO_ROOT/out/qga-${SAKURA_VM:-test}.sock" "$CMD" <<'PY'
+exec python3 - "$REPO_ROOT/out/qga-${SAKURA_VM:-test}.sock" "$CMD" "$WAIT" <<'PY'
 import base64, json, socket, sys, time
 
 sock_path, command = sys.argv[1], sys.argv[2]
+wait_for = float(sys.argv[3]) if len(sys.argv) > 3 else 60.0
 s = socket.socket(socket.AF_UNIX)
 s.settimeout(30)
 s.connect(sock_path)
@@ -58,13 +63,13 @@ if "error" in r:
     sys.exit(r["error"]["desc"])
 pid = r["return"]["pid"]
 
-for _ in range(120):
+for _ in range(int(wait_for * 2)):
     st = cmd("guest-exec-status", pid=pid)["return"]
     if st.get("exited"):
         break
     time.sleep(0.5)
 else:
-    sys.exit("guest command did not exit within 60s")
+    sys.exit(f"guest command did not exit within {wait_for:.0f}s")
 
 for stream in ("out-data", "err-data"):
     if st.get(stream):

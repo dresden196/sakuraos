@@ -33,6 +33,14 @@ check() {
     fi
 }
 
+# For commands that are legitimately slow. Syncing four pacman databases over
+# a NAT link takes well over the default ceiling, and reporting that as a
+# failure says the repository is unreachable when it is merely not instant --
+# which is exactly the wrong conclusion to hand somebody.
+check_slow() {
+    SAKURA_GUEST_TIMEOUT=240 check "$1" "$2"
+}
+
 if (( ! verify_only )); then
     echo ">> booting the installer media on a blank disk"
     rm -f "$REPO_ROOT/out/sakura-clean.qcow2" \
@@ -101,15 +109,15 @@ check "sakura-store is installed"          "pacman -Q sakura-store"
 check "the user exists"                    "id $USER_NAME"
 check "hostname was applied"               "test \"\$(cat /etc/hostname)\" = $HOSTNAME_"
 check "root is on btrfs"                   "findmnt -no FSTYPE / | grep -q btrfs"
-check "the @ subvolume is the root"        "findmnt -no OPTIONS / | grep -q 'subvol=/@\\b'"
+check "the @ subvolume is the root"        "findmnt -no OPTIONS / | tr ',' '\\n' | grep -qx 'subvol=/@'"
 check "the ESP is mounted"                 "findmnt -no TARGET /boot"
 check "snapper has a root config"          "snapper -c root list"
 check "snapshots exist"                    "test \"\$(snapper -c root list | wc -l)\" -gt 2"
 # The duplicate [sakura-core] left by pacstrap made every pacman run warn.
 check "sakura-core registered exactly once" \
       "test \"\$(grep -c '^\\[sakura-core\\]' /etc/pacman.conf)\" -eq 0"
-check "the repo resolves"                  "pacman -Sy --noconfirm"
-check "our own packages verify"            "pacman -Sw --noconfirm sakura-store"
+check_slow "the repo resolves"             "pacman -Sy --noconfirm"
+check_slow "our own packages verify"       "pacman -Sw --noconfirm sakura-store"
 check "the display manager is enabled"     "systemctl is-enabled sddm"
 check "the network manager is enabled"     "systemctl is-enabled NetworkManager"
 check "a boot entry was written"           "efibootmgr | grep -qi sakura"
