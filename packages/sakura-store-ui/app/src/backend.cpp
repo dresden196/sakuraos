@@ -98,6 +98,9 @@ void Backend::loadCollection(const QString &name, int limit, QVariantList &into)
         for (const QJsonValue &v : root[QStringLiteral("apps")].toArray()) {
             into.append(toMap(v.toObject()));
         }
+        // The front page has to report a failing engine too, not just search.
+        m_unavailable = root[QStringLiteral("unavailable")].toObject().toVariantMap();
+        Q_EMIT resultsChanged();
         Q_EMIT featuredChanged();
     });
 }
@@ -119,6 +122,8 @@ void Backend::loadCategory(const QString &id, const QString &label)
         for (const QJsonValue &v : root[QStringLiteral("apps")].toArray()) {
             m_categoryApps.append(toMap(v.toObject()));
         }
+        m_unavailable = root[QStringLiteral("unavailable")].toObject().toVariantMap();
+        Q_EMIT resultsChanged();
         m_loadingCategory = false;
         Q_EMIT categoryChanged();
     });
