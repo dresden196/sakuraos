@@ -895,6 +895,8 @@ def cmd_install(args) -> int:
     with tx.transaction_lock():
         if args.source == "flatpak":
             rc = tx.install_flatpak(args.id)
+        elif args.source == "repo":
+            rc = tx.install_repo(args.id)
         elif args.source == "snap":
             rc = tx.install_snap(args.id)
         elif args.source == "appimage":
@@ -917,6 +919,8 @@ def cmd_remove(args) -> int:
     with tx.transaction_lock():
         if args.source == "flatpak":
             rc = tx.remove_flatpak(args.id)
+        elif args.source == "repo":
+            rc = tx.remove_repo(args.id)
         elif args.source == "snap":
             rc = tx.remove_snap(args.id)
         elif args.source == "appimage":

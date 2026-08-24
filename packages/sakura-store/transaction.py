@@ -191,6 +191,67 @@ def install_appimage(url: str, name: str, sha256: str = "") -> int:
     return 0
 
 
+# Package names that pacman will be asked to act on as root. Validated
+# against the sync database rather than a pattern: a name that pacman itself
+# does not recognise as a repository package never reaches the command line.
+_PKG_NAME = re.compile(r"\A[a-z0-9][a-z0-9@._+-]*\Z")
+
+
+def _is_repo_package(name: str) -> bool:
+    if not _PKG_NAME.match(name):
+        return False
+    return subprocess.run(["pacman", "-Si", "--", name],
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode == 0
+
+
+def _pacman_progress(line: str):
+    """Which phase pacman is in.
+
+    Without this every line is reported as "downloading", so the UI claims a
+    download is still running while packages are already being written to
+    disk. pacman announces its phases plainly; this reads them.
+    """
+    stripped = line.strip()
+    if stripped.startswith(":: Retrieving") or "downloading" in stripped:
+        return {"stage": DOWNLOADING, "detail": stripped[:160]}
+    if (stripped.startswith(":: Processing package changes")
+            or stripped.startswith(("installing ", "upgrading ", "reinstalling "))):
+        return {"stage": INSTALLING, "detail": stripped[:160]}
+    if "transaction hooks" in stripped or stripped.startswith("("):
+        return {"stage": CONFIGURING, "detail": stripped[:160]}
+    return None
+
+
+def install_repo(name: str) -> int:
+    """Install a package from the SakuraOS and Arch repositories.
+
+    pacman needs root. There is no privileged store helper yet, so this goes
+    through pkexec, which puts the request in front of the session's polkit
+    agent -- the user sees what is being installed and authorises it. When the
+    helper lands this is the one call that changes.
+    """
+    if not _is_repo_package(name):
+        emit(FAILED, error=f"{name} is not a package in any enabled "
+                           f"repository.", recoverable=False)
+        return 2
+    emit(RESOLVING, source="repo", app=name)
+    # "--" so a name can never be read as an option, even though the check
+    # above already rejects anything that could be.
+    return stream(["pkexec", "pacman", "-S", "--noconfirm", "--needed", "--",
+                   name], DOWNLOADING, _pacman_progress)
+
+
+def remove_repo(name: str) -> int:
+    if not _PKG_NAME.match(name):
+        emit(FAILED, error=f"{name} is not a valid package name.",
+             recoverable=False)
+        return 2
+    emit(INSTALLING, source="repo", app=name, detail="removing")
+    return stream(["pkexec", "pacman", "-Rns", "--noconfirm", "--", name],
+                  INSTALLING)
+
+
 def install_aur(name: str) -> int:
     """Not reachable until the review step exists.
 
