@@ -125,6 +125,12 @@ depends=(
     # The store needs Flatpak present; AppStream metadata drives its listings
     'flatpak'
     'archlinux-appstream-data'
+    # Snap. We rebuild snapd into sakura-core precisely so it works here
+    # without anyone reaching for the AUR -- and then never installed it, so
+    # the store correctly reported "snapd is not installed" on every machine.
+    # docs/store.md calls supporting Snap a standing commitment; this is what
+    # that costs.
+    'snapd'
 
     # Updates
     'pacman-contrib'
