@@ -13,6 +13,11 @@ QQC2.ApplicationWindow {
     palette.windowText: text
     color: bg
 
+    // The restore point awaiting confirmation, or null. Rolling back replaces
+    // the whole system with an earlier copy of itself, so it is never one
+    // click away.
+    property var confirmRollback: null
+
     readonly property color accent: "#ffb7c5"
     readonly property color accentText: "#3a2731"
     readonly property color bg: "#26161e"
@@ -480,7 +485,12 @@ QQC2.ApplicationWindow {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         color: root.dim; font.pixelSize: 14
-                        text: "Arch published a manual step: " + modelData.title
+                        // The engine puts the affected package names in
+                        // "reason" and this dropped them, so the one thing
+                        // this section exists to say -- which of your updates
+                        // it is about -- never reached the screen.
+                        text: (modelData.reason ? modelData.reason + " \u2014 " : "")
+                            + "Arch published a manual step: " + modelData.title
                     }
                 }
                 QQC2.Label {
@@ -503,7 +513,7 @@ QQC2.ApplicationWindow {
             Item { Layout.preferredHeight: 30 }
             Head {
                 title: "Restore points"
-                subtitle: "One is taken before every change. To go back to one, restart and choose Recovery from the boot menu."
+                subtitle: "One is taken before every change. Going back restarts the machine and undoes everything after that point \u2014 the files in your home folder are not touched."
             }
             QQC2.Label {
                 visible: backend.history.length === 0
@@ -538,6 +548,29 @@ QQC2.ApplicationWindow {
                             color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.7)
                             font.pixelSize: 12; font.family: "monospace"
                         }
+                        // The action the whole tab exists for. Without it this
+                        // was a list of restore points and a sentence telling
+                        // people to find the boot menu themselves -- which the
+                        // documentation itself calls not a safety net.
+                        QQC2.Button {
+                            text: "Go back to this"
+                            enabled: !backend.busy
+                            onClicked: root.confirmRollback = modelData
+                            contentItem: QQC2.Label {
+                                text: parent.text
+                                color: root.text; font.pixelSize: 12
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                radius: 7
+                                color: parent.down ? root.cardUp
+                                     : parent.hovered ? Qt.rgba(1, 1, 1, 0.10)
+                                     : Qt.rgba(1, 1, 1, 0.05)
+                                border.width: 1; border.color: root.line
+                            }
+                            padding: 8; leftPadding: 14; rightPadding: 14
+                        }
                     }
                 }
             }
@@ -567,11 +600,16 @@ QQC2.ApplicationWindow {
                     verticalAlignment: Text.AlignVCenter
                 }
             }
+            // The canary fleet does not exist. Nothing anywhere holds an
+            // update back for want of evidence, so a switch offering that
+            // choice is describing infrastructure, not controlling it. Left
+            // visible because it is genuinely planned, switched off because
+            // the alternative is a promise about updates that is not kept.
             QQC2.CheckBox {
                 id: canaryBox
-                enabled: autoBox.checked
+                enabled: false
                 text: "Only updates that were tested first"
-                checked: parent.s.canary
+                checked: false
                 contentItem: QQC2.Label {
                     text: parent.text; color: parent.enabled ? root.text : root.dim
                     font.pixelSize: 14
@@ -607,6 +645,15 @@ QQC2.ApplicationWindow {
                     }
                 }
             }
+            QQC2.Label {
+                Layout.maximumWidth: 520
+                wrapMode: Text.WordWrap
+                text: "Not built yet. When it is, SakuraOS will install each update on its "
+                    + "own machines and restart them before offering it to yours, and hold "
+                    + "back anything that breaks. Until then, updates are held back only "
+                    + "when Arch publishes a notice about them."
+                color: root.dim; font.pixelSize: 12
+            }
             Btn {
                 text: "Save"
                 Layout.topMargin: 6
@@ -620,4 +667,97 @@ QQC2.ApplicationWindow {
             Item { Layout.fillHeight: true }
         }
     }
+    // ---- confirm a rollback -------------------------------------------------
+    Rectangle {
+        anchors.fill: parent
+        z: 200
+        visible: root.confirmRollback !== null
+        color: Qt.rgba(0, 0, 0, 0.6)
+        TapHandler { onTapped: {} }          // swallow clicks on what is behind
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(540, parent.width - 70)
+            implicitHeight: body.implicitHeight + 46
+            radius: 16
+            color: root.card
+            border.width: 1; border.color: root.line
+
+            ColumnLayout {
+                id: body
+                anchors.left: parent.left; anchors.right: parent.right
+                anchors.top: parent.top; anchors.margins: 23
+                spacing: 14
+
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Go back to " + (root.confirmRollback
+                          ? (root.confirmRollback.date || "this restore point") : "") + "?"
+                    color: root.text
+                    font.pixelSize: 21; font.weight: Font.Light
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: root.confirmRollback && root.confirmRollback.description
+                          ? root.confirmRollback.description : ""
+                    visible: text !== ""
+                    color: root.accent; font.pixelSize: 13
+                }
+                // What it does, in the terms a person actually cares about.
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Every program and system change made since then will be undone. "
+                        + "Your documents, photos and other personal files are not part of a "
+                        + "restore point and are left exactly as they are.\n\n"
+                        + "The machine restarts to do this, and it cannot be stopped once it "
+                        + "begins."
+                    color: root.dim; font.pixelSize: 13
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    visible: backend.error !== ""
+                    wrapMode: Text.WordWrap
+                    text: backend.error
+                    color: "#ff9db0"; font.pixelSize: 12
+                }
+                RowLayout {
+                    Layout.topMargin: 3
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 10
+                    QQC2.Button {
+                        text: "Cancel"
+                        onClicked: root.confirmRollback = null
+                        contentItem: QQC2.Label {
+                            text: parent.text; color: root.text
+                            font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            radius: 8; color: parent.down ? root.cardUp : "transparent"
+                            border.width: 1; border.color: root.line
+                        }
+                        padding: 10; leftPadding: 20; rightPadding: 20
+                    }
+                    QQC2.Button {
+                        text: "Restart and go back"
+                        enabled: !backend.busy
+                        onClicked: backend.rollback(root.confirmRollback.number)
+                        contentItem: QQC2.Label {
+                            text: parent.text; color: root.accentText
+                            font.pixelSize: 13; font.weight: Font.DemiBold
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle { radius: 8; color: root.accent }
+                        padding: 10; leftPadding: 20; rightPadding: 20
+                    }
+                }
+            }
+        }
+    }
+
 }

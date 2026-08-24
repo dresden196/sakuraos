@@ -41,6 +41,7 @@ public:
     Q_INVOKABLE void check();
     Q_INVOKABLE void apply();
     Q_INVOKABLE void loadHistory();
+    Q_INVOKABLE void rollback(const QString &number);
     Q_INVOKABLE QVariantMap schedule() const;
     Q_INVOKABLE void setSchedule(const QVariantMap &values);
 

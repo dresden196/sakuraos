@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>SakuraOS</vendor>
+  <vendor_url>https://sakuraos.org</vendor_url>
+
+  <!--
+    Scheduling a rollback writes one integer to a file and does nothing else.
+    The rollback itself happens in the recovery environment on the next boot,
+    where no policy applies because nothing is logged in yet.
+
+    auth_admin rather than auth_admin_keep: this replaces the entire root
+    filesystem with an earlier one, and unlike applying updates it is not
+    something the machine ever does on its own. Asking every time is
+    proportionate to what it undoes.
+
+    Note the helper's whole argument surface is one snapshot number, checked
+    against a directory that must already exist, or a cancel flag. There is
+    nothing here that can point at another path.
+
+    (An XML comment cannot contain two consecutive hyphens, and polkit
+    rejects the whole file if one does, silently losing the action.)
+  -->
+  <action id="org.sakuraos.rollback.schedule">
+    <description>Go back to an earlier restore point</description>
+    <message>Authentication is required to restore this system to an earlier point</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/sakura/snapshot-boot/sakura-schedule-rollback</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

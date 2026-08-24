@@ -124,6 +124,47 @@ void Backend::apply()
     m_proc->start(QString::fromLatin1(ENGINE), {QStringLiteral("apply")});
 }
 
+void Backend::rollback(const QString &number)
+{
+    if (m_busy) {
+        return;
+    }
+    m_busy = true;
+    m_error.clear();
+    Q_EMIT stateChanged();
+
+    // Two steps, deliberately separate. The helper only records which restore
+    // point was chosen; the rollback itself happens in the recovery
+    // environment on the next boot, because a root subvolume cannot be
+    // replaced while it is mounted.
+    auto *p = new QProcess(this);
+    p->setProcessChannelMode(QProcess::MergedChannels);
+    connect(p, &QProcess::finished, this,
+            [this, p](int code, QProcess::ExitStatus status) {
+        const QString out = QString::fromUtf8(p->readAll()).trimmed();
+        p->deleteLater();
+        m_busy = false;
+        if (code != 0 || status != QProcess::NormalExit) {
+            // 126 and 127 are pkexec's own: dismissed, and not authorised.
+            m_error = (code == 126 || code == 127)
+                ? tr("Authentication was cancelled; nothing has changed.")
+                : (out.isEmpty()
+                   ? tr("The restore point could not be scheduled.")
+                   : out.section(QLatin1Char('\n'), -1));
+            Q_EMIT stateChanged();
+            return;
+        }
+        Q_EMIT stateChanged();
+        // Only reboot once the request is safely written. Rebooting first and
+        // hoping would leave a machine that restarted for no reason.
+        QProcess::startDetached(QStringLiteral("systemctl"),
+                                {QStringLiteral("reboot")});
+    });
+    p->start(QStringLiteral("pkexec"),
+             {QStringLiteral("/usr/lib/sakura/snapshot-boot/sakura-schedule-rollback"),
+              number});
+}
+
 void Backend::loadHistory()
 {
     m_history.clear();

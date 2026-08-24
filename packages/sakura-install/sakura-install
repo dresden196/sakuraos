@@ -243,6 +243,13 @@ PRESETS=('default' 'recovery')
 
 default_uki="/boot/EFI/sakura/sakura.efi"
 default_cmdline="/etc/kernel/cmdline"
+# The normal image carries the recovery hook too. It does nothing on an
+# ordinary boot -- the flag on the kernel command line is what starts the
+# picker -- but its late hook is what notices a rollback asked for from the
+# desktop and hands over before the system comes up. Without this the request
+# is written and then never acted on, and the Update Center's "go back to
+# this" does nothing at all.
+default_options="-A sakura-recovery"
 
 recovery_uki="/boot/EFI/sakura/sakura-recovery.efi"
 recovery_cmdline="/etc/kernel/recovery-cmdline"

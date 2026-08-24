@@ -142,20 +142,23 @@ KCM.SimpleKCM {
             text: i18n("A snapshot is taken before every update. If one causes a problem, you can go back to the previous state from the boot menu.")
         }
 
+        // The canary fleet does not exist yet. Nothing holds an update back
+        // for want of evidence, so this switch would describe infrastructure
+        // rather than control it. Visible because it is genuinely planned;
+        // off because the alternative is a promise about updates that is not
+        // kept.
         QQC2.CheckBox {
             Kirigami.FormData.label: i18n("Only install:")
             text: i18n("Updates that have been tested first")
-            enabled: autoApply.checked
-            checked: cfg.updatesRequireCanary
-            onToggled: cfg.updatesRequireCanary = checked
+            enabled: false
+            checked: false
         }
 
         QQC2.Label {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            enabled: autoApply.checked
-            text: i18n("SakuraOS installs and restarts each update on its own machines before offering it to yours. Anything that has not passed, or that needs a manual step, waits for you instead.")
+            text: i18n("Not built yet. When it is, SakuraOS will install and restart each update on its own machines before offering it to yours, and hold back anything that fails. Today an update is held back only when Arch publishes a notice saying it needs a manual step.")
         }
 
         QQC2.TextField {

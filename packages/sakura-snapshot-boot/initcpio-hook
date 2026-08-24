@@ -1,9 +1,91 @@
 #!/usr/bin/ash
 # mkinitcpio runtime hook: hand control to the recovery picker.
 
+# A rollback asked for from the desktop, carried out on the next boot.
+#
+# This runs before the root filesystem is mounted, not after. The first
+# attempt used a late hook -- cheaper, because the request is just a file on
+# an already-mounted root -- and then had to unmount that root to hand over to
+# the recovery environment, which is the only place a root subvolume can be
+# replaced. Unmounting a root the kernel has just mounted is not something to
+# depend on, and when it silently failed the rollback simply never happened.
+#
+# So the cost is paid instead: the btrfs top level is mounted read-only, one
+# file is checked, and it is unmounted again. That is a single mount of a
+# device the kernel has already scanned, on every boot, to make the recovery
+# story work at all.
+sakura_pending_rollback() {
+    local dev want top=/sakura-check
+    # SAKURA_ROOT_SUBVOL and SAKURA_ROLLBACK_REQUEST live here, so the hook
+    # and the picker cannot drift apart on where the request is kept.
+    . /usr/lib/sakura/snapshot-boot/lib.sh
+
+    # Which disk. The root= parameter is there on every boot, unlike
+    # sakura.root=, which only the recovery image carries.
+    for arg in $(cat /proc/cmdline); do
+        case "$arg" in
+            root=*) dev="${arg#root=}" ;;
+        esac
+    done
+    # Progress goes to /dev/kmsg, not /dev/console: this runs before there is
+    # any journal, and a console message on a machine that then boots normally
+    # scrolls away before anyone can read it. kmsg survives into dmesg.
+    sakura_log() { echo "sakura-recovery: $*" > /dev/kmsg 2>/dev/null || true; }
+
+    [ -n "$dev" ] || { sakura_log "no root= on the command line"; return 0; }
+    case "$dev" in
+        UUID=*|LABEL=*|PARTUUID=*) dev=$(findfs "$dev" 2>/dev/null) ;;
+    esac
+    [ -n "$dev" ] && [ -b "$dev" ] || {
+        sakura_log "could not resolve the root device"; return 0; }
+
+    mkdir -p "$top"
+    # subvolid=5 is the top level, where @ lives alongside the snapshots.
+    sakura_log "root device resolves to $dev"
+    # Read-write, deliberately. A read-only btrfs mount cannot replay the log
+    # tree, so anything written shortly before the reboot is simply not there
+    # -- which is exactly what happened: @/etc was visible and the request
+    # file written moments earlier was not. Mounting rw replays the log and
+    # sees the filesystem as it actually is.
+    if ! mount -t btrfs -o rw,subvolid=5 "$dev" "$top" 2>/dev/null; then
+        sakura_log "could not read the top level of $dev"
+        return 0
+    fi
+
+    # Read with the shell alone. The initramfs is a minimal busybox: head, tr
+    # and even ls are not there, and a missing tool in a command substitution
+    # is indistinguishable from an empty result -- which is what happened. The
+    # file was found every time and the snapshot number silently came back
+    # empty, so the rollback was skipped and the request left in place.
+    want=""
+    if [ -f "$top/$SAKURA_ROOT_SUBVOL/$SAKURA_ROLLBACK_REQUEST" ]; then
+        read -r want < "$top/$SAKURA_ROOT_SUBVOL/$SAKURA_ROLLBACK_REQUEST" || want=""
+        case "$want" in
+            ''|*[!0-9]*) want="" ;;
+        esac
+    fi
+
+    umount "$top" 2>/dev/null
+    rmdir "$top" 2>/dev/null
+
+    [ -n "$want" ] || { sakura_log "no rollback pending"; return 0; }
+    sakura_log "rollback to restore point $want pending"
+
+    echo "sakura: restoring the point you chose before starting up" > /dev/console
+    # The picker mounts the top level itself, read-write, removes the request
+    # so a failure cannot repeat on every boot, and reboots either way.
+    SAKURA_ROOT_DEV="$dev" SAKURA_ROLLBACK_TARGET="$want" \
+        /usr/lib/sakura/snapshot-boot/sakura-recovery-menu
+}
+
 run_hook() {
-    # The normal boot image carries this hook too, so the flag is what
-    # distinguishes the two. Without it, boot proceeds untouched.
+    # Before anything else: a rollback the user asked for has to happen while
+    # the root subvolume is still unmounted.
+    sakura_pending_rollback
+
+    # Both images carry this hook -- the preset adds it to the normal one with
+    # default_options -- so the flag on the kernel command line is what
+    # distinguishes them. Without it, boot proceeds untouched.
     local arg
     for arg in $(cat /proc/cmdline); do
         case "$arg" in
