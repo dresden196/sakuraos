@@ -40,6 +40,14 @@ QQC2.ApplicationWindow {
     }
 
     // ---- shared -----------------------------------------------------------
+    // Tiles were a fixed 250px in a variable-width column, so three of them
+    // left ~110px of dead space on the right and the whole grid read as
+    // shoved to the left. Sizing the cell to the column instead means the
+    // grid always fills the width and lines up with the heading above it.
+    function cellWidth(avail, cols, gap) {
+        return Math.max(180, Math.floor((avail - (cols - 1) * gap) / cols))
+    }
+
     // Where a package comes from is the single most consequential fact about
     // it -- sandboxing, update path and trust model all follow from it -- so
     // it gets a name and a colour rather than being left implicit.
@@ -52,6 +60,61 @@ QQC2.ApplicationWindow {
         // builds unreviewed code on the user's machine.
         return ({ repo: root.accent, flatpak: "#4a90d9", aur: "#d98c3f",
                   appimage: "#8e7cc3", snap: "#7ea67e" })[s] || root.dim
+    }
+
+    // A continuously rotating arc. RotationAnimator runs on the render
+    // thread, so it stays smooth even while the engine is parsing a response
+    // on the GUI thread -- which is exactly when it is on screen.
+    component Spinner : Item {
+        property int size: 46
+        property color tint: root.accent
+        implicitWidth: size
+        implicitHeight: size
+
+        Canvas {
+            id: arc
+            anchors.fill: parent
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.reset()
+                var r = width / 2 - 3
+                ctx.lineWidth = 3
+                ctx.lineCap = "round"
+                // Faint full ring, so the gap reads as motion rather than as
+                // something half-drawn.
+                ctx.strokeStyle = Qt.rgba(tint.r, tint.g, tint.b, 0.18)
+                ctx.beginPath()
+                ctx.arc(width / 2, height / 2, r, 0, Math.PI * 2)
+                ctx.stroke()
+                ctx.strokeStyle = tint
+                ctx.beginPath()
+                ctx.arc(width / 2, height / 2, r, 0, Math.PI * 0.72)
+                ctx.stroke()
+            }
+            RotationAnimator on rotation {
+                loops: Animation.Infinite
+                from: 0; to: 360
+                duration: 950
+                running: arc.visible
+            }
+        }
+    }
+
+    // Centred spinner with a line of text under it, for a whole page that has
+    // nothing to show yet.
+    component Loading : ColumnLayout {
+        id: loadingRoot
+        property string label: ""
+        spacing: 16
+        Item { Layout.fillHeight: true }
+        Spinner { Layout.alignment: Qt.AlignHCenter }
+        QQC2.Label {
+            Layout.alignment: Qt.AlignHCenter
+            text: loadingRoot.label
+            visible: !!loadingRoot.label
+            color: root.dim; font.pixelSize: 14
+        }
+        Item { Layout.fillHeight: true }
     }
 
     component Chip : Rectangle {
@@ -91,7 +154,8 @@ QQC2.ApplicationWindow {
     component Tile : Rectangle {
         property var appData
         signal opened()
-        width: 250; height: 120
+        width: 250          // overridden by grids that size cells to fit
+        height: 120
         radius: 14
         color: hov.hovered ? root.cardUp : root.card
         Behavior on color { ColorAnimation { duration: 120 } }
@@ -223,6 +287,40 @@ QQC2.ApplicationWindow {
                     Layout.fillWidth: true
                     spacing: 9
                     QQC2.Label {
+                        Layout.topMargin: 6
+                        text: "BROWSE"
+                        color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, .75)
+                        font.pixelSize: 11; font.weight: Font.DemiBold
+                        font.letterSpacing: 1.2
+                    }
+                    Repeater {
+                        // Categories come from the engine, which has them for
+                        // Flatpak and the repositories. The AUR publishes no
+                        // categories at all and Snap uses its own taxonomy, so
+                        // neither appears here rather than being faked.
+                        model: backend.categories
+                        delegate: QQC2.Label {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 2
+                            padding: 5
+                            text: modelData.name
+                            color: root.view === "category"
+                                   && backend.categoryName === modelData.name
+                                   ? root.accent : root.text
+                            font.pixelSize: 13
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                            TapHandler {
+                                onTapped: {
+                                    root.view = "category"
+                                    backend.loadCategory(modelData.id, modelData.name)
+                                }
+                            }
+                        }
+                    }
+
+                    QQC2.Label {
+                        Layout.topMargin: 10
                         text: "SOURCES"; color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, .75)
                         font.pixelSize: 11; font.weight: Font.DemiBold
                         font.letterSpacing: 1.4
@@ -231,8 +329,8 @@ QQC2.ApplicationWindow {
                         // Listed in the same order the engine resolves them,
                         // so the sidebar reads as the priority it actually is.
                         model: [{k: "all", n: "Everything"},
-                                {k: "repo", n: "SakuraOS"},
                                 {k: "flatpak", n: "Flatpak"},
+                                {k: "repo", n: "SakuraOS"},
                                 {k: "appimage", n: "AppImage"},
                                 {k: "snap", n: "Snap"},
                                 {k: "aur", n: "AUR"}]
@@ -350,6 +448,7 @@ QQC2.ApplicationWindow {
                     sourceComponent: root.view === "app" ? appPage
                                    : root.view === "results" ? resultsPage
                                    : root.view === "installed" ? installedPage
+                                   : root.view === "category" ? categoryPage
                                    : discoverPage
                 }
                 }
@@ -498,6 +597,7 @@ QQC2.ApplicationWindow {
                     Repeater {
                         model: backend.popular
                         delegate: Tile {
+                            width: root.cellWidth(popularFlow.width, 3, 13)
                             required property var modelData
                             appData: modelData
                             onOpened: { backend.openApp(modelData.id); root.view = "app" }
@@ -536,7 +636,15 @@ QQC2.ApplicationWindow {
                 }
             }
 
+            Loading {
+                visible: backend.searching
+                Layout.fillWidth: true
+                Layout.preferredHeight: 260
+                label: "Asking every enabled source"
+            }
+
             Flow {
+                id: resultsFlow
                 Layout.fillWidth: true
                 Layout.preferredHeight: implicitHeight
                 Layout.leftMargin: 26; Layout.rightMargin: 26
@@ -544,6 +652,53 @@ QQC2.ApplicationWindow {
                 Repeater {
                     model: backend.results
                     delegate: Tile {
+                        width: root.cellWidth(resultsFlow.width, 3, 13)
+                        required property var modelData
+                        appData: modelData
+                        onOpened: { backend.openApp(modelData.id); root.view = "app" }
+                    }
+                }
+            }
+            Item { Layout.preferredHeight: 30 }
+        }
+    }
+
+    // ---- one category -----------------------------------------------------
+    Component {
+        id: categoryPage
+        ColumnLayout {
+            spacing: 15
+            QQC2.Label {
+                Layout.leftMargin: 26; Layout.topMargin: 6
+                text: backend.categoryName
+                color: root.text; font.pixelSize: 22; font.weight: Font.Light
+            }
+            QQC2.Label {
+                visible: !backend.loadingCategory
+                Layout.leftMargin: 26
+                Layout.maximumWidth: 640
+                wrapMode: Text.WordWrap
+                text: backend.categoryApps.length + " applications. Categories come from "
+                      + "Flatpak and the SakuraOS repositories, which share one set of them. "
+                      + "The AUR publishes no categories, so it is not represented here \u2014 search finds it."
+                color: root.dim; font.pixelSize: 14
+            }
+            Loading {
+                visible: backend.loadingCategory
+                Layout.fillWidth: true
+                Layout.preferredHeight: 300
+                label: "Loading " + backend.categoryName
+            }
+            Flow {
+                id: categoryFlow
+                Layout.fillWidth: true
+                Layout.leftMargin: 26; Layout.rightMargin: 26
+                Layout.preferredHeight: childrenRect.height
+                spacing: 13
+                Repeater {
+                    model: backend.categoryApps
+                    delegate: Tile {
+                        width: root.cellWidth(categoryFlow.width, 3, 13)
                         required property var modelData
                         appData: modelData
                         onOpened: { backend.openApp(modelData.id); root.view = "app" }
@@ -558,7 +713,10 @@ QQC2.ApplicationWindow {
     Component {
         id: installedPage
         ColumnLayout {
+            id: installedRoot
             spacing: 15
+            Component.onCompleted: backend.loadInstalled()
+
             QQC2.Label {
                 Layout.leftMargin: 26; Layout.topMargin: 6
                 text: "Installed"
@@ -566,12 +724,45 @@ QQC2.ApplicationWindow {
             }
             QQC2.Label {
                 Layout.leftMargin: 26
-                Layout.maximumWidth: 520
+                Layout.maximumWidth: 620
                 wrapMode: Text.WordWrap
-                text: "Everything you have installed, from every source. Applications update themselves unless you turn that off."
+                visible: !backend.loadingInstalled
+                text: backend.installed.length + " applications, from every source. "
+                        + "System packages are not listed: this is what you installed, not what SakuraOS is made of."
                 color: root.dim; font.pixelSize: 14
             }
-            Item { Layout.fillHeight: true }
+            Loading {
+                visible: backend.loadingInstalled
+                Layout.fillWidth: true
+                Layout.preferredHeight: 260
+                label: "Looking at what is installed"
+            }
+
+            Flow {
+                id: installedFlow
+                Layout.fillWidth: true
+                Layout.leftMargin: 26; Layout.rightMargin: 26
+                Layout.topMargin: 6
+                // A Flow reports no implicit height to a ColumnLayout, so
+                // without this the row collapses and nothing is drawn.
+                Layout.preferredHeight: childrenRect.height
+                spacing: 14
+                Repeater {
+                    model: backend.installed
+                    delegate: Tile {
+                        width: root.cellWidth(installedFlow.width, 3, 14)
+                        required property var modelData
+                        appData: modelData
+                        onOpened: {
+                            // Repository rows carry the AppStream id, which is
+                            // what the app page looks things up by.
+                            backend.openApp(modelData.id)
+                            root.view = "app"
+                        }
+                    }
+                }
+            }
+            Item { Layout.preferredHeight: 30 }
         }
     }
 
@@ -589,10 +780,21 @@ QQC2.ApplicationWindow {
             spacing: 22
             property var a: backend.app
 
-            QQC2.Label {
+            // Every source that has this app, primary first. also_from holds
+            // whatever the engine matched; the primary is not in it.
+            readonly property var options: !a || !a.source ? [] : [{
+                    source: a.source, id: a.id,
+                    version: a.version || "",
+                    installed: a.installed || false
+                }].concat(a.also_from || [])
+            property int chosen: 0
+            onAChanged: chosen = 0
+
+            Loading {
                 visible: backend.loadingApp
-                Layout.leftMargin: 26; Layout.topMargin: 20
-                text: "Loading…"; color: root.dim; font.pixelSize: 16
+                Layout.fillWidth: true
+                Layout.preferredHeight: 320
+                label: "Fetching details"
             }
 
             // header
@@ -640,56 +842,83 @@ QQC2.ApplicationWindow {
                         color: root.dim; font.pixelSize: 15
                         wrapMode: Text.WordWrap
                     }
-                    // What you are actually about to install.
-                    RowLayout {
-                        Layout.topMargin: 2
-                        spacing: 10
-                        Chip {
-                            label: root.sourceLabel(appRoot.a.source)
-                            tint: root.sourceTint(appRoot.a.source)
-                            visible: !!appRoot.a.source
-                        }
+                    // Where this will come from -- a choice, not a label.
+                    // Listing the alternatives without letting anyone pick one
+                    // was the wrong half of the feature.
+                    ColumnLayout {
+                        Layout.topMargin: 4
+                        spacing: 6
                         QQC2.Label {
-                            visible: !!appRoot.a.version
-                            // The installed version is the one that matters
-                            // when the two differ; say which is which.
-                            text: appRoot.a.installed && appRoot.a.installed_version
-                                  && appRoot.a.installed_version !== appRoot.a.version
-                                  ? appRoot.a.installed_version + "  →  " + appRoot.a.version
-                                  : (appRoot.a.version || "")
-                            color: root.dim; font.pixelSize: 14
-                        }
-                        QQC2.Label {
-                            visible: !!appRoot.a.installed
-                            text: "Installed"
-                            color: root.accent; font.pixelSize: 14; font.weight: Font.DemiBold
-                        }
-                    }
-                    // Cross-source matching is a heuristic on package names,
-                    // so it is offered rather than asserted.
-                    RowLayout {
-                        visible: (appRoot.a.also_from || []).length > 0
-                        spacing: 8
-                        QQC2.Label {
-                            text: "Also available from"
+                            visible: appRoot.options.length > 1
+                            text: "Install from"
                             color: root.dim; font.pixelSize: 13
                         }
-                        Repeater {
-                            model: appRoot.a.also_from || []
-                            Chip {
-                                label: root.sourceLabel(modelData.source)
-                                      + (modelData.version ? "  " + modelData.version : "")
-                                tint: root.sourceTint(modelData.source)
+                        RowLayout {
+                            spacing: 8
+                            Repeater {
+                                model: appRoot.options
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    required property int index
+                                    readonly property bool picked: index === appRoot.chosen
+                                    readonly property color hue: root.sourceTint(modelData.source)
+                                    implicitWidth: srcRow.implicitWidth + 22
+                                    implicitHeight: 30
+                                    radius: 8
+                                    color: picked ? Qt.rgba(hue.r, hue.g, hue.b, 0.22)
+                                                  : Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.10)
+                                    border.width: picked ? 1 : 0
+                                    border.color: hue
+                                    Behavior on color { ColorAnimation { duration: 130 } }
+                                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                                    TapHandler { onTapped: appRoot.chosen = index }
+                                    RowLayout {
+                                        id: srcRow
+                                        anchors.centerIn: parent
+                                        spacing: 7
+                                        QQC2.Label {
+                                            text: root.sourceLabel(modelData.source)
+                                            color: picked ? hue : root.text
+                                            font.pixelSize: 12; font.weight: Font.DemiBold
+                                        }
+                                        QQC2.Label {
+                                            visible: !!modelData.version
+                                            text: modelData.version || ""
+                                            color: root.dim; font.pixelSize: 12
+                                        }
+                                        QQC2.Label {
+                                            visible: !!modelData.installed
+                                            text: "installed"
+                                            color: "#8fd3a4"; font.pixelSize: 11
+                                            font.weight: Font.DemiBold
+                                        }
+                                    }
+                                }
                             }
                         }
+                        // A single option usually means the other sources are
+                        // switched off, which is worth saying rather than
+                        // leaving the short list unexplained.
+                        QQC2.Label {
+                            visible: appRoot.options.length === 1
+                            Layout.maximumWidth: 540
+                            wrapMode: Text.WordWrap
+                            text: "Only " + root.sourceLabel(appRoot.a.source) +
+                                  " offers this. Sources that are switched off cannot be searched \u2014 " +
+                                  "turn them on in SakuraOS Settings."
+                            color: root.dim; font.pixelSize: 12
+                        }
                     }
+
                     RowLayout {
                         spacing: 12
                         Layout.topMargin: 6
                         Action {
-                            text: backend.busy ? "Installing…" : "Install"
-                            enabled: !backend.busy
-                            onClicked: backend.install(appRoot.a.id, appRoot.a.source || "flatpak")
+                            readonly property var pick: appRoot.options[appRoot.chosen] || null
+                            text: backend.busy ? "Installing…"
+                                 : (pick && pick.installed ? "Reinstall" : "Install")
+                            enabled: !backend.busy && !!pick
+                            onClicked: backend.install(pick.id, pick.source)
                         }
                         Action {
                             text: "Permissions"; quiet: true

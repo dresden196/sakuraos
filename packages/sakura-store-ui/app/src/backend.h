@@ -20,6 +20,12 @@ class Backend : public QObject
     Q_PROPERTY(QVariantList results READ results NOTIFY resultsChanged)
     Q_PROPERTY(QVariantList featured READ featured NOTIFY featuredChanged)
     Q_PROPERTY(QVariantList popular READ popular NOTIFY featuredChanged)
+    Q_PROPERTY(QVariantList installed READ installed NOTIFY installedChanged)
+    Q_PROPERTY(QVariantList categories READ categories CONSTANT)
+    Q_PROPERTY(QVariantList categoryApps READ categoryApps NOTIFY categoryChanged)
+    Q_PROPERTY(QString categoryName READ categoryName NOTIFY categoryChanged)
+    Q_PROPERTY(bool loadingCategory READ loadingCategory NOTIFY categoryChanged)
+    Q_PROPERTY(bool loadingInstalled READ loadingInstalled NOTIFY installedChanged)
     Q_PROPERTY(QVariantMap app READ app NOTIFY appChanged)
     Q_PROPERTY(QVariantMap unavailable READ unavailable NOTIFY resultsChanged)
     Q_PROPERTY(QString stage READ stage NOTIFY progressChanged)
@@ -36,6 +42,12 @@ public:
     QVariantList results() const { return m_results; }
     QVariantList featured() const { return m_featured; }
     QVariantList popular() const { return m_popular; }
+    QVariantList installed() const { return m_installed; }
+    QVariantList categories() const { return m_categories; }
+    QVariantList categoryApps() const { return m_categoryApps; }
+    QString categoryName() const { return m_categoryName; }
+    bool loadingCategory() const { return m_loadingCategory; }
+    bool loadingInstalled() const { return m_loadingInstalled; }
     QVariantMap app() const { return m_app; }
     QVariantMap unavailable() const { return m_unavailable; }
     QString stage() const { return m_stage; }
@@ -47,6 +59,8 @@ public:
     Q_INVOKABLE void search(const QString &query, const QString &source);
     Q_INVOKABLE void openApp(const QString &id);
     Q_INVOKABLE void loadFeatured();
+    Q_INVOKABLE void loadInstalled();
+    Q_INVOKABLE void loadCategory(const QString &id, const QString &label);
     Q_INVOKABLE void install(const QString &id, const QString &source);
     Q_INVOKABLE void remove(const QString &id, const QString &source);
     Q_INVOKABLE void openPermissions(const QString &id);
@@ -55,6 +69,8 @@ Q_SIGNALS:
     void stateChanged();
     void resultsChanged();
     void featuredChanged();
+    void installedChanged();
+    void categoryChanged();
     void appChanged();
     void progressChanged();
 
@@ -63,7 +79,11 @@ private:
 
     void loadCollection(const QString &name, int limit, QVariantList &into);
 
-    QVariantList m_results, m_featured, m_popular;
+    QVariantList m_results, m_featured, m_popular, m_installed;
+    bool m_loadingInstalled = false;
+    bool m_loadingCategory = false;
+    QVariantList m_categories, m_categoryApps;
+    QString m_categoryName;
     QVariantMap m_app, m_unavailable;
     QString m_stage, m_detail, m_error;
     int m_percent = 0;
