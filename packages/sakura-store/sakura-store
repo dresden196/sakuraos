@@ -1137,7 +1137,14 @@ def main() -> int:
         # the detail still goes to stderr for a person reading the log.
         import traceback
         traceback.print_exc()
-        if getattr(args, "json", False):
+        # install and remove speak a line-of-JSON progress protocol, so a
+        # failure has to arrive in that shape or the caller sees a process
+        # that exited with nothing to say.
+        if args.cmd in ("install", "remove"):
+            print(json.dumps({"stage": "failed",
+                              "error": f"{type(exc).__name__}: {exc}",
+                              "recoverable": False}), flush=True)
+        elif getattr(args, "json", False):
             print(json.dumps({
                 "apps": [], "unavailable": dict(
                     FAILURES, engine=f"{type(exc).__name__}: {exc}"),

@@ -238,15 +238,37 @@ void Backend::install(const QString &id, const QString &source)
             Q_EMIT progressChanged();
         }
     });
-    connect(p, &QProcess::finished, this, [this, p, id] {
+    connect(p, &QProcess::finished, this,
+            [this, p, id](int code, QProcess::ExitStatus status) {
+        // Anything the engine printed that was not a progress line. A crash
+        // arrives as a traceback, which is not JSON, so nothing above sees it.
+        const QString trailing = QString::fromUtf8(p->readAll()).trimmed();
         p->deleteLater();
         m_busy = false;
+        if (m_error.isEmpty()
+            && (code != 0 || status != QProcess::NormalExit)) {
+            // A process that failed must never render as "done". It did
+            // exactly that: the engine died with a PermissionError, emitted no
+            // failed event because the traceback was not JSON, and the store
+            // showed a completed install that had not happened.
+            const QString last = trailing.section(QLatin1Char('\n'), -1).trimmed();
+            m_error = last.isEmpty()
+                ? tr("The install did not finish (exit code %1).").arg(code)
+                : last;
+        }
         if (m_error.isEmpty()) {
             m_stage = QStringLiteral("done");
             m_percent = 100;
+        } else {
+            m_stage = QStringLiteral("failed");
         }
         Q_EMIT progressChanged();
-        openApp(id);
+        // Re-open the app, not the package. Installing GIMP from the
+        // repositories passes "gimp", and asking the app page to load "gimp"
+        // finds nothing on Flathub -- so a successful install left the page
+        // blank. The canonical id is whatever the page was already showing.
+        const QString shown = m_app.value(QStringLiteral("id")).toString();
+        openApp(shown.isEmpty() ? id : shown);
     });
 
     p->start(QString::fromLatin1(ENGINE),
@@ -313,7 +335,8 @@ void Backend::remove(const QString &id, const QString &source, bool deleteData)
         // wrong for a removal started from the Installed list, and impossible
         // for a repository-only or AUR application, which has no Flathub
         // entry for that page to load.
-        Q_EMIT removed(id, source);
+        const QString shown = m_app.value(QStringLiteral("id")).toString();
+        Q_EMIT removed(shown.isEmpty() ? id : shown, source);
     });
 }
 

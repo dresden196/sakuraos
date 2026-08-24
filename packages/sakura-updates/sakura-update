@@ -13,6 +13,8 @@ implementations that disagree.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -239,6 +241,31 @@ def elevate(verb: str) -> int:
         return 1
 
 
+@contextlib.contextmanager
+def store_transaction_lock():
+    """Serialise against the store, best effort.
+
+    Advisory: if the lock cannot be taken the update still runs. An update
+    that refuses to install security fixes because a lock file was missing
+    would be a worse failure than the one this prevents.
+    """
+    lock = Path(os.environ.get("SAKURA_STORE_LOCK", "/run/sakura/store.lock"))
+    fd = None
+    try:
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o666)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+    except OSError:
+        if fd is not None:
+            os.close(fd)
+            fd = None
+    try:
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
 def on_ac_power() -> bool:
     """Whether the machine is on mains power.
 
@@ -317,7 +344,13 @@ def cmd_apply(args) -> int:
         print("could not take a restore point; refusing to update", file=sys.stderr)
         return 1
 
-    r = subprocess.run(["pacman", "-Syu", "--noconfirm"])
+    # The same lock the store takes. Without it an unattended update at 03:00
+    # and an install a user started can reach pacman together; pacman's own
+    # database lock stops them corrupting anything, but the loser fails with
+    # "unable to lock database", which explains nothing. The store's docstring
+    # already claimed this was shared -- it was not, until now.
+    with store_transaction_lock():
+        r = subprocess.run(["pacman", "-Syu", "--noconfirm"])
     if r.returncode != 0:
         return r.returncode
 

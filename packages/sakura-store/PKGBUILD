@@ -21,8 +21,9 @@ depends=('python' 'flatpak' 'sakura-settings-core' 'archlinux-appstream-data' 'p
 optdepends=('zsync2: AppImage delta updates'
             'snapd: Snap support'
             'binutils: reading AppImage update information')
-source=('sakura-store' 'appimage.py' 'transaction.py')
-sha256sums=('SKIP' 'SKIP' 'SKIP')
+source=('sakura-store' 'appimage.py' 'transaction.py'
+        'sakura-store.tmpfiles')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/sakura-store" "$pkgdir/usr/bin/sakura-store"
@@ -30,5 +31,8 @@ package() {
         "$pkgdir/usr/lib/sakura/store/appimage.py"
     install -Dm644 "$srcdir/transaction.py" \
         "$pkgdir/usr/lib/sakura/store/transaction.py"
-    install -d "$pkgdir/var/cache/sakura/store" "$pkgdir/var/lib/sakura"
+    # The lock is created at boot under /run by tmpfiles, not shipped in
+    # /var/lib -- see sakura-store.tmpfiles for why.
+    install -Dm644 "$srcdir/sakura-store.tmpfiles" \
+        "$pkgdir/usr/lib/tmpfiles.d/sakura-store.conf"
 }

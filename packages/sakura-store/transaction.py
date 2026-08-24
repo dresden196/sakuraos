@@ -24,7 +24,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-LOCK = Path("/var/lib/sakura/store.lock")
+# /run, not /var/lib: a lock is meaningless across a reboot, and a stale one
+# on disk only blocks installs on a machine that crashed. Created by
+# tmpfiles at boot so the unprivileged store can open it.
+LOCK = Path(os.environ.get("SAKURA_STORE_LOCK", "/run/sakura/store.lock"))
 
 # Named steps rather than a percentage. A bar that sits at 40% tells the user
 # nothing; "verifying" tells them the download finished and nothing has been
@@ -51,8 +54,19 @@ def transaction_lock():
     mid-install must not leave a stale marker that blocks every future one.
     The kernel drops this when the process dies, however it dies.
     """
-    LOCK.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(LOCK, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        LOCK.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(LOCK, os.O_CREAT | os.O_RDWR, 0o666)
+    except OSError as exc:
+        # Serialising is a safeguard, not the operation. Refusing to install
+        # anything because the lock could not be created would turn a missing
+        # tmpfiles entry into a store that does nothing at all -- which is
+        # exactly how this was found.
+        emit(CONFIGURING,
+             warning=f"could not take the transaction lock ({exc}); "
+                     f"continuing without it")
+        yield
+        return
     try:
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
