@@ -219,6 +219,20 @@ class FlatpakSource(Source):
 SWCATALOG = Path("/usr/share/swcatalog")
 
 
+def norm_id(app_id: str) -> str:
+    """Compare AppStream ids across catalogues.
+
+    The same application is filed under ids that differ in ways that carry no
+    meaning: Arch calls Steam com.valvesoftware.Steam.desktop where Flathub
+    calls it com.valvesoftware.Steam, and Arch's VLC is org.videolan.vlc
+    against Flathub's org.videolan.VLC. Trailing .desktop and case are noise.
+    """
+    out = app_id.strip().lower()
+    if out.endswith(".desktop"):
+        out = out[: -len(".desktop")]
+    return out
+
+
 def _untagged(component, tag: str) -> str:
     """The element with no xml:lang, i.e. the source-language one.
 
@@ -489,14 +503,49 @@ def stars(dist: dict) -> tuple[float | None, int]:
     return round(score / total, 1), total
 
 
+def rating_for(app_id: str, ratings: dict | None = None) -> tuple[float | None, int]:
+    """The ODRS rating for one application id.
+
+    ODRS is keyed by desktop-file id, and the same application often appears
+    under more than one spelling of it -- Sober has 1160 ratings under
+    org.vinegarhq.Sober and a single stray one under
+    org.vinegarhq.Sober.desktop. Taking the first key that matched meant
+    showing "1 review" for an app with over a thousand, which is exactly how
+    it looked next to Discover. The largest pool is the one the application
+    actually accumulated, and it is the one Discover shows.
+    """
+    folded = _odrs_folded()
+    best, best_total = None, -1
+    # Case matters to nobody but a dictionary lookup: ODRS files Firefox under
+    # org.mozilla.Firefox where Flathub calls it org.mozilla.firefox, and the
+    # exact-match miss cost the app its 2600 ratings.
+    for key in (app_id, f"{app_id}.desktop", f"{app_id}.desktop.desktop"):
+        entry = folded.get(key.lower())
+        if entry and entry.get("total", 0) > best_total:
+            best, best_total = entry, entry["total"]
+    return stars(best) if best else (None, 0)
+
+
+@lru_cache(maxsize=1)
+def _odrs_folded() -> dict:
+    """Case-folded view of the ratings table, built once per process.
+
+    There are 10,700 entries and a search touches dozens of applications, so
+    folding on every lookup would be wasteful.
+    """
+    out: dict[str, dict] = {}
+    for k, v in odrs_ratings().items():
+        low = k.lower()
+        # Two keys can fold together; keep whichever carries more ratings.
+        if v.get("total", 0) > out.get(low, {}).get("total", -1):
+            out[low] = v
+    return out
+
+
 def attach_ratings(apps: list[App]) -> None:
     ratings = odrs_ratings()
     for a in apps:
-        # ODRS keys are desktop-file ids; Flatpak app ids differ by the suffix.
-        for key in (f"{a.id}.desktop", a.id, f"{a.id}.desktop.desktop"):
-            if key in ratings:
-                a.rating, a.rating_count = stars(ratings[key])
-                break
+        a.rating, a.rating_count = rating_for(a.id, ratings)
 
 
 def merge(results: list[list[App]]) -> list[App]:
@@ -514,7 +563,7 @@ def merge(results: list[list[App]]) -> list[App]:
         # org.gimp.GIMP. Match on that where both sides have one; fall back to
         # the display name for the AUR and Snap, which have only bare names.
         if "." in app.id and " " not in app.id:
-            return app.id.lower()
+            return norm_id(app.id)
         return app.name.lower().strip()
 
     def entry(app: App) -> dict:
@@ -668,19 +717,28 @@ def find_elsewhere(app_id: str, name: str) -> list[dict]:
     # component id Flathub uses, so this is an exact lookup rather than a
     # search for a similar-looking name.
     repo = RepoSource()
+    matched_repo = False
     if repo.available():
+        target = norm_id(app_id)
         for pkg, meta in appstream_index().items():
-            if meta["id"].lower() != app_id.lower():
+            if norm_id(meta["id"]) != target:
                 continue
             have = repo.installed()
             found.append({"source": "repo", "id": pkg,
                           "version": have.get(pkg) or pacman_version(pkg),
                           "installed": pkg in have, "popularity": {},
                           "exact": True})
+            matched_repo = True
             break
 
     for src in SOURCES:
-        if src.name in ("flatpak", "repo") or not src.available():
+        # Not every repository package has a reverse-DNS id -- Arch files
+        # Discord under "discord.desktop", which no normalisation can turn
+        # into com.discordapp.Discord -- so when the exact lookup misses, the
+        # repositories go through the same name heuristic as everything else.
+        if src.name == "flatpak" or (src.name == "repo" and matched_repo):
+            continue
+        if not src.available():
             continue
         try:
             for hit in src.search(stem):
@@ -723,12 +781,9 @@ def app_detail(app_id: str) -> dict:
             if b.get("scheme_preference") == "dark":
                 break
 
-    ratings = odrs_ratings()
-    rating, count = (None, 0)
-    for key in (f"{app_id}.desktop", app_id):
-        if key in ratings:
-            rating, count = stars(ratings[key])
-            break
+    # The same lookup the search results use -- it was duplicated here with the
+    # first-match bug, so the app page and the tile could disagree.
+    rating, count = rating_for(app_id)
 
     installed_here = FlatpakSource().installed()
 
