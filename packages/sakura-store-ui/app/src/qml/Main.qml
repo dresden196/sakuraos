@@ -123,6 +123,38 @@ QQC2.ApplicationWindow {
         }
     }
 
+    // The magnifier was the "\u2315" glyph, whose ink sits high in its em box
+    // and moves with whatever font resolves -- no amount of vertical
+    // alignment centres a glyph that is not centred in its own metrics.
+    // Drawing it means the circle really is in the middle of the item.
+    component SearchIcon : Canvas {
+        property color tint: root.dim
+        property real weight: 1.6
+        implicitWidth: 17
+        implicitHeight: 17
+        onTintChanged: requestPaint()
+        onPaint: {
+            var ctx = getContext("2d")
+            ctx.reset()
+            ctx.strokeStyle = tint
+            ctx.lineWidth = weight
+            ctx.lineCap = "round"
+            // Circle plus handle, sized so the whole glyph is centred in the
+            // item rather than sitting against one edge.
+            var r = width * 0.30
+            var cx = width * 0.42
+            var cy = height * 0.42
+            ctx.beginPath()
+            ctx.arc(cx, cy, r, 0, Math.PI * 2)
+            ctx.stroke()
+            ctx.beginPath()
+            var d = r * 0.70
+            ctx.moveTo(cx + d, cy + d)
+            ctx.lineTo(width - weight, height - weight)
+            ctx.stroke()
+        }
+    }
+
     component Chip : Rectangle {
         property string label
         property color tint: root.dim
@@ -419,7 +451,10 @@ QQC2.ApplicationWindow {
                             anchors.fill: parent
                             anchors.leftMargin: 14; anchors.rightMargin: 10
                             spacing: 8
-                            QQC2.Label { text: "⌕"; color: root.dim; font.pixelSize: 18 }
+                            SearchIcon {
+                                Layout.alignment: Qt.AlignVCenter
+                                tint: field.activeFocus ? root.accent : root.dim
+                            }
                             QQC2.TextField {
                                 id: field
                                 Layout.fillWidth: true
