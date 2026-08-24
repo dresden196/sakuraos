@@ -115,6 +115,13 @@ depends=(
     'noto-fonts'
     'noto-fonts-emoji'
 
+    # The store itself. It was missing from this list entirely, so a freshly
+    # installed machine had no way to install software -- the one thing the
+    # project is built around. sakura-install and sakura-installer stay out on
+    # purpose: they belong to the live media, and an installed system should
+    # not carry a disk-erasing wizard.
+    'sakura-store'
+    'sakura-store-ui'
     # The store needs Flatpak present; AppStream metadata drives its listings
     'flatpak'
     'archlinux-appstream-data'
