@@ -1000,9 +1000,20 @@ def cmd_installed(args) -> int:
 
 
 def cmd_sources(args) -> int:
-    for s in SOURCES:
-        state = "available" if s.available() else "unavailable"
-        print(f"  {s.name:<9} {s.label:<14} {state}")
+    rows = [{"id": s.name, "label": s.label, "available": s.available(),
+             # Searchable but not installable, until the review step exists.
+             "installable": s.name != "aur"}
+            for s in SOURCES]
+    # AppImage has no catalogue to search, so it is not a source in the sense
+    # the others are; it appears here only so the UI can say why.
+    rows.append({"id": "appimage", "label": "AppImage", "available": False,
+                 "installable": True})
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    for r in rows:
+        print(f"  {r['id']:<9} {r['label']:<14} "
+              f"{'available' if r['available'] else 'unavailable'}")
     return 0
 
 
@@ -1050,6 +1061,7 @@ def main() -> int:
     s.set_defaults(fn=cmd_search)
 
     v = sub.add_parser("sources")
+    v.add_argument("--json", action="store_true")
     v.set_defaults(fn=cmd_sources)
 
     i = sub.add_parser("install")

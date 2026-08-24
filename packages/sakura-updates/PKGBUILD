@@ -13,8 +13,9 @@ url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
 depends=('python' 'pacman-contrib' 'snapper' 'sakura-settings-core' 'polkit')
 source=('sakura-update' 'sakura-update-helper' 'org.sakuraos.updates.policy'
-        'sakura-updates.service' 'sakura-updates.timer')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        'sakura-updates.service' 'sakura-updates.timer'
+        'sakura-updates-schedule')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/sakura-update" "$pkgdir/usr/bin/sakura-update"
@@ -26,5 +27,7 @@ package() {
         "$pkgdir/usr/lib/systemd/system/sakura-updates.service"
     install -Dm644 "$srcdir/sakura-updates.timer" \
         "$pkgdir/usr/lib/systemd/system/sakura-updates.timer"
+    install -Dm755 "$srcdir/sakura-updates-schedule" \
+        "$pkgdir/usr/lib/sakura/updates/sakura-updates-schedule"
     install -d "$pkgdir/var/lib/sakura/updates"
 }

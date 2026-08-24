@@ -16,6 +16,23 @@ QVariantMap toMap(const QJsonObject &o)
 } // namespace
 
 Backend::Backend(QObject *parent) : QObject(parent) {
+    // The source list comes from the engine too. It was a hardcoded literal
+    // that listed Snap and the AUR unconditionally, so a machine without
+    // snapd showed a filter that could only ever return nothing -- the same
+    // fault the category list was deliberately built to avoid.
+    {
+        QProcess p;
+        p.start(QString::fromLatin1(ENGINE),
+                {QStringLiteral("sources"), QStringLiteral("--json")});
+        if (p.waitForFinished(6000)) {
+            const QJsonArray rows =
+                QJsonDocument::fromJson(p.readAllStandardOutput()).array();
+            for (const QJsonValue &v : rows) {
+                m_sources.append(toMap(v.toObject()));
+            }
+        }
+    }
+
     // The category vocabulary lives in the engine, which is also what knows
     // that it applies to Flatpak and the repositories but not to the AUR.
     {

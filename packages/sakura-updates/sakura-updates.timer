@@ -2,8 +2,11 @@
 Description=Nightly SakuraOS update check
 
 [Timer]
-# The time is a default the user can change in Update Centre; it is written
-# back here rather than kept in a second place that could disagree.
+# The default. The time the user chooses in Update Centre or System Settings
+# arrives as a drop-in written by sakura-updates-schedule, which clears this
+# and sets its own -- this file is never edited. An earlier comment here
+# claimed it was written back to, which was untrue and would have stopped a
+# reader noticing that nothing applied the setting at all.
 OnCalendar=*-*-* 03:00:00
 # A machine that was asleep at 03:00 still gets its update, rather than
 # silently going a day further behind every time it is closed at night.

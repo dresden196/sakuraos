@@ -273,9 +273,18 @@ QQC2.ApplicationWindow {
                         color: root.text; font.pixelSize: 30; font.weight: Font.Light
                     }
                     QQC2.Label {
-                        text: backend.updates.length
-                            ? "A restore point is taken before anything is installed."
-                            : "Updates install automatically overnight."
+                        // Read the setting rather than asserting the default.
+                        // This claimed updates install overnight even when the
+                        // user had turned that off on the very next tab.
+                        text: {
+                            if (backend.updates.length) {
+                                return "A restore point is taken before anything is installed."
+                            }
+                            var s = backend.schedule()
+                            return s && s.autoApply
+                                ? "Updates install automatically at " + (s.window || "03:00") + "."
+                                : "Automatic updates are off. You install them when you choose to."
+                        }
                         color: root.dim; font.pixelSize: 14
                     }
                 }

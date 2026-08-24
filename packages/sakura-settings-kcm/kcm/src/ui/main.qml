@@ -65,45 +65,46 @@ KCM.SimpleKCM {
             text: i18n("The AUR is build scripts written by other users. Nobody reviews them before publication.")
         }
 
+        // The review flow and the campaign scanner are designed but not
+        // built. They stay visible, because hiding planned work makes the
+        // roadmap invisible, but they are switched off and labelled -- a
+        // checkbox headed "Security scanning" that scans nothing is worse
+        // than no checkbox at all, and the note under the old one warned
+        // against exactly the complacency the control itself was creating.
         QQC2.CheckBox {
             Kirigami.FormData.label: i18n("Before installing:")
             text: i18n("Review packages before they build")
-            enabled: aurEnabled.checked
-            checked: cfg.aurReview
-            onToggled: cfg.aurReview = checked
+            enabled: false
+            checked: false
         }
 
         QQC2.Label {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            enabled: aurEnabled.checked
-            text: i18n("Shows what a package's build script does, what changed since the version you last accepted, and flags risk signals — a maintainer who changed recently, an unusual download location, code that runs outside the build directory.")
+            text: i18n("Not built yet. Until it is, the store will not install from the AUR at all — it refuses rather than building an unreviewed script without showing it to you first. AUR packages are searchable, so you can see what exists.")
         }
 
         QQC2.CheckBox {
             id: campaignScan
             Kirigami.FormData.label: i18n("Security scanning:")
             text: i18n("Check for known compromised packages")
-            enabled: aurEnabled.checked
-            checked: cfg.aurCampaignScanning
-            onToggled: cfg.aurCampaignScanning = checked
+            enabled: false
+            checked: false
         }
 
         QQC2.Label {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            enabled: aurEnabled.checked
-            // Saying plainly what this cannot do is the point. A user who
-            // believes they are protected stops reading build scripts, which
-            // is the behaviour this feature exists to encourage.
-            text: i18n("Compares what you have installed against published attack campaigns. This cannot detect an attack that nobody has reported yet — it is not a substitute for reading what you install.")
+            text: i18n("Not built yet. When it exists it will compare what you have installed against published attack campaigns — and it still will not detect an attack nobody has reported, so it will not be a substitute for reading what you install.")
         }
 
         QQC2.ComboBox {
             Kirigami.FormData.label: i18n("Command-line helper:")
-            enabled: aurEnabled.checked
+            // Nothing installs or removes a helper in response to this yet,
+            // so it would be a stored string pretending to be an action.
+            enabled: false
             textRole: "label"
             valueRole: "value"
             model: [
@@ -119,8 +120,7 @@ KCM.SimpleKCM {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            enabled: aurEnabled.checked
-            text: i18n("With no helper installed, the AUR is reachable only through the store, where the review step is not optional.")
+            text: i18n("Not wired up yet: choosing a helper here does not install or remove one. The AUR is reachable through the store, and on the command line through whatever you install yourself.")
         }
 
         // ---- Updates ------------------------------------------------------
@@ -190,7 +190,7 @@ KCM.SimpleKCM {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            text: i18n("The two settings above are all there is to configure. To see what is being installed, why anything is held back, and the restore points you can go back to, open the Update Center.")
+            text: i18n("The settings above are all there is to configure. To see what is being installed, why anything is held back, and the restore points you can go back to, open the Update Center.")
         }
     }
 }

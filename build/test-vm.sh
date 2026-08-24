@@ -29,6 +29,19 @@ NVRAM="$REPO_ROOT/out/OVMF_VARS-$VM.fd"
 QMP_SOCK="$REPO_ROOT/out/qmp-$VM.sock"
 QGA_SOCK="$REPO_ROOT/out/qga-$VM.sock"
 
+# The SSH forward is a host-wide resource, so a second instance cannot reuse
+# it -- qemu refuses to start rather than sharing the port. Derived from the
+# instance name so two machines never collide, and overridable when the
+# derived port is itself in use.
+if [[ -n "${SAKURA_VM_SSH_PORT:-}" ]]; then
+    SSH_PORT="$SAKURA_VM_SSH_PORT"
+elif [[ "$VM" == "test" ]]; then
+    SSH_PORT=2222
+else
+    # Stable per name, well clear of the ephemeral range.
+    SSH_PORT=$(( 2223 + $(cksum <<<"$VM" | cut -d' ' -f1) % 500 ))
+fi
+
 secboot=0
 headless=0
 reset=0
@@ -96,7 +109,11 @@ display_args=(-display gtk,show-cursor=on -device "$VGA")
 (( gl ))       && display_args=(-display gtk,gl=on,show-cursor=on -device virtio-vga-gl,edid=on,xres=1920,yres=1080)
 (( headless )) && display_args=(-display none -device "$VGA")
 
-echo ">> booting $(basename "$ISO")"
+if (( installed )); then
+    echo ">> booting the installed system as \"$VM\" (ssh port $SSH_PORT)"
+else
+    echo ">> booting $(basename "$ISO") as \"$VM\" (ssh port $SSH_PORT)"
+fi
 exec qemu-system-x86_64 \
     -enable-kvm \
     -machine q35,smm=on \
@@ -109,7 +126,7 @@ exec qemu-system-x86_64 \
     -drive file="$DISK2",if=virtio,format=qcow2 \
     "${media_args[@]}" \
     -device qemu-xhci -device usb-tablet \
-    -netdev user,id=net0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=net0 \
+    -netdev "user,id=net0,hostfwd=tcp::$SSH_PORT-:22" -device virtio-net,netdev=net0 \
     -qmp "unix:$QMP_SOCK,server,nowait" \
     -chardev "socket,path=$QGA_SOCK,server=on,wait=off,id=qga0" \
     -device virtio-serial \
