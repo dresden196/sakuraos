@@ -401,12 +401,16 @@ QQC2.ApplicationWindow {
                     Repeater {
                         // Listed in the same order the engine resolves them,
                         // so the sidebar reads as the priority it actually is.
-                        model: [{k: "all", n: "Everything"},
-                                {k: "flatpak", n: "Flatpak"},
-                                {k: "repo", n: "SakuraOS"},
-                                {k: "appimage", n: "AppImage"},
-                                {k: "snap", n: "Snap"},
-                                {k: "aur", n: "AUR"}]
+                        // From the engine, which knows what is actually
+                        // present. A hardcoded list showed Snap on machines
+                        // with no snapd, where the filter could only ever
+                        // return nothing.
+                        model: [{k: "all", n: "Everything", avail: true}].concat(
+                            (backend.sources || [])
+                                .filter(function (s) { return s.available })
+                                .map(function (s) {
+                                    return {k: s.id, n: s.label, avail: true}
+                                }))
                         delegate: RowLayout {
                             required property var modelData
                             Layout.fillWidth: true
@@ -1188,10 +1192,26 @@ QQC2.ApplicationWindow {
                         Layout.topMargin: 6
                         Action {
                             readonly property var pick: appRoot.options[appRoot.chosen] || null
+                            // The AUR install path refuses until the review
+                            // step exists, so offering the button was walking
+                            // the user several steps down a path with no end.
+                            readonly property bool blocked:
+                                !!(pick && pick.source === "aur")
                             text: backend.busy ? "Installing…"
+                                 : blocked ? "Not available yet"
                                  : (pick && pick.installed ? "Reinstall" : "Install")
-                            enabled: !backend.busy && !!pick
+                            enabled: !backend.busy && !!pick && !blocked
                             onClicked: backend.install(pick.id, pick.source)
+                        }
+                        QQC2.Label {
+                            readonly property var pick: appRoot.options[appRoot.chosen] || null
+                            visible: !!(pick && pick.source === "aur")
+                            Layout.maximumWidth: 420
+                            wrapMode: Text.WordWrap
+                            text: "An AUR package is a build script nobody has reviewed. "
+                                + "SakuraOS will not run one without showing you what it "
+                                + "does first, and that step is not built yet."
+                            color: root.dim; font.pixelSize: 12
                         }
                         Action {
                             readonly property var pick: appRoot.options[appRoot.chosen] || null

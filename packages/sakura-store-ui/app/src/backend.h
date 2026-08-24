@@ -24,6 +24,7 @@ class Backend : public QObject
     Q_PROPERTY(QVariantMap removalPlan READ removalPlan NOTIFY removalPlanChanged)
     Q_PROPERTY(bool planningRemoval READ planningRemoval NOTIFY removalPlanChanged)
     Q_PROPERTY(QVariantList categories READ categories CONSTANT)
+    Q_PROPERTY(QVariantList sources READ sources CONSTANT)
     Q_PROPERTY(QVariantList categoryApps READ categoryApps NOTIFY categoryChanged)
     Q_PROPERTY(QString categoryName READ categoryName NOTIFY categoryChanged)
     Q_PROPERTY(bool loadingCategory READ loadingCategory NOTIFY categoryChanged)
@@ -48,6 +49,7 @@ public:
     QVariantMap removalPlan() const { return m_removalPlan; }
     bool planningRemoval() const { return m_planningRemoval; }
     QVariantList categories() const { return m_categories; }
+    QVariantList sources() const { return m_sources; }
     QVariantList categoryApps() const { return m_categoryApps; }
     QString categoryName() const { return m_categoryName; }
     bool loadingCategory() const { return m_loadingCategory; }
@@ -93,7 +95,7 @@ private:
     bool m_planningRemoval = false;
     QVariantMap m_removalPlan;
     bool m_loadingCategory = false;
-    QVariantList m_categories, m_categoryApps;
+    QVariantList m_categories, m_categoryApps, m_sources;
     QString m_categoryName;
     QVariantMap m_app, m_unavailable;
     QString m_stage, m_detail, m_error;

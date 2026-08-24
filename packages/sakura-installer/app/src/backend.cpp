@@ -172,6 +172,13 @@ void Backend::install(const QVariantMap &answers)
         QStringLiteral("--password"), answers[QStringLiteral("password")].toString(),
         QStringLiteral("--hostname"), answers[QStringLiteral("hostname")].toString(),
         QStringLiteral("--timezone"), answers[QStringLiteral("timezone")].toString(),
+        // The keyboard screen warns that getting this wrong locks you out at
+        // the first login prompt. It has to reach the backend for that warning
+        // to mean anything.
+        QStringLiteral("--keymap"), answers[QStringLiteral("keyboard")].toString(),
+        QStringLiteral("--feedback"),
+        answers[QStringLiteral("crashReports")].toBool() ? QStringLiteral("on")
+                                                         : QStringLiteral("off"),
         QStringLiteral("--theme"),
         answers[QStringLiteral("dark")].toBool() ? QStringLiteral("dark")
                                                  : QStringLiteral("light"),

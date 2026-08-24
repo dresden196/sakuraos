@@ -17,6 +17,8 @@ USERPASS="sakura"
 ROOTPASS=""
 TIMEZONE="UTC"
 LOCALE="en_US.UTF-8"
+KEYMAP="us"
+FEEDBACK="off"
 SECUREBOOT="auto"
 THEME="dark"
 EXTRA_PACKAGES=""
@@ -35,6 +37,8 @@ while [[ $# -gt 0 ]]; do
         --root-password) ROOTPASS="$2"; shift 2 ;;
         --timezone)   TIMEZONE="$2"; shift 2 ;;
         --locale)     LOCALE="$2"; shift 2 ;;
+        --keymap)     KEYMAP="$2"; shift 2 ;;
+        --feedback)   FEEDBACK="$2"; shift 2 ;;   # on | off
         --secureboot) SECUREBOOT="$2"; shift 2 ;;   # auto | on | off
         --extra-packages) EXTRA_PACKAGES="$2"; shift 2 ;;
         --graphics) GRAPHICS="$2"; shift 2 ;;
@@ -186,6 +190,41 @@ ln -sf "/usr/share/zoneinfo/$TIMEZONE" /mnt/etc/localtime
 echo "$LOCALE UTF-8" > /mnt/etc/locale.gen
 echo "LANG=$LOCALE" > /mnt/etc/locale.conf
 
+# Keyboard layout, for both the graphical session and the console.
+#
+# The installer's keyboard screen tells the user that getting this wrong locks
+# them out at their first login prompt, and it was right to: the answer used
+# to be collected and thrown away, so every machine booted "us" no matter what
+# was chosen. Someone who picked their own layout, typed a password on it, and
+# then met a us-layout login prompt really was locked out.
+#
+# Two files, because they are read by different things. Wayland and X sessions
+# take the layout from the X11 config; the virtual consoles take a keymap
+# name, and the two namespaces do not always agree -- xkb calls the British
+# layout "gb" while the console calls it "uk". systemd ships the conversion
+# table, so it is used rather than guessed at.
+install -d /mnt/etc/X11/xorg.conf.d
+cat > /mnt/etc/X11/xorg.conf.d/00-keyboard.conf <<KBD
+# Written by sakura-install. Generated from the layout chosen during install.
+Section "InputClass"
+        Identifier "system-keyboard"
+        MatchIsKeyboard "on"
+        Option "XkbLayout" "$KEYMAP"
+EndSection
+KBD
+
+CONSOLE_KEYMAP=$(awk -v want="$KEYMAP" \
+    '!/^#/ && $2 == want { print $1; exit }' \
+    /mnt/usr/share/systemd/kbd-model-map 2>/dev/null || true)
+if [[ -z "$CONSOLE_KEYMAP" ]]; then
+    # No console equivalent. The graphical layout is still correct, which is
+    # what a desktop user meets; say so rather than silently differing.
+    CONSOLE_KEYMAP="$KEYMAP"
+    info "no console keymap matches '$KEYMAP'; using it verbatim for the console"
+fi
+echo "KEYMAP=$CONSOLE_KEYMAP" > /mnt/etc/vconsole.conf
+info "keyboard: $KEYMAP (console: $CONSOLE_KEYMAP)"
+
 # The kernel command line never varies -- rollback replaces what @ *is* rather
 # than pointing the kernel at a different subvolume. That is what lets this
 # stay embedded in a signed UKI. See packages/sakura-snapshot-boot/README.md.
@@ -215,33 +254,67 @@ sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect microcode modconf kms keyboard k
     /mnt/etc/mkinitcpio.conf
 sed -i 's/^MODULES=.*/MODULES=(btrfs)/' /mnt/etc/mkinitcpio.conf
 
-# pacstrap copies the live media's pacman.conf into the target, and that file
-# defines [sakura-core] against file:///usr/share/sakura/repo -- a path that
-# exists only on the ISO. sakura-branding then adds the network definition via
-# an Include, so the installed system declares the same repository twice and
-# every pacman run reports "could not register 'sakura-core' database
-# (database already registered)" while also pointing at a directory that is
-# not there. Drop the on-media block and let the Include be the only one.
+# Make the target reference our repository exactly once, before [core].
+#
+# Two different starting states have to end up the same. A normal install gets
+# stock Arch's pacman.conf from the pacman package: no [sakura-core] at all, so
+# the machine cannot see our packages even though sakura-core.conf is sitting
+# right there in /etc/pacman.d. An install driven from a live environment can
+# instead inherit that environment's pacman.conf, which defines [sakura-core]
+# against file:///usr/share/sakura/repo -- a path that exists only on the ISO
+# -- and then registers it a second time through the Include, which is what
+# made every pacman run warn about a duplicate database.
+#
+# So: drop any [sakura-core] block, and ensure exactly one Include, placed
+# before [core] because sakura-core.conf says it must be.
 python3 - <<'PYCONF'
 import pathlib, sys
+
+INCLUDE = "Include = /etc/pacman.d/sakura-core.conf"
+# A marker, so a second run strips what the first one wrote instead of
+# stacking another copy of the comment above the same Include.
+MARKER = "# SakuraOS packages (managed by sakura-install)"
 p = pathlib.Path("/mnt/etc/pacman.conf")
-out, in_block, kept_include = [], False, False
-for line in p.read_text().splitlines(keepends=True):
+
+out, in_block = [], False
+for line in p.read_text().splitlines():
     stripped = line.strip()
     if stripped.startswith("["):
         in_block = stripped == "[sakura-core]"
-    if in_block:
-        # Anything sakura-branding appended lives on an Include line; keep it,
-        # drop the on-media Server and the duplicate section header.
-        if stripped.startswith("Include"):
-            out.append(line)
-            kept_include = True
-        continue
+    if in_block or stripped == INCLUDE or stripped == MARKER:
+        continue                      # rebuilt below, exactly once
     out.append(line)
-text = "".join(out)
-if text.count("[sakura-core]") or not kept_include:
-    print("pacman.conf de-duplication did not produce the expected result",
-          file=sys.stderr)
+
+try:
+    at = next(i for i, l in enumerate(out) if l.strip() == "[core]")
+except StopIteration:
+    print("no [core] section in the target pacman.conf", file=sys.stderr)
+    sys.exit(1)
+
+out[at:at] = [MARKER, INCLUDE, ""]
+
+# Collapse runs of blank lines, so running this twice leaves the file
+# byte-identical rather than growing a blank line each time.
+collapsed = []
+for line in out:
+    if not line.strip() and collapsed and not collapsed[-1].strip():
+        continue
+    collapsed.append(line)
+out = collapsed
+text = "\n".join(out) + "\n"
+
+# Verify rather than assume: this file decides whether the machine can reach
+# its own updates. The checks work on line positions, not string offsets --
+# comparing offsets matched the section name inside a comment.
+lines = text.splitlines()
+headers = [i for i, l in enumerate(lines) if l.strip() == "[sakura-core]"]
+includes = [i for i, l in enumerate(lines) if l.strip() == INCLUDE]
+cores = [i for i, l in enumerate(lines) if l.strip() == "[core]"]
+if headers or len(includes) != 1 or not cores:
+    print("pacman.conf rewrite produced an unexpected result", file=sys.stderr)
+    sys.exit(1)
+if includes[0] > cores[0]:
+    print("sakura-core must be included before [core]", file=sys.stderr)
     sys.exit(1)
 p.write_text(text)
 PYCONF
@@ -264,10 +337,35 @@ if [ -n "$ROOTPASS" ]; then
 else
     passwd -l root >/dev/null
 fi
+# KDE's user feedback level, as chosen on the installer's privacy screen.
+#
+# That screen used to say "Sending basic information to KDE" in the present
+# tense and then configure nothing, so it described a state of the system that
+# was not true either way. FeedbackLevel is what Plasma reads: 0 is off, 16 is
+# the basic system information the screen describes. This goes to KDE and
+# never to SakuraOS, which is why it is the only telemetry question asked.
+install -d -o "$USERNAME" -g "$USERNAME" "/home/$USERNAME/.config"
+if [ "$FEEDBACK" = "on" ]; then
+    printf '[Global]\nFeedbackLevel=16\n' > "/home/$USERNAME/.config/PlasmaUserFeedback"
+else
+    printf '[Global]\nFeedbackLevel=0\n' > "/home/$USERNAME/.config/PlasmaUserFeedback"
+fi
+chown "$USERNAME:$USERNAME" "/home/$USERNAME/.config/PlasmaUserFeedback"
+
 echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/10-wheel
 chmod 440 /etc/sudoers.d/10-wheel
 
-systemctl enable sddm NetworkManager >/dev/null 2>&1
+# sakura-updates.timer is what makes "updates install overnight" true. It
+# was shipped but never enabled, so every machine installed so far has been
+# saying that and not doing it.
+# cups.socket rather than cups.service: socket activation means the printing
+# stack costs nothing until something actually prints. bluetooth.service is
+# what bluedevil talks to -- the Plasma page is inert without it.
+systemctl enable sddm NetworkManager sakura-updates.timer \
+    bluetooth.service cups.socket >/dev/null 2>&1
+# Turn the chosen window into the timer's schedule. Safe to run now: the
+# config is already in place from the package's defaults.
+/usr/lib/sakura/updates/sakura-updates-schedule >/dev/null 2>&1 || true
 
 # Apply the appearance the user chose. Without this the answer is collected in
 # the installer and silently thrown away, and every machine boots dark.
@@ -303,7 +401,14 @@ mkdir /.snapshots
 mount /.snapshots
 chmod 750 /.snapshots
 
-snapper --no-dbus -c root set-config TIMELINE_CREATE=no NUMBER_LIMIT=10 NUMBER_LIMIT_IMPORTANT=5
+# ALLOW_GROUPS and SYNC_ACL are what let the desktop show the restore points
+# it takes. Without them the Update Center -- which runs unprivileged, on
+# purpose -- reads nothing back and tells the user "no restore points yet" on
+# a machine that has plenty, which undermines the one guarantee this whole
+# design exists to make. Reading the list is not a privileged act; making a
+# rollback still is.
+snapper --no-dbus -c root set-config TIMELINE_CREATE=no NUMBER_LIMIT=10 \
+    NUMBER_LIMIT_IMPORTANT=5 ALLOW_GROUPS=wheel SYNC_ACL=yes
 snapper --no-dbus -c root create --description "installation complete" --cleanup-algorithm number
 CHROOT
 

@@ -239,15 +239,61 @@ def elevate(verb: str) -> int:
         return 1
 
 
+def on_ac_power() -> bool:
+    """Whether the machine is on mains power.
+
+    A desktop with no battery reports nothing at all, and that has to read as
+    "fine to update" rather than as "on battery" -- otherwise every desktop
+    silently stops updating. Only an explicit "discharging" is a no.
+    """
+    supplies = Path("/sys/class/power_supply")
+    if not supplies.is_dir():
+        return True
+    mains = []
+    for d in supplies.iterdir():
+        try:
+            kind = (d / "type").read_text().strip()
+        except OSError:
+            continue
+        if kind == "Mains":
+            try:
+                mains.append((d / "online").read_text().strip() == "1")
+            except OSError:
+                pass
+    # No mains supply described at all: a desktop, or a kernel that does not
+    # report it. Either way, not evidence of running on battery.
+    return any(mains) if mains else True
+
+
 def cmd_apply(args) -> int:
     if os.geteuid() != 0:
         # 126 and 127 are pkexec's own codes for "dismissed" and "not
         # authorised"; say so rather than leaving a bare number.
+        # --unattended is deliberately not carried through the helper. It
+        # accepts one argument from a fixed list precisely so that it cannot be
+        # made to run something else, and the flag is not needed here: the
+        # timer runs as root and never elevates. Anyone reaching this line is a
+        # person who asked for updates, which is the case the settings do not
+        # gate anyway.
         rc = elevate("apply")
         if rc in (126, 127):
             print("Updates were not installed: authentication was cancelled.",
                   file=sys.stderr)
         return rc
+
+    cfg = read_config()
+
+    # An unattended run is the timer's; a plain `apply` is somebody pressing
+    # Install now. The settings describe what the machine does on its own, so
+    # they gate the first and never the second -- a user who asks for updates
+    # explicitly has already answered the question the setting exists to ask.
+    if args.unattended:
+        if cfg.get("AutoApply", "true") != "true":
+            print("Automatic updates are switched off; nothing was installed.")
+            return 0
+        if cfg.get("RequireACPower", "true") == "true" and not on_ac_power():
+            print("Not installing updates: this machine is on battery.")
+            return 0
 
     ups = available()
     if not ups:
@@ -255,7 +301,7 @@ def cmd_apply(args) -> int:
         return 0
 
     describe(ups)
-    holds = apply_holds(ups, read_config())
+    holds = apply_holds(ups, cfg)
     ready = [u for u in ups if not u.held]
 
     if not ready:
@@ -298,6 +344,10 @@ def main() -> int:
     c.set_defaults(fn=cmd_check)
 
     a = sub.add_parser("apply", help="snapshot, then install")
+    # The timer passes this; a person never does. It is what separates "the
+    # machine decided to update" from "someone asked it to".
+    a.add_argument("--unattended", action="store_true",
+                   help="obey the automatic-update settings and skip if they say no")
     a.set_defaults(fn=cmd_apply)
 
     s = sub.add_parser("status", help="one line")

@@ -131,8 +131,15 @@ void Backend::loadHistory()
     // Restore points are the history. snap-pac writes one before every pacman
     // transaction, so the snapshot list already is the record of what changed
     // and when -- there is no second log to keep in step.
+    // Through D-Bus, deliberately. --no-dbus makes snapper read
+    // /etc/snapper/configs/root directly, which is root-only, so an
+    // unprivileged process got nothing back and the tab reported "no restore
+    // points yet" on a machine full of them -- the safety net this project is
+    // built around, apparently absent. The D-Bus path is the one that honours
+    // the ALLOW_GROUPS=wheel the installer sets, and listing snapshots is not
+    // a privileged act; taking or restoring one still is.
     const QString out = capture(QStringLiteral("snapper"),
-        {QStringLiteral("--no-dbus"), QStringLiteral("-c"), QStringLiteral("root"),
+        {QStringLiteral("-c"), QStringLiteral("root"),
          QStringLiteral("list"), QStringLiteral("--columns"),
          QStringLiteral("number,date,description")});
 

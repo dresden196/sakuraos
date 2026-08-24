@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import subprocess
 import tempfile
 
 CONFIG = os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf")
@@ -157,6 +158,18 @@ def main() -> int:
     except OSError as error:
         os.unlink(tmp)
         fail(f"cannot write {CONFIG}: {error}")
+
+    # A timer cannot read a config file, so the update window has to be pushed
+    # into a systemd drop-in. Doing it here means the setting takes effect when
+    # it is saved rather than at the next install -- previously the four update
+    # controls in two different UIs wrote keys that nothing ever acted on.
+    #
+    # Best-effort: the settings are already safely written, and failing the
+    # whole save because systemd was unhappy would lose them for no gain.
+    schedule = "/usr/lib/sakura/updates/sakura-updates-schedule"
+    if os.path.exists(schedule):
+        subprocess.run([schedule], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     return 0
 
