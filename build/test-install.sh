@@ -46,9 +46,14 @@ if (( ! verify_only )); then
     # 60s, and an install takes many minutes -- waiting on it directly means
     # the call reports a timeout while the install is still going, and a
     # second attempt then collides with the first over a mounted /dev/vda2.
+    # qemu-guest-agent is for this harness, not for users: an installed system
+    # ships no agent, so without it the machine is unreachable and none of the
+    # checks below can run. --extra-packages is the installer's own mechanism
+    # for this, so nothing test-specific leaks into the installer itself.
     run "setsid bash -c 'sakura-install --disk /dev/vda --user $USER_NAME \
          --password $USER_PASS --hostname $HOSTNAME_ --timezone UTC \
-         --theme dark --yes > /tmp/install.log 2>&1; echo \$? > /tmp/install.rc' &" \
+         --theme dark --keymap gb --extra-packages qemu-guest-agent --yes \
+         > /tmp/install.log 2>&1; echo \$? > /tmp/install.rc' &" \
         >/dev/null 2>&1 || true
 
     echo -n ">> installing"
@@ -70,7 +75,21 @@ if (( ! verify_only )); then
     # optical cannot quietly boot the live environment and pass these checks
     # against the wrong system.
     "$REPO_ROOT/build/test-vm.sh" --installed --headless >/dev/null 2>&1 &
-    SAKURA_VM_TIMEOUT=420 "$REPO_ROOT/build/vm-ready.sh"
+
+    # Wait for the guest agent, not for a desktop session. An installed system
+    # does not autologin -- correctly -- so there is no session until somebody
+    # types a password, and every check below is a shell command anyway.
+    echo -n ">> waiting for the installed system"
+    deadline=$(( SECONDS + 420 ))
+    until run "true" >/dev/null 2>&1; do
+        (( SECONDS < deadline )) || { echo; echo "installed system never came up" >&2; exit 1; }
+        echo -n .
+        sleep 5
+    done
+    echo " up"
+    # The agent answers before the boot has settled; a few units are still
+    # starting and `systemctl is-enabled` can race them.
+    sleep 10
 fi
 
 echo
@@ -95,6 +114,19 @@ check "the display manager is enabled"     "systemctl is-enabled sddm"
 check "the network manager is enabled"     "systemctl is-enabled NetworkManager"
 check "a boot entry was written"           "efibootmgr | grep -qi sakura"
 check "the store engine runs as the user"  "runuser -u $USER_NAME -- sakura-store sources"
+# Everything below is something that was broken and is meant to be fixed.
+check "the keyboard layout was applied"    "grep -q 'XkbLayout' /etc/X11/xorg.conf.d/00-keyboard.conf"
+check "the console keymap was converted"   "grep -qx 'KEYMAP=uk' /etc/vconsole.conf"
+check "the update timer is enabled"        "systemctl is-enabled sakura-updates.timer"
+check "the update timer has a schedule"    "systemctl show sakura-updates.timer -p TimersCalendar | grep -q 03:00"
+check "snapper allows the wheel group"     "grep -q 'ALLOW_GROUPS=\"wheel\"' /etc/snapper/configs/root"
+check "the user can list snapshots"        "runuser -u $USER_NAME -- snapper -c root list"
+check "bluetooth is enabled"               "systemctl is-enabled bluetooth.service"
+check "printing is socket-activated"       "systemctl is-enabled cups.socket"
+check "print-manager is installed"         "pacman -Q print-manager"
+check "a video player is installed"        "pacman -Q haruna"
+check "the KWin rule for Dolphin shipped"  "grep -q dolphin /etc/xdg/kwinrulesrc"
+check "user feedback was configured"       "grep -q FeedbackLevel /home/$USER_NAME/.config/PlasmaUserFeedback"
 
 echo
 printf '>> %d passed, %d failed\n' "$pass" "$fail"

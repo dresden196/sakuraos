@@ -1,0 +1,11 @@
+# Background for the login screen.
+#
+# SDDM's breeze theme is deliberate -- it matches Plasma and costs nothing,
+# since plasma-desktop already ships it -- but it comes with Breeze's own
+# wallpaper, so the first thing anyone ever saw of SakuraOS was somebody
+# else's branding. theme.conf.user is the documented override: the theme
+# reads it in preference to theme.conf, and shipping it does not modify a
+# file another package owns.
+[General]
+background=/usr/share/wallpapers/Sakura/contents/images_dark/5120x2880.jpg
+type=image
