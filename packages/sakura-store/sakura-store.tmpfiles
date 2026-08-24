@@ -1,0 +1,13 @@
+# The transaction lock, shared by the store and the update engine so that an
+# install and an unattended update cannot run at once.
+#
+# It lives in /run rather than /var/lib because a lock means nothing across a
+# reboot -- a stale one on disk is only a way to block installs on a machine
+# that crashed. And it is created here, at boot, because the store runs as the
+# logged-in user: a root-owned directory meant the very first Install failed
+# with a PermissionError before anything was even downloaded.
+#
+# Mode 0666 on the file itself: nothing reads its contents, only flock() on
+# the descriptor matters, so there is nothing in it to protect.
+d /run/sakura 0755 root root -
+f /run/sakura/store.lock 0666 root root -
