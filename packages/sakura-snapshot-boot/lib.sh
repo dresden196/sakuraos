@@ -11,6 +11,14 @@ SAKURA_SNAPSHOT_SUBVOL="${SAKURA_SNAPSHOT_SUBVOL:-@snapshots}"
 # kernel command line stay constant, embedded, and signed.
 SAKURA_ROOT_SUBVOL="${SAKURA_ROOT_SUBVOL:-@}"
 
+# A rollback asked for from the desktop, waiting to be carried out.
+#
+# It has to live inside the root subvolume rather than in /run or on the ESP:
+# the recovery environment mounts the btrfs top level and can read
+# $TOP/@/etc/..., and putting it on the ESP would mean a FAT filesystem and a
+# second thing to keep in step. The path is relative to the root subvolume.
+SAKURA_ROLLBACK_REQUEST="${SAKURA_ROLLBACK_REQUEST:-etc/sakura/rollback-request}"
+
 # Pull one element's text out of a snapper info.xml. Snapper writes these one
 # tag per line, so a line-oriented parser is sufficient and avoids depending on
 # an XML parser in early boot.

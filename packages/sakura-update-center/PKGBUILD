@@ -11,7 +11,11 @@ pkgdesc="See and manage SakuraOS updates"
 arch=('x86_64')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
-depends=('sakura-updates' 'qt6-base' 'qt6-declarative' 'ki18n'
+# sakura-settings-kcm owns sakura-settings-write, which the Schedule tab
+# calls to save; sakura-snapshot-boot owns the rollback helper the History
+# tab calls. Both were used without being declared -- masked only because
+# sakura-desktop happens to pull them in.
+depends=('sakura-updates' 'sakura-settings-kcm' 'sakura-snapshot-boot' 'qt6-base' 'qt6-declarative' 'ki18n'
          'qqc2-desktop-style' 'polkit')
 makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools')
 

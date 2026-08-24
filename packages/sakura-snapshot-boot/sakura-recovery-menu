@@ -15,6 +15,15 @@ say() { printf '%s\n' "$*" > /dev/console; }
 # Resolve the filesystem holding the system. The recovery image is built with
 # sakura.root= naming the same filesystem the normal image boots from.
 find_root_device() {
+    # Set by the late hook, which read it from /proc/mounts before unmounting
+    # the root it was about to replace. Only the recovery image's command line
+    # carries sakura.root=, so on a normal boot -- which is where a rollback
+    # asked for from the desktop is handled -- this is the only thing that
+    # knows the device.
+    if [ -n "${SAKURA_ROOT_DEV:-}" ]; then
+        printf '%s' "$SAKURA_ROOT_DEV"
+        return 0
+    fi
     for _arg in $(cat /proc/cmdline); do
         case "$_arg" in
             sakura.root=*) printf '%s' "${_arg#sakura.root=}"; return 0 ;;
@@ -55,6 +64,56 @@ main() {
         say "  Could not open the disk holding your system."
         return 1
     }
+
+    # A rollback the user asked for from the desktop. Honouring it here rather
+    # than making them read a console menu is the whole point: a boot entry
+    # nobody knows about is not a safety net.
+    #
+    # The request is deleted before the rollback is attempted, not after. If
+    # it survived a failure the machine would try the same rollback on every
+    # boot, which turns one bad snapshot into an unbootable system.
+    # Either handed over by the late hook, which has already removed the
+    # request file, or read from that file when this runs from the Recovery
+    # boot entry with nothing having pre-selected anything.
+    _req="$TOP/$SAKURA_ROOT_SUBVOL/$SAKURA_ROLLBACK_REQUEST"
+    _want="${SAKURA_ROLLBACK_TARGET:-}"
+    if [ -z "$_want" ] && [ -f "$_req" ]; then
+        # Builtins only: head and tr are not in this initramfs, and a missing
+        # tool here returns empty rather than failing loudly.
+        read -r _want < "$_req" || _want=""
+    fi
+    case "$_want" in
+        ''|*[!0-9]*) _want="" ;;
+    esac
+    rm -f "$_req"
+    if [ -n "$_want" ]; then
+        if [ -d "$TOP/$SAKURA_SNAPSHOT_SUBVOL/$_want/snapshot" ]; then
+            say "  Going back to the restore point you chose."
+            say ""
+            if /usr/lib/sakura/snapshot-boot/sakura-rollback "$TOP" "$_want" \
+                    > /dev/console 2>&1; then
+                # The subvolume now in place is the snapshot, and it carries
+                # whatever was in /etc when it was taken -- including, if a
+                # rollback had been asked for around then, a request of its
+                # own. Left there, the next boot performs that one too, and
+                # the machine walks backwards through its own history. Clear
+                # it from the restored root, not just from the one replaced.
+                rm -f "$TOP/$SAKURA_ROOT_SUBVOL/$SAKURA_ROLLBACK_REQUEST"
+                sync
+                say ""
+                say "  Done. Your system has been restored to that point."
+                say ""
+                umount "$TOP"
+                return 0
+            fi
+            say ""
+            say "  That did not work. Pick a point to go back to instead:"
+            say ""
+        else
+            say "  The restore point that was requested is no longer there."
+            say ""
+        fi
+    fi
 
     _list=$(sakura_list_snapshots "$TOP/$SAKURA_SNAPSHOT_SUBVOL")
     if [ -z "$_list" ]; then
