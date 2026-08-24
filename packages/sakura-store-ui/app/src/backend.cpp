@@ -1,6 +1,7 @@
 #include "backend.h"
 
 #include <QJsonArray>
+#include <algorithm>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QVariant>
@@ -14,7 +15,22 @@ QVariantMap toMap(const QJsonObject &o)
 }
 } // namespace
 
-Backend::Backend(QObject *parent) : QObject(parent) {}
+Backend::Backend(QObject *parent) : QObject(parent) {
+    // The category vocabulary lives in the engine, which is also what knows
+    // that it applies to Flatpak and the repositories but not to the AUR.
+    {
+        QProcess p;
+        p.start(QString::fromLatin1(ENGINE),
+                {QStringLiteral("categories"), QStringLiteral("--json")});
+        if (p.waitForFinished(4000)) {
+            const QJsonArray rows =
+                QJsonDocument::fromJson(p.readAllStandardOutput()).array();
+            for (const QJsonValue &v : rows) {
+                m_categories.append(toMap(v.toObject()));
+            }
+        }
+    }
+}
 
 QProcess *Backend::run(const QStringList &args)
 {
@@ -83,6 +99,62 @@ void Backend::loadCollection(const QString &name, int limit, QVariantList &into)
             into.append(toMap(v.toObject()));
         }
         Q_EMIT featuredChanged();
+    });
+}
+
+void Backend::loadCategory(const QString &id, const QString &label)
+{
+    m_loadingCategory = true;
+    m_categoryName = label;
+    m_categoryApps.clear();
+    Q_EMIT categoryChanged();
+    auto *p = run({QStringLiteral("category"), id,
+                   QStringLiteral("--limit"), QStringLiteral("36"),
+                   QStringLiteral("--json")});
+    connect(p, &QProcess::finished, this, [this, p] {
+        const QJsonObject root =
+            QJsonDocument::fromJson(p->readAllStandardOutput()).object();
+        p->deleteLater();
+        m_categoryApps.clear();
+        for (const QJsonValue &v : root[QStringLiteral("apps")].toArray()) {
+            m_categoryApps.append(toMap(v.toObject()));
+        }
+        m_loadingCategory = false;
+        Q_EMIT categoryChanged();
+    });
+}
+
+void Backend::loadInstalled()
+{
+    m_loadingInstalled = true;
+    Q_EMIT installedChanged();
+    // The engine returns applications rather than packages -- a native
+    // package list would be a thousand entries of operating system.
+    auto *p = run({QStringLiteral("installed"), QStringLiteral("--json")});
+    connect(p, &QProcess::finished, this, [this, p] {
+        const QJsonArray rows =
+            QJsonDocument::fromJson(p->readAllStandardOutput()).array();
+        p->deleteLater();
+        m_installed.clear();
+        for (const QJsonValue &v : rows) {
+            m_installed.append(toMap(v.toObject()));
+        }
+        // Group by source, then by the name actually shown, so the list has a
+        // stable order that matches how it reads.
+        std::sort(m_installed.begin(), m_installed.end(),
+                  [](const QVariant &a, const QVariant &b) {
+            const QVariantMap x = a.toMap(), y = b.toMap();
+            const QString xs = x.value(QStringLiteral("source")).toString();
+            const QString ys = y.value(QStringLiteral("source")).toString();
+            if (xs != ys) {
+                return xs < ys;
+            }
+            return x.value(QStringLiteral("name")).toString().compare(
+                   y.value(QStringLiteral("name")).toString(),
+                   Qt::CaseInsensitive) < 0;
+        });
+        m_loadingInstalled = false;
+        Q_EMIT installedChanged();
     });
 }
 

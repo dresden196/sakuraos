@@ -73,12 +73,37 @@ needs a link between identities that do not share a namespace: Flatpak uses
 reverse-DNS (`org.mozilla.firefox`), Snap and the AUR use bare names
 (`firefox`), AppImages use whatever the author called the file.
 
-AppStream component IDs join Flatpak and repository packages reliably. The rest
-needs a mapping table that somebody maintains. That is ongoing curation, not a
-clever algorithm, and it should be a data file in this repository that anyone
-can send a correction to.
+AppStream component IDs join Flatpak and repository packages reliably, and this
+is now implemented: `archlinux-appstream-data` gives `gimp` in `extra` the id
+`org.gimp.GIMP`, which is character-for-character the id Flathub uses, so the
+two collapse into one result with no guessing. `merge()` keys on that id
+wherever both sides have one and falls back to the display name only for Snap
+and the AUR, which carry bare names.
+
+The rest needs a mapping table that somebody maintains. That is ongoing
+curation, not a clever algorithm, and it should be a data file in this
+repository that anyone can send a correction to.
+
+Two traps in reading that catalogue, both of which produced wrong output before
+they were caught. Every string is present once per translation as a sibling
+element, so `findtext("name")` returns whichever locale happens to come first —
+for GIMP that is Arabic; the element with no `xml:lang` is the one wanted. And
+`icon type="stock"` names a theme icon that still has to be resolved, so only
+`type="cached"` icons, which are real files under
+`/usr/share/swcatalog/icons/`, are usable directly.
 
 ## Decisions
+
+**The Arch repositories are a source, and Flatpak still leads.** The store
+originally searched Flathub, the AUR and Snap but not Arch's own repositories,
+which on an Arch-based distribution cannot be right: GIMP is in `extra` and is
+not in the AUR at all, so the store could not find it by any route. Flatpak
+keeps the primary slot because it is the same build on every machine; the
+repository package is listed as an alternative on the app page, where it is
+usually the better choice for anyone who wants system integration and a smaller
+download. Ranking within repository results puts packages that have an
+AppStream component first, so searching `gimp` leads with GIMP rather than with
+twenty-five `gimp-help-*` locale packages.
 
 **Ratings come from ODRS, popularity is shown separately.** ODRS is one pool
 that GNOME Software and Discover both read, it takes anonymous submissions

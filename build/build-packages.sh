@@ -53,6 +53,16 @@ docker run --rm \
         chown -R builder:builder /home/builder/.gnupg
         chmod -R go-rwx /home/builder/.gnupg
 
+        # Trust our own signing key inside the build container. Packages are
+        # signed as they are built, and an AUR package that depends on another
+        # AUR package has to be installed here before the dependent one can
+        # build -- pacman -U refuses a package signed by a key it does not
+        # know, which is why installing cpr for zsync2 failed silently.
+        pacman-key --init >/dev/null 2>&1
+        gpg --homedir /home/builder/.gnupg --export "$SIGNER" \
+            | pacman-key --add - >/dev/null 2>&1
+        pacman-key --lsign-key "$SIGNER" >/dev/null 2>&1
+
         WORK=/home/builder/work
         install -d -o builder -g builder "$WORK"
 
@@ -108,15 +118,19 @@ docker run --rm \
         # An AUR package breaking upstream must not take the whole repo down
         # with it. Record the failure, publish everything that did build, and
         # report at the end -- a half-built repo you know about beats no repo.
-        while read -r pkg; do
+        # A manifest line is a package name, optionally followed by extra
+        # makepkg flags for that one package. Per-package rather than global
+        # so that weakening a check stays visible next to the package it
+        # applies to, with the reason in a comment above it.
+        while read -r pkg flags; do
             # An if, not "[[ ... ]] && continue": under set -e a false test
             # makes the && list return non-zero and kills the whole build,
             # after it has already succeeded.
             if [[ -z "$pkg" || "$pkg" == \#* ]]; then continue; fi
-            echo ">>> rebuilding AUR package $pkg"
+            echo ">>> rebuilding AUR package $pkg${flags:+ ($flags)}"
             if su builder -c "git clone --depth 1 https://aur.archlinux.org/$pkg.git $WORK/$pkg" \
                && su builder -c "cd $WORK/$pkg && GNUPGHOME=/home/builder/.gnupg \
-                    makepkg --syncdeps --noconfirm --clean --sign --key $SIGNER"; then
+                    makepkg --syncdeps --noconfirm --clean --sign --key $SIGNER $flags"; then
                 echo ">>> $pkg ok"
                 # Install what we just built into the build container. Some AUR
                 # packages depend on other AUR packages -- zsync2 needs cpr and
@@ -125,8 +139,13 @@ docker run --rm \
                 # this the dependent package fails with "target not found" no
                 # matter what order the manifest is in. The container is
                 # thrown away at the end of the build.
-                pacman -U --noconfirm --asdeps --needed \
-                    "$WORK/$pkg"/*.pkg.tar.zst >/dev/null 2>&1 || true
+                if ! pacman -U --noconfirm --asdeps --needed \
+                        "$WORK/$pkg"/*.pkg.tar.zst >/dev/null 2>&1; then
+                    # Not fatal on its own, but it is why a later package that
+                    # depends on this one will fail, so say so here rather
+                    # than leaving that failure unexplained.
+                    echo ">>> warning: could not install $pkg into the build container"
+                fi
             else
                 echo ">>> $pkg FAILED"
                 FAILED="$FAILED $pkg"

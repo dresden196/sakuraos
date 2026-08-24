@@ -14,6 +14,7 @@ contract rather than editing the interface.
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import os
 import re
@@ -22,6 +23,8 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
+from functools import lru_cache
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
@@ -109,7 +112,31 @@ class Source:
         raise NotImplementedError
 
     def installed(self) -> dict[str, str]:
-        """source_id -> version"""
+        """source_id -> version, for everything this source has installed."""
+        return {}
+
+    def installed_apps(self) -> dict[str, str]:
+        """The subset a person would call an application.
+
+        For every source but the repositories these are the same set, because
+        a Flatpak or a Snap is always an application. Native packages are not.
+        """
+        return self.installed()
+
+    def display_names(self) -> dict[str, str]:
+        """source_id -> the name to show a person.
+
+        Flatpak ids are reverse-DNS, so an installed list built from ids alone
+        reads as app.zen_browser.zen rather than Zen Browser.
+        """
+        return {}
+
+    def local_icons(self) -> dict[str, str]:
+        """source_id -> a path to an icon already on this machine.
+
+        The Installed list must render with no network: it is the one view a
+        person opens when something is wrong.
+        """
         return {}
 
 
@@ -119,6 +146,28 @@ class FlatpakSource(Source):
 
     def available(self) -> bool:
         return bool(run(["flatpak", "--version"]))
+
+    def display_names(self) -> dict[str, str]:
+        out = run(["flatpak", "list", "--app", "--columns=application,name"])
+        names = {}
+        for line in out.splitlines():
+            parts = line.split("\t")
+            if len(parts) == 2 and parts[0]:
+                names[parts[0]] = parts[1]
+        return names
+
+    def local_icons(self) -> dict[str, str]:
+        # flatpak keeps the remote's AppStream icons unpacked under
+        # /var/lib/flatpak/appstream/<remote>/<arch>/active/icons/.
+        icons: dict[str, str] = {}
+        base = Path("/var/lib/flatpak/appstream")
+        if not base.is_dir():
+            return icons
+        for size in ("128x128", "64x64"):
+            for d in base.glob(f"*/*/active/icons/{size}"):
+                for f in d.glob("*.png"):
+                    icons.setdefault(f.stem, f"file://{f}")
+        return icons
 
     def installed(self) -> dict[str, str]:
         out = run(["flatpak", "list", "--app", "--columns=application,version"])
@@ -132,9 +181,14 @@ class FlatpakSource(Source):
     def search(self, query: str) -> list[App]:
         data = fetch(f"{FLATHUB_API}/search", {}, post={"query": query}, tag="Flathub")
         hits = data.get("hits", []) if isinstance(data, dict) else []
+        return self.apps_from_hits(hits)
+
+    def apps_from_hits(self, hits: list, limit: int = 40) -> list[App]:
+        """Flathub returns the same hit shape from search and from every
+        collection endpoint, so one converter serves both."""
         have = self.installed()
         out = []
-        for h in hits[:40]:
+        for h in hits[:limit]:
             app_id = h.get("app_id") or h.get("id") or ""
             if not app_id:
                 continue
@@ -152,6 +206,83 @@ class FlatpakSource(Source):
                             if h.get("installs_last_month") else {},
             ))
         return out
+
+
+# --------------------------------------------------------------------------
+# AppStream metadata for repository packages
+# --------------------------------------------------------------------------
+# pacman knows a package's name and description and nothing else -- no icon,
+# no display name, no upstream id. archlinux-appstream-data carries all of it,
+# and crucially it gives repository packages the SAME component id Flathub
+# uses (gimp in extra is org.gimp.GIMP), which turns cross-source matching
+# from a guess about package names into an identity.
+SWCATALOG = Path("/usr/share/swcatalog")
+
+
+def _untagged(component, tag: str) -> str:
+    """The element with no xml:lang, i.e. the source-language one.
+
+    The catalogue ships every translation as a sibling element, so findtext()
+    returns whichever locale happens to come first -- for GIMP that is Arabic.
+    """
+    for el in component.findall(tag):
+        if not el.get("{http://www.w3.org/XML/1998/namespace}lang"):
+            return (el.text or "").strip()
+    return ""
+
+
+@lru_cache(maxsize=1)
+def appstream_index() -> dict[str, dict]:
+    """pkgname -> metadata, merged across the repository catalogues."""
+    index: dict[str, dict] = {}
+    xmldir = SWCATALOG / "xml"
+    if not xmldir.is_dir():
+        return index
+    for path in sorted(xmldir.glob("*.xml.gz")):
+        origin = path.name[: -len(".xml.gz")]
+        try:
+            with gzip.open(path, "rb") as fh:
+                root = ET.parse(fh).getroot()
+        except Exception as exc:                     # a corrupt catalogue must
+            FAILURES["appstream"] = str(exc)         # not take the search down
+            continue
+        for c in root.findall("component"):
+            pkg = c.findtext("pkgname")
+            if not pkg or pkg in index:
+                continue
+            kind = c.get("type") or ""
+            icon = ""
+            # Prefer the largest cached icon; "stock" icons name a theme icon
+            # we would have to resolve ourselves and often do not have.
+            best = 0
+            for el in c.findall("icon"):
+                if el.get("type") != "cached":
+                    continue
+                w = int(el.get("width") or 0)
+                if w >= best:
+                    best, icon = w, str(
+                        SWCATALOG / "icons" / f"archlinux-arch-{origin}"
+                        / f"{w}x{w}" / (el.text or "").strip())
+            # A local path is not a URL. Qt resolves a bare absolute path
+            # against the component's base URL -- qrc:/ -- and draws nothing.
+            icon_url = f"file://{icon}" if icon and Path(icon).exists() else ""
+            dev = _untagged(c, "developer_name")
+            if not dev:
+                node = c.find("developer")
+                if node is not None:
+                    dev = _untagged(node, "name")
+            index[pkg] = {
+                "kind": kind,
+                "categories": [e.text for e in c.findall("categories/category")
+                               if e.text],
+                "id": c.findtext("id") or pkg,
+                "name": _untagged(c, "name") or pkg,
+                "summary": _untagged(c, "summary"),
+                "developer": dev,
+                "license": c.findtext("project_license") or "",
+                "icon": icon_url,
+            }
+    return index
 
 
 class RepoSource(Source):
@@ -174,6 +305,22 @@ class RepoSource(Source):
         return {l.split()[0]: l.split()[1]
                 for l in out.splitlines() if len(l.split()) == 2}
 
+    def installed_apps(self) -> dict[str, str]:
+        """Only the applications, not the operating system.
+
+        installed() has to answer "is this package present" for every package,
+        dependencies included, so the search results can be marked correctly.
+        The Installed list is a different question: -Qn returns all ~1000
+        native packages, so without this the tab lists glibc and systemd
+        beside the user's actual applications. Explicitly-installed packages
+        that have an AppStream component are the applications.
+        """
+        out = run(["pacman", "-Qen"])
+        index = appstream_index()
+        return {p[0]: p[1] for p in (l.split() for l in out.splitlines())
+                if len(p) == 2
+                and index.get(p[0], {}).get("kind") == "desktop-application"}
+
     def search(self, query: str) -> list[App]:
         out = run(["pacman", "-Ss", query])
         have = self.installed()
@@ -187,20 +334,35 @@ class RepoSource(Source):
                     header = None
                     continue
                 repo, _, pkg = parts[0].partition("/")
+                meta = appstream_index().get(pkg, {})
                 header = App(
-                    id=pkg, name=pkg, source=self.name, source_id=pkg,
+                    # The AppStream id where there is one: it is the same id
+                    # Flathub uses, so an app that exists in both places is
+                    # recognised as one app rather than matched by name.
+                    id=meta.get("id") or pkg,
+                    name=meta.get("name") or pkg,
+                    summary=meta.get("summary", ""),
+                    developer=meta.get("developer") or repo,
+                    icon=meta.get("icon", ""),
+                    source=self.name, source_id=pkg,
                     installed=pkg in have,
                     version=have.get(pkg) or (parts[1] if len(parts) > 1 else ""),
-                    developer=repo,
                 )
                 apps.append(header)
             elif header is not None:
-                header.summary = line.strip()
+                # pacman's own description is the fallback for the ~90% of
+                # packages that ship no AppStream component at all.
+                if not header.summary:
+                    header.summary = line.strip()
                 header = None
         # pacman -Ss matches descriptions too, so a bare query can return
         # hundreds. Name matches first, then the rest.
         q = query.lower()
-        apps.sort(key=lambda a: (q not in a.name.lower(), a.name))
+        index = appstream_index()
+        apps.sort(key=lambda a: (
+            a.source_id not in index,        # applications before plumbing
+            q not in a.source_id.lower(),    # then name matches before description ones
+            a.source_id))
         return apps[:25]
 
 
@@ -217,6 +379,12 @@ class AurSource(Source):
     def installed(self) -> dict[str, str]:
         out = run(["pacman", "-Qm"])
         return {l.split()[0]: l.split()[1] for l in out.splitlines() if len(l.split()) == 2}
+
+    def installed_apps(self) -> dict[str, str]:
+        # -debug packages are split output that only a debugger consumes;
+        # listing yay-debug beside yay in a store is noise.
+        return {k: v for k, v in self.installed().items()
+                if not k.endswith("-debug")}
 
     def search(self, query: str) -> list[App]:
         data = fetch(f"{AUR_RPC}/search/{urllib.parse.quote(query)}", {}, tag="AUR")
@@ -275,7 +443,11 @@ class SnapSource(Source):
         return out
 
 
-SOURCES = [RepoSource(), FlatpakSource(), AurSource(), SnapSource()]
+# Order matters: merge() gives the primary slot to the first source that
+# has an app, and everything after it becomes an alternative. Flatpak
+# leads because it is the same build everywhere; the repository package
+# is usually smaller and better integrated, so it is offered right after.
+SOURCES = [FlatpakSource(), RepoSource(), AurSource(), SnapSource()]
 
 
 # --------------------------------------------------------------------------
@@ -335,21 +507,33 @@ def merge(results: list[list[App]]) -> list[App]:
     own page rather than as duplicate rows in a search.
     """
     order = {s.name: i for i, s in enumerate(SOURCES)}
+
+    def key_for(app: App) -> str:
+        # A reverse-DNS id is an identity, and Flathub and
+        # archlinux-appstream-data agree on it -- gimp in extra really is
+        # org.gimp.GIMP. Match on that where both sides have one; fall back to
+        # the display name for the AUR and Snap, which have only bare names.
+        if "." in app.id and " " not in app.id:
+            return app.id.lower()
+        return app.name.lower().strip()
+
+    def entry(app: App) -> dict:
+        return {"source": app.source, "id": app.source_id,
+                "version": app.version, "installed": app.installed}
+
     by_key: dict[str, App] = {}
     for group in results:
         for app in group:
-            key = app.name.lower().strip()
+            key = key_for(app)
             if key not in by_key:
                 by_key[key] = app
                 continue
             existing = by_key[key]
             if order.get(app.source, 9) < order.get(existing.source, 9):
-                app.also_from = existing.also_from + [
-                    {"source": existing.source, "id": existing.source_id}]
+                app.also_from = existing.also_from + [entry(existing)]
                 by_key[key] = app
             else:
-                existing.also_from.append(
-                    {"source": app.source, "id": app.source_id})
+                existing.also_from.append(entry(app))
     return list(by_key.values())
 
 
@@ -375,6 +559,62 @@ def read_config() -> dict:
 # --------------------------------------------------------------------------
 # commands
 # --------------------------------------------------------------------------
+# The freedesktop menu categories. Flathub serves them at
+# /collection/category/<Name> and archlinux-appstream-data tags repository
+# packages with exactly the same names, so one vocabulary covers both sources.
+# The AUR has no categories at all and Snap uses its own taxonomy; neither is
+# invented here, they are simply absent from the category view.
+CATEGORIES = [
+    ("Graphics", "Graphics & Photography"),
+    ("AudioVideo", "Audio & Video"),
+    ("Development", "Developer Tools"),
+    ("Game", "Games"),
+    ("Network", "Internet"),
+    ("Office", "Productivity"),
+    ("Education", "Education & Science"),
+    ("System", "System"),
+    ("Utility", "Utilities"),
+]
+
+
+def category(name: str, limit: int = 24) -> list[App]:
+    """One category, from every source that has a notion of categories."""
+    groups: list[list[App]] = []
+
+    flat = [s for s in SOURCES if s.name == "flatpak"][0]
+    if flat.available():
+        data = fetch(f"{FLATHUB_API}/collection/category/{urllib.parse.quote(name)}"
+                     f"?page=1&per_page={limit}", {}, tag="Flathub")
+        groups.append(flat.apps_from_hits(data.get("hits", []), limit))
+
+    repo = RepoSource()
+    if repo.available():
+        have = repo.installed()
+        index = appstream_index()
+        hits = []
+        for pkg, meta in index.items():
+            if meta.get("kind") != "desktop-application":
+                continue
+            if name not in meta.get("categories", []):
+                continue
+            hits.append(App(id=meta["id"], name=meta["name"],
+                            summary=meta.get("summary", ""),
+                            developer=meta.get("developer", ""),
+                            icon=meta.get("icon", ""),
+                            source="repo", source_id=pkg,
+                            installed=pkg in have,
+                            version=have.get(pkg, "")))
+        hits.sort(key=lambda a: a.name.lower())
+        groups.append(hits[:limit])
+
+    apps = merge(groups)
+    attach_ratings(apps)
+    # Rated things first: within a category, what other people rated is a
+    # better opening order than the alphabet.
+    apps.sort(key=lambda a: (-(a.rating_count or 0), a.name.lower()))
+    return apps[:limit]
+
+
 def collection(name: str, limit: int = 12) -> list[App]:
     """A real Flathub collection: popular, trending, recently-updated.
 
@@ -404,6 +644,14 @@ def collection(name: str, limit: int = 12) -> list[App]:
     return out
 
 
+def pacman_version(pkg: str) -> str:
+    """The repository version of a package that is not installed."""
+    for line in run(["pacman", "-Si", pkg]).splitlines():
+        if line.startswith("Version"):
+            return line.split(":", 1)[1].strip()
+    return ""
+
+
 def find_elsewhere(app_id: str, name: str) -> list[dict]:
     """The same application from other sources.
 
@@ -415,15 +663,33 @@ def find_elsewhere(app_id: str, name: str) -> list[dict]:
     stem = app_id.rsplit(".", 1)[-1].lower()
     words = {stem, name.lower().split()[0]} if name else {stem}
     found = []
+
+    # The repositories are not a guess: AppStream gives their packages the same
+    # component id Flathub uses, so this is an exact lookup rather than a
+    # search for a similar-looking name.
+    repo = RepoSource()
+    if repo.available():
+        for pkg, meta in appstream_index().items():
+            if meta["id"].lower() != app_id.lower():
+                continue
+            have = repo.installed()
+            found.append({"source": "repo", "id": pkg,
+                          "version": have.get(pkg) or pacman_version(pkg),
+                          "installed": pkg in have, "popularity": {},
+                          "exact": True})
+            break
+
     for src in SOURCES:
-        if src.name == "flatpak" or not src.available():
+        if src.name in ("flatpak", "repo") or not src.available():
             continue
         try:
             for hit in src.search(stem):
                 if hit.source_id.lower() in words or hit.name.lower() in words:
                     found.append({"source": src.name, "id": hit.source_id,
                                   "version": hit.version,
-                                  "popularity": hit.popularity})
+                                  "installed": hit.installed,
+                                  "popularity": hit.popularity,
+                                  "exact": False})
                     break
         except Exception:
             continue
@@ -519,6 +785,27 @@ def odrs_reviews(app_id: str, limit: int = 8) -> list:
     return out
 
 
+def cmd_categories(args) -> int:
+    if args.json:
+        print(json.dumps([{"id": k, "name": n} for k, n in CATEGORIES], indent=2))
+        return 0
+    for k, n in CATEGORIES:
+        print(f"  {k:<12} {n}")
+    return 0
+
+
+def cmd_category(args) -> int:
+    apps = category(args.name, args.limit)
+    if args.json:
+        print(json.dumps({"apps": [asdict(a) for a in apps],
+                          "unavailable": FAILURES}, indent=2))
+        return 0
+    for a in apps:
+        alt = f"  (+{len(a.also_from)})" if a.also_from else ""
+        print(f"  {a.source:<8} {a.name}{alt}")
+    return 0
+
+
 def cmd_collection(args) -> int:
     apps = collection(args.name, args.limit)
     attach_ratings(apps)
@@ -595,11 +882,18 @@ def cmd_remove(args) -> int:
 def cmd_installed(args) -> int:
     import appimage
     rows = []
+    index = appstream_index()
     for s in SOURCES:
         if not s.available():
             continue
-        for sid, ver in s.installed().items():
-            rows.append({"source": s.name, "id": sid, "version": ver})
+        names = s.display_names()
+        icons = s.local_icons()
+        for sid, ver in s.installed_apps().items():
+            meta = index.get(sid, {})
+            rows.append({"source": s.name, "id": sid, "version": ver,
+                         "name": meta.get("name") or names.get(sid) or sid,
+                         "summary": meta.get("summary", ""),
+                         "icon": meta.get("icon") or icons.get(sid, "")})
     for a in appimage.installed():
         rows.append({"source": "appimage", "id": a["name"],
                      "version": "", "updatable": a["updatable"]})
@@ -676,6 +970,16 @@ def main() -> int:
     r.add_argument("id")
     r.add_argument("--source", required=True)
     r.set_defaults(fn=cmd_remove)
+
+    cats = sub.add_parser("categories")
+    cats.add_argument("--json", action="store_true")
+    cats.set_defaults(fn=cmd_categories)
+
+    cat = sub.add_parser("category")
+    cat.add_argument("name", choices=[k for k, _ in CATEGORIES])
+    cat.add_argument("--limit", type=int, default=24)
+    cat.add_argument("--json", action="store_true")
+    cat.set_defaults(fn=cmd_category)
 
     c = sub.add_parser("collection")
     c.add_argument("name", choices=["popular", "trending",
