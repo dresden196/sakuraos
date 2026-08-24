@@ -11,9 +11,11 @@ without waiting for the process to end.
 from __future__ import annotations
 
 import fcntl
+import functools
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -32,6 +34,7 @@ DOWNLOADING = "downloading"
 VERIFYING = "verifying"
 INSTALLING = "installing"
 CONFIGURING = "configuring"
+REMOVING = "removing"
 DONE = "done"
 FAILED = "failed"
 
@@ -111,10 +114,14 @@ def install_flatpak(app_id: str) -> int:
         DOWNLOADING, _flatpak_progress)
 
 
-def remove_flatpak(app_id: str) -> int:
-    emit(INSTALLING, source="flatpak", app=app_id, detail="removing")
-    return stream(["flatpak", "uninstall", "--noninteractive", "--assumeyes",
-                   app_id], INSTALLING)
+def remove_flatpak(app_id: str, delete_data: bool = False) -> int:
+    emit(REMOVING, source="flatpak", app=app_id, packages=[app_id])
+    args = ["flatpak", "uninstall", "--noninteractive", "--assumeyes"]
+    if delete_data:
+        # Off by default: settings and saved files are the user's, and a
+        # reinstall should find them where they were left.
+        args.append("--delete-data")
+    return stream(args + [app_id], REMOVING)
 
 
 def install_snap(name: str) -> int:
@@ -123,7 +130,10 @@ def install_snap(name: str) -> int:
 
 
 def remove_snap(name: str) -> int:
-    return stream(["snap", "remove", name], INSTALLING)
+    emit(REMOVING, source="snap", app=name, packages=[name])
+    # snapd keeps a snapshot of the snap's data for 31 days by default, so
+    # this is recoverable without us doing anything.
+    return stream(["snap", "remove", name], REMOVING)
 
 
 def install_appimage(url: str, name: str, sha256: str = "") -> int:
@@ -205,22 +215,39 @@ def _is_repo_package(name: str) -> bool:
                           stderr=subprocess.DEVNULL).returncode == 0
 
 
-def _pacman_progress(line: str):
+def _pacman_progress(line: str, main_stage: str = INSTALLING):
     """Which phase pacman is in.
 
     Without this every line is reported as "downloading", so the UI claims a
     download is still running while packages are already being written to
     disk. pacman announces its phases plainly; this reads them.
+
+    main_stage is what ":: Processing package changes" means for the operation
+    in hand -- installing for an install, removing for a removal. Hardcoding
+    it made an uninstall report itself as an install halfway through.
     """
     stripped = line.strip()
     if stripped.startswith(":: Retrieving") or "downloading" in stripped:
         return {"stage": DOWNLOADING, "detail": stripped[:160]}
     if (stripped.startswith(":: Processing package changes")
-            or stripped.startswith(("installing ", "upgrading ", "reinstalling "))):
-        return {"stage": INSTALLING, "detail": stripped[:160]}
+            or stripped.startswith(("installing ", "upgrading ",
+                                    "reinstalling ", "removing "))):
+        return {"stage": main_stage, "detail": stripped[:160]}
     if "transaction hooks" in stripped or stripped.startswith("("):
         return {"stage": CONFIGURING, "detail": stripped[:160]}
     return None
+
+
+def _pacman_removing(line: str):
+    return _pacman_progress(line, REMOVING)
+
+
+def _is_installed_package(name: str) -> bool:
+    if not _PKG_NAME.match(name):
+        return False
+    return subprocess.run(["pacman", "-Q", "--", name],
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode == 0
 
 
 def install_repo(name: str) -> int:
@@ -242,14 +269,129 @@ def install_repo(name: str) -> int:
                    name], DOWNLOADING, _pacman_progress)
 
 
-def remove_repo(name: str) -> int:
-    if not _PKG_NAME.match(name):
-        emit(FAILED, error=f"{name} is not a valid package name.",
-             recoverable=False)
+def remove_repo(name: str, source: str = "repo") -> int:
+    """Remove a pacman package -- repository or AUR, they are the same thing.
+
+    Once an AUR package is installed it is an ordinary pacman package, so this
+    path serves both. The plan decides whether dependencies come with it, and
+    it refuses outright rather than removing anything the desktop needs.
+    """
+    plan = removal_plan(name, source)
+    if plan["blocked"]:
+        emit(FAILED, error=plan["reason"], recoverable=False)
         return 2
-    emit(INSTALLING, source="repo", app=name, detail="removing")
-    return stream(["pkexec", "pacman", "-Rns", "--noconfirm", "--", name],
-                  INSTALLING)
+    emit(REMOVING, source=source, app=name,
+         packages=plan["packages"], mode=plan["mode"])
+    # -R, not -Rns: -n also deletes files in /etc that another package may
+    # have come to rely on, and -s is added only when the plan says the
+    # cascade is safe.
+    flags = "-Rs" if plan["mode"] == "with-dependencies" else "-R"
+    return stream(["pkexec", "pacman", flags, "--noconfirm", "--", name],
+                  REMOVING, _pacman_removing)
+
+
+# Packages whose removal would break the desktop or the boot. pacman refuses
+# to remove a package another package depends on, but that is not enough on
+# its own: nothing depends on the kernel or the bootloader, so pacman would
+# take them without complaint, and `-Rs` cascades into dependencies that are
+# no longer needed by anything -- which is the case that actually breaks
+# systems.
+# Stands in for "the protected set could not be computed". It is a name no
+# package can have, so it never matches a real removal, but its presence makes
+# the intersection test below conservative.
+_NO_PACTREE = "\x00pactree-missing"
+
+ESSENTIAL_ROOTS = [
+    "base", "linux", "linux-firmware", "systemd", "sudo",
+    "sddm", "plasma-desktop", "plasma-workspace", "networkmanager",
+    "limine", "sakura-desktop",
+]
+
+
+@functools.lru_cache(maxsize=1)
+def protected_packages() -> frozenset[str]:
+    """Everything the desktop and the boot chain depend on, transitively.
+
+    Roughly 576 packages on a stock install. Ordinary applications -- konsole,
+    dolphin, ark, kate -- are deliberately outside it: the point is to stop a
+    removal cascading into the system, not to stop anyone uninstalling an app.
+    """
+    if not shutil.which("pactree"):
+        # Fail safe. An empty protected set would silently mean "nothing is
+        # protected", which is the opposite of what this function is for, so
+        # the sentinel below makes every cascade look unsafe and removals fall
+        # back to taking the application alone.
+        return frozenset({_NO_PACTREE})
+    found: set[str] = set()
+    for root in ESSENTIAL_ROOTS:
+        if subprocess.run(["pacman", "-Q", "--", root],
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode != 0:
+            continue
+        r = subprocess.run(["pactree", "-u", "-l", "--", root],
+                           capture_output=True, text=True)
+        found.update(line.strip() for line in r.stdout.splitlines()
+                     if line.strip())
+    return frozenset(found)
+
+
+def _pacman_removal_cascade(name: str, recursive: bool) -> tuple[list[str], str]:
+    """What pacman says it would remove. Needs no privileges."""
+    args = ["pacman", "-Rs" if recursive else "-R",
+            "--print", "--print-format", "%n", "--", name]
+    r = subprocess.run(args, capture_output=True, text=True)
+    if r.returncode != 0:
+        return [], (r.stderr.strip().splitlines() or ["pacman refused"])[-1]
+    return [l.strip() for l in r.stdout.splitlines() if l.strip()], ""
+
+
+def removal_plan(name: str, source: str) -> dict:
+    """What uninstalling would actually do, before anyone commits to it.
+
+    Returned rather than acted on so the confirmation can show it: the list of
+    packages, whether dependencies come with them, and why not when they do
+    not.
+    """
+    if source in ("flatpak", "snap", "appimage"):
+        # Self-contained by construction. Nothing else on the system can be
+        # depending on them, so there is no cascade to reason about.
+        return {"packages": [name], "mode": "app-only", "blocked": False,
+                "reason": "", "extra": []}
+
+    if not _is_installed_package(name):
+        return {"packages": [], "mode": "", "blocked": True,
+                "reason": f"{name} is not installed.", "extra": []}
+
+    protected = protected_packages()
+    if name in protected:
+        return {"packages": [], "mode": "", "blocked": True,
+                "reason": f"{name} is part of the SakuraOS desktop or the "
+                          f"boot system. Removing it would leave this "
+                          f"machine unable to start or log in.",
+                "extra": []}
+
+    cascade, err = _pacman_removal_cascade(name, recursive=True)
+    if err:
+        return {"packages": [], "mode": "", "blocked": True,
+                "reason": err, "extra": []}
+
+    unsafe = sorted(set(cascade) & protected)
+    if _NO_PACTREE in protected and len(cascade) > 1:
+        unsafe = ["(could not verify: pactree is not installed)"]
+    if unsafe:
+        # Removing the dependencies would take the system with it, so keep
+        # them. They stay as orphans, which is untidy and harmless.
+        only, err = _pacman_removal_cascade(name, recursive=False)
+        if err:
+            return {"packages": [], "mode": "", "blocked": True,
+                    "reason": err, "extra": []}
+        return {"packages": only, "mode": "app-only", "blocked": False,
+                "reason": "Dependencies are being kept: removing them would "
+                          "have taken parts of the desktop with them.",
+                "extra": unsafe}
+
+    return {"packages": cascade, "mode": "with-dependencies", "blocked": False,
+            "reason": "", "extra": [p for p in cascade if p != name]}
 
 
 def install_aur(name: str) -> int:

@@ -44,6 +44,17 @@ QQC2.ApplicationWindow {
     // left ~110px of dead space on the right and the whole grid read as
     // shoved to the left. Sizing the cell to the column instead means the
     // grid always fills the width and lines up with the heading above it.
+    function stageLabel(stage) {
+        return ({
+            resolving:   "Working out what is needed",
+            downloading: "Downloading",
+            installing:  "Installing",
+            configuring: "Setting up",
+            removing:    "Uninstalling",
+            done:        "Done",
+        })[stage] || stage
+    }
+
     function cellWidth(avail, cols, gap) {
         return Math.max(180, Math.floor((avail - (cols - 1) * gap) / cols))
     }
@@ -191,7 +202,12 @@ QQC2.ApplicationWindow {
     // An app tile. Used in search results and in the front-page rows.
     component Tile : Rectangle {
         property var appData
+        // The Installed list removes things directly rather than routing
+        // through the app page: an AUR or repository-only application has no
+        // Flathub entry, so that page would have nothing to show.
+        property bool showRemove: false
         signal opened()
+        signal removeRequested()
         width: 250          // overridden by grids that size cells to fit
         height: 120
         radius: 14
@@ -200,6 +216,25 @@ QQC2.ApplicationWindow {
 
         HoverHandler { id: hov; cursorShape: Qt.PointingHandCursor }
         TapHandler { onTapped: opened() }
+
+        // Only on hover: a delete control that is always visible invites
+        // being hit by accident.
+        Rectangle {
+            visible: showRemove && hov.hovered
+            anchors.right: parent.right; anchors.top: parent.top
+            anchors.margins: 7
+            width: 26; height: 26; radius: 13
+            color: rmHover.hovered ? "#c8524f" : Qt.rgba(1, 1, 1, 0.10)
+            Behavior on color { ColorAnimation { duration: 120 } }
+            HoverHandler { id: rmHover; cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: removeRequested() }
+            QQC2.Label {
+                anchors.centerIn: parent
+                text: "\u2715"
+                color: rmHover.hovered ? "#ffffff" : root.dim
+                font.pixelSize: 12; font.weight: Font.DemiBold
+            }
+        }
 
         RowLayout {
             anchors.fill: parent
@@ -732,6 +767,172 @@ QQC2.ApplicationWindow {
         }
     }
 
+    Connections {
+        target: backend
+        // Refresh whatever is on screen. The Installed list is always
+        // reloaded because it is now wrong; the app page is re-opened only
+        // when it is the page being looked at.
+        function onRemoved(id, source) {
+            backend.loadInstalled()
+            if (root.view === "app") {
+                backend.openApp(id)
+            }
+        }
+    }
+
+    // ---- uninstall confirmation ------------------------------------------
+    // Shown over everything, because it is the one destructive action in the
+    // application and it must not be possible to trigger it by accident.
+    Rectangle {
+        id: confirmRemove
+        anchors.fill: parent
+        z: 100
+        readonly property var plan: backend.removalPlan
+        readonly property string appName: plan && plan.id ? plan.id : ""
+        readonly property bool blocked: !!(plan && plan.blocked)
+        visible: !!(plan && plan.id)
+        color: Qt.rgba(0, 0, 0, 0.55)
+
+        // Swallow clicks so nothing behind the sheet can be reached.
+        TapHandler { onTapped: {} }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(560, parent.width - 80)
+            implicitHeight: sheet.implicitHeight + 44
+            radius: 16
+            color: root.card
+            border.width: 1
+            border.color: root.line
+
+            ColumnLayout {
+                id: sheet
+                anchors.left: parent.left; anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 22
+                spacing: 13
+
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: confirmRemove.blocked
+                          ? "Cannot uninstall " + confirmRemove.appName
+                          : "Uninstall " + confirmRemove.appName + "?"
+                    color: root.text
+                    font.pixelSize: 21; font.weight: Font.Light
+                }
+
+                Loading {
+                    visible: backend.planningRemoval
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 90
+                    label: "Working out what this would remove"
+                }
+
+                // Refused: say why, offer nothing but a way out.
+                QQC2.Label {
+                    visible: confirmRemove.blocked && !backend.planningRemoval
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: confirmRemove.plan ? (confirmRemove.plan.reason || "") : ""
+                    color: root.warn; font.pixelSize: 14
+                }
+
+                // Allowed: state exactly what goes, never just "are you sure".
+                QQC2.Label {
+                    visible: !confirmRemove.blocked && !backend.planningRemoval
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: {
+                        var n = confirmRemove.plan && confirmRemove.plan.packages
+                                ? confirmRemove.plan.packages.length : 0
+                        if (n <= 1) {
+                            return "This removes the application. Files you "
+                                 + "created with it are not touched."
+                        }
+                        var deps = n - 1
+                        return "This removes " + n + " packages: the "
+                             + "application and " + deps + " "
+                             + (deps === 1 ? "dependency" : "dependencies")
+                             + " nothing else needs."
+                    }
+                    color: root.dim; font.pixelSize: 14
+                }
+
+                // The list itself, scrollable, because a cascade can be long.
+                Rectangle {
+                    visible: !confirmRemove.blocked && !backend.planningRemoval
+                             && !!(confirmRemove.plan
+                                   && confirmRemove.plan.packages
+                                   && confirmRemove.plan.packages.length > 1)
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(150, pkgList.contentHeight + 16)
+                    radius: 9
+                    color: root.bg
+                    QQC2.ScrollView {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        clip: true
+                        ListView {
+                            id: pkgList
+                            model: confirmRemove.plan && confirmRemove.plan.packages
+                                   ? confirmRemove.plan.packages : []
+                            delegate: QQC2.Label {
+                                required property var modelData
+                                text: modelData
+                                color: root.dim; font.pixelSize: 12
+                            }
+                        }
+                    }
+                }
+
+                // Why dependencies were kept, when they were.
+                QQC2.Label {
+                    visible: !confirmRemove.blocked && !backend.planningRemoval
+                             && !!(confirmRemove.plan && confirmRemove.plan.reason)
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: confirmRemove.plan ? (confirmRemove.plan.reason || "") : ""
+                    color: root.accent; font.pixelSize: 12
+                }
+
+                QQC2.CheckBox {
+                    id: alsoData
+                    visible: !confirmRemove.blocked && !backend.planningRemoval
+                             && !!(confirmRemove.plan
+                                   && confirmRemove.plan.source === "flatpak")
+                    text: "Also remove its settings and saved data"
+                    checked: false
+                    contentItem: QQC2.Label {
+                        text: alsoData.text
+                        leftPadding: alsoData.indicator.width + 8
+                        verticalAlignment: Text.AlignVCenter
+                        color: root.dim; font.pixelSize: 13
+                    }
+                }
+
+                RowLayout {
+                    Layout.topMargin: 4
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 10
+                    Action {
+                        text: confirmRemove.blocked ? "Close" : "Cancel"
+                        quiet: true
+                        onClicked: backend.clearRemovalPlan()
+                    }
+                    Action {
+                        visible: !confirmRemove.blocked
+                        enabled: !backend.planningRemoval && !backend.busy
+                        text: "Uninstall"
+                        onClicked: backend.remove(confirmRemove.plan.id,
+                                                  confirmRemove.plan.source,
+                                                  alsoData.checked)
+                    }
+                }
+            }
+        }
+    }
+
     // ---- one category -----------------------------------------------------
     Component {
         id: categoryPage
@@ -822,6 +1023,9 @@ QQC2.ApplicationWindow {
                         width: root.cellWidth(installedFlow.width, 3, 14)
                         required property var modelData
                         appData: modelData
+                        showRemove: true
+                        onRemoveRequested: backend.planRemoval(modelData.id,
+                                                              modelData.source)
                         onOpened: {
                             // Repository rows carry the AppStream id, which is
                             // what the app page looks things up by.
@@ -990,6 +1194,13 @@ QQC2.ApplicationWindow {
                             onClicked: backend.install(pick.id, pick.source)
                         }
                         Action {
+                            readonly property var pick: appRoot.options[appRoot.chosen] || null
+                            visible: !!(pick && pick.installed)
+                            enabled: !backend.busy
+                            text: "Uninstall"; quiet: true
+                            onClicked: backend.planRemoval(pick.id, pick.source)
+                        }
+                        Action {
                             text: "Permissions"; quiet: true
                             // Meaningless for an app that is not installed --
                             // there is no sandbox to adjust yet.
@@ -1013,8 +1224,13 @@ QQC2.ApplicationWindow {
                 RowLayout {
                     spacing: 10
                     QQC2.Label {
-                        text: backend.error !== "" ? "Could not install"
-                            : backend.stage.charAt(0).toUpperCase() + backend.stage.slice(1)
+                        // Capitalising the engine's stage name gave
+                        // "Removing" and "Configuring"; these say what is
+                        // happening in the words a person would use.
+                        text: backend.error !== ""
+                            ? (backend.stage === "removing"
+                               ? "Could not uninstall" : "Could not install")
+                            : root.stageLabel(backend.stage)
                         color: backend.error !== "" ? "#ff9db0" : root.text
                         font.pixelSize: 14; font.weight: Font.DemiBold
                     }

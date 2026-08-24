@@ -13,7 +13,11 @@ license=('GPL-3.0-or-later')
 # archlinux-appstream-data is what gives repository packages an icon, a
 # display name and -- the part that matters -- the same AppStream id Flathub
 # uses, which is how one app is recognised across two sources.
-depends=('python' 'flatpak' 'sakura-settings-core' 'archlinux-appstream-data' 'pacman')
+depends=('python' 'flatpak' 'sakura-settings-core' 'archlinux-appstream-data' 'pacman'
+         # pactree, which computes what a removal would cascade into.
+         # Without it the store cannot tell a safe uninstall from one
+         # that would take the desktop with it.
+         'pacman-contrib')
 optdepends=('zsync2: AppImage delta updates'
             'snapd: Snap support'
             'binutils: reading AppImage update information')

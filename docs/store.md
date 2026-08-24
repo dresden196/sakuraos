@@ -92,6 +92,57 @@ for GIMP that is Arabic; the element with no `xml:lang` is the one wanted. And
 `type="cached"` icons, which are real files under
 `/usr/share/swcatalog/icons/`, are usable directly.
 
+## Uninstalling without breaking the system
+
+pacman refuses to remove a package that another installed package depends on,
+and that is often mistaken for sufficient protection. It is not. Nothing
+depends on the kernel, the bootloader or `sudo`, so pacman would remove any of
+them without complaint. And `-Rs` cascades into dependencies that are no
+longer needed by anything, which is the case that actually breaks systems: the
+package you asked for goes, and so does something the desktop was quietly
+relying on.
+
+So a removal is planned before it is offered. `pacman -Rs --print` gives the
+exact cascade and needs no privileges, so the plan is free. That list is
+intersected with the transitive dependency closure of the desktop and the boot
+chain — `pactree -u` over `base`, `linux`, `systemd`, `sddm`, `plasma-desktop`,
+`networkmanager`, `limine`, `sakura-desktop` and friends, about 576 packages on
+a stock install.
+
+Three outcomes:
+
+- **The cascade is clean.** Remove with `-Rs`; the confirmation names every
+  package that will go.
+- **The cascade would touch the protected set.** Fall back to `-R`, taking
+  only the application and leaving its dependencies behind as orphans. Untidy
+  and harmless, and the confirmation says why.
+- **The application is itself in the protected set.** Refuse, and say that
+  removing it would leave the machine unable to start or log in.
+
+`-n` is never used. It deletes files under `/etc` that another package may have
+come to depend on, and the gain — a slightly tidier filesystem — is not worth
+the class of failure it opens.
+
+If `pactree` is missing the protected set cannot be computed. That case fails
+safe: every cascade is treated as unsafe and removals take the application
+alone. An empty protected set would have meant "nothing is protected", which is
+the exact inverse of the intent, so `pacman-contrib` is a hard dependency and
+the sentinel exists in case it is ever removed anyway.
+
+**AUR packages need no special path.** Once installed, an AUR package is an
+ordinary pacman package; the removal and the same safety check apply
+unchanged. The AUR is only harder at install time, where the build script is
+unreviewed.
+
+Flatpak, Snap and AppImage are self-contained, so there is no cascade to reason
+about. Flatpak removal keeps the application's settings and data by default —
+a reinstall should find them where they were left — with an explicit opt-in to
+delete them. Snap keeps its own snapshot for 31 days, so that one is
+recoverable without any help from us.
+
+Removals also pass through `snap-pac`, so a system snapshot brackets them the
+same way it brackets an install.
+
 ## Decisions
 
 **The Arch repositories are a source, and Flatpak still leads.** The store

@@ -21,6 +21,8 @@ class Backend : public QObject
     Q_PROPERTY(QVariantList featured READ featured NOTIFY featuredChanged)
     Q_PROPERTY(QVariantList popular READ popular NOTIFY featuredChanged)
     Q_PROPERTY(QVariantList installed READ installed NOTIFY installedChanged)
+    Q_PROPERTY(QVariantMap removalPlan READ removalPlan NOTIFY removalPlanChanged)
+    Q_PROPERTY(bool planningRemoval READ planningRemoval NOTIFY removalPlanChanged)
     Q_PROPERTY(QVariantList categories READ categories CONSTANT)
     Q_PROPERTY(QVariantList categoryApps READ categoryApps NOTIFY categoryChanged)
     Q_PROPERTY(QString categoryName READ categoryName NOTIFY categoryChanged)
@@ -43,6 +45,8 @@ public:
     QVariantList featured() const { return m_featured; }
     QVariantList popular() const { return m_popular; }
     QVariantList installed() const { return m_installed; }
+    QVariantMap removalPlan() const { return m_removalPlan; }
+    bool planningRemoval() const { return m_planningRemoval; }
     QVariantList categories() const { return m_categories; }
     QVariantList categoryApps() const { return m_categoryApps; }
     QString categoryName() const { return m_categoryName; }
@@ -62,7 +66,10 @@ public:
     Q_INVOKABLE void loadInstalled();
     Q_INVOKABLE void loadCategory(const QString &id, const QString &label);
     Q_INVOKABLE void install(const QString &id, const QString &source);
-    Q_INVOKABLE void remove(const QString &id, const QString &source);
+    Q_INVOKABLE void planRemoval(const QString &id, const QString &source);
+    Q_INVOKABLE void clearRemovalPlan();
+    Q_INVOKABLE void remove(const QString &id, const QString &source,
+                            bool deleteData = false);
     Q_INVOKABLE void openPermissions(const QString &id);
 
 Q_SIGNALS:
@@ -70,6 +77,8 @@ Q_SIGNALS:
     void resultsChanged();
     void featuredChanged();
     void installedChanged();
+    void removalPlanChanged();
+    void removed(const QString &id, const QString &source);
     void categoryChanged();
     void appChanged();
     void progressChanged();
@@ -81,6 +90,8 @@ private:
 
     QVariantList m_results, m_featured, m_popular, m_installed;
     bool m_loadingInstalled = false;
+    bool m_planningRemoval = false;
+    QVariantMap m_removalPlan;
     bool m_loadingCategory = false;
     QVariantList m_categories, m_categoryApps;
     QString m_categoryName;

@@ -236,24 +236,67 @@ void Backend::install(const QString &id, const QString &source)
              {QStringLiteral("install"), id, QStringLiteral("--source"), source});
 }
 
-void Backend::remove(const QString &id, const QString &source)
+void Backend::planRemoval(const QString &id, const QString &source)
+{
+    // Asked before anything is removed, so the confirmation can say what will
+    // actually happen rather than "are you sure?" with nothing behind it.
+    m_planningRemoval = true;
+    m_removalPlan.clear();
+    m_removalPlan.insert(QStringLiteral("id"), id);
+    m_removalPlan.insert(QStringLiteral("source"), source);
+    Q_EMIT removalPlanChanged();
+
+    auto *p = run({QStringLiteral("remove-plan"), id,
+                   QStringLiteral("--source"), source, QStringLiteral("--json")});
+    connect(p, &QProcess::finished, this, [this, p, id, source] {
+        const QJsonObject o =
+            QJsonDocument::fromJson(p->readAllStandardOutput()).object();
+        p->deleteLater();
+        m_removalPlan = toMap(o);
+        // The id and source are what the confirmation acts on; the engine's
+        // reply does not echo them back.
+        m_removalPlan.insert(QStringLiteral("id"), id);
+        m_removalPlan.insert(QStringLiteral("source"), source);
+        m_planningRemoval = false;
+        Q_EMIT removalPlanChanged();
+    });
+}
+
+void Backend::clearRemovalPlan()
+{
+    m_removalPlan.clear();
+    m_planningRemoval = false;
+    Q_EMIT removalPlanChanged();
+}
+
+void Backend::remove(const QString &id, const QString &source, bool deleteData)
 {
     if (m_busy) {
         return;
     }
     m_busy = true;
     m_error.clear();
-    m_stage = QStringLiteral("installing");
+    m_stage = QStringLiteral("removing");
     m_detail = tr("removing");
     Q_EMIT progressChanged();
+    clearRemovalPlan();
 
-    auto *p = run({QStringLiteral("remove"), id, QStringLiteral("--source"), source});
-    connect(p, &QProcess::finished, this, [this, p, id] {
+    QStringList args{QStringLiteral("remove"), id,
+                     QStringLiteral("--source"), source};
+    if (deleteData) {
+        args << QStringLiteral("--delete-data");
+    }
+    auto *p = run(args);
+    connect(p, &QProcess::finished, this, [this, p, id, source] {
         p->deleteLater();
         m_busy = false;
         m_stage = QStringLiteral("done");
         Q_EMIT progressChanged();
-        openApp(id);
+        // The view decides what to refresh. Re-opening the app page here was
+        // wrong for a removal started from the Installed list, and impossible
+        // for a repository-only or AUR application, which has no Flathub
+        // entry for that page to load.
+        Q_EMIT removed(id, source);
     });
 }
 
