@@ -70,11 +70,46 @@ depends=(
     'pipewire-pulse'
     'wireplumber'
 
+    # Bluetooth. bluedevil above is only the Plasma front end -- without the
+    # daemon it has nothing to talk to, so Bluetooth did not work at all.
+    'bluez'
+    'bluez-utils'
+
+    # Printing and scanning. There was none of this, so a printer could not be
+    # added by any route. print-manager is the Plasma page; cups-pdf gives a
+    # "print to PDF" target on a machine with no printer at all; the driver
+    # databases are what make a printer work without hunting for a PPD.
+    'cups'
+    'cups-pdf'
+    'cups-filters'
+    'print-manager'
+    'gutenprint'
+    'foomatic-db'
+    'foomatic-db-ppds'
+    'sane'
+    'skanpage'
+
     # Applications
     'konsole'
     'dolphin'
+    # kate ships kwrite too, so both editors come from this one package.
     'kate'
     'ark'
+    'kcalc'
+    'okular'
+    'gwenview'
+    'spectacle'
+    'filelight'
+    'kolourpaint'
+    'plasma-systemmonitor'
+    'kdeconnect'
+    'kamoso'
+    'merkuro'
+    'kdenlive'
+    # Video: Haruna is a KDE front end over libmpv, so it is mpv's playback
+    # with a Plasma-native interface. Recorded as a decision in
+    # docs/defaults.md, where the mpv-versus-VLC question is still open.
+    'haruna'
 
     # Fonts, otherwise the session renders as tofu
     'noto-fonts'

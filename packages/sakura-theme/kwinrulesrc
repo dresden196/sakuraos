@@ -1,0 +1,27 @@
+# Window rules shipped with SakuraOS.
+#
+# Dolphin opens at a size that is unusable on a modern display: it has no
+# saved state on a fresh account and falls back to its own sizeHint, which is
+# a small box. There is no config key to preseed -- Dolphin only writes a size
+# after the user has resized it, and it writes it per resolution -- so the
+# initial size is set here, where it is resolution-independent and applies to
+# a new account without the user having to fix it first.
+#
+# "Apply Initially" (sizerule=3), not Force: this is a better starting point,
+# not a policy. Resize it and it stays resized for that window; the next new
+# window starts here again, which is what a default should do.
+
+[$Version]
+update_info=kwinrules.upd:replace-placement-string-to-enum
+
+[General]
+count=1
+rules=sakura-dolphin-size
+
+[sakura-dolphin-size]
+Description=SakuraOS: Dolphin opens at a usable size
+size=1250,780
+sizerule=3
+wmclass=org.kde.dolphin
+wmclasscomplete=false
+wmclassmatch=1
