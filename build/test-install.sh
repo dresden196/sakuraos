@@ -41,6 +41,15 @@ check_slow() {
     SAKURA_GUEST_TIMEOUT=240 check "$1" "$2"
 }
 
+# pacman takes a database lock, and the previous check may still be holding it
+# when the next one starts -- which fails with "unable to lock database" and
+# reads as the repository being broken. Wait for it rather than sleeping.
+check_pacman() {
+    run "for _ in \$(seq 60); do [ -e /var/lib/pacman/db.lck ] || break; sleep 1; done" \
+        >/dev/null 2>&1 || true
+    check_slow "$1" "$2"
+}
+
 if (( ! verify_only )); then
     echo ">> booting the installer media on a blank disk"
     rm -f "$REPO_ROOT/out/sakura-clean.qcow2" \
@@ -98,6 +107,20 @@ if (( ! verify_only )); then
     # The agent answers before the boot has settled; a few units are still
     # starting and `systemctl is-enabled` can race them.
     sleep 10
+
+    # And wait for the network specifically. The repository checks were
+    # failing here not because the repository was unreachable but because
+    # NetworkManager had not finished getting a lease -- a test that reports
+    # "the repo resolves: FAIL" for that reason is worse than no test, because
+    # it sends you looking at the server.
+    echo -n ">> waiting for the network"
+    deadline=$(( SECONDS + 120 ))
+    until run "ping -c1 -W2 173.233.87.167" >/dev/null 2>&1; do
+        (( SECONDS < deadline )) || { echo " (no route; repo checks will fail)"; break; }
+        echo -n .
+        sleep 5
+    done
+    echo " up"
 fi
 
 echo
@@ -116,8 +139,8 @@ check "snapshots exist"                    "test \"\$(snapper -c root list | wc 
 # The duplicate [sakura-core] left by pacstrap made every pacman run warn.
 check "sakura-core registered exactly once" \
       "test \"\$(grep -c '^\\[sakura-core\\]' /etc/pacman.conf)\" -eq 0"
-check_slow "the repo resolves"             "pacman -Sy --noconfirm"
-check_slow "our own packages verify"       "pacman -Sw --noconfirm sakura-store"
+check_pacman "the repo resolves"           "pacman -Sy --noconfirm"
+check_pacman "our own packages verify"     "pacman -Sw --noconfirm sakura-store"
 check "the display manager is enabled"     "systemctl is-enabled sddm"
 check "the network manager is enabled"     "systemctl is-enabled NetworkManager"
 check "a boot entry was written"           "efibootmgr | grep -qi sakura"
