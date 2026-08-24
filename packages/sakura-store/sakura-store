@@ -1000,13 +1000,30 @@ def cmd_installed(args) -> int:
 
 
 def cmd_sources(args) -> int:
+    """Every source, present or not, and why not.
+
+    Sources that are switched off or absent are still listed. Hiding them
+    means a person cannot discover that the AUR exists, let alone that it is
+    theirs to switch on -- the filter simply vanishes with no explanation.
+    """
+    def why(src) -> str:
+        if src.available():
+            return ""
+        if src.name == "aur":
+            return "Switched off in SakuraOS Settings"
+        if src.name == "snap":
+            return "snapd is not installed"
+        return "Not available on this machine"
+
     rows = [{"id": s.name, "label": s.label, "available": s.available(),
+             "reason": why(s),
              # Searchable but not installable, until the review step exists.
              "installable": s.name != "aur"}
             for s in SOURCES]
     # AppImage has no catalogue to search, so it is not a source in the sense
     # the others are; it appears here only so the UI can say why.
     rows.append({"id": "appimage", "label": "AppImage", "available": False,
+                 "reason": "No catalogue to search — AppImages install from a file or a link",
                  "installable": True})
     if args.json:
         print(json.dumps(rows, indent=2))

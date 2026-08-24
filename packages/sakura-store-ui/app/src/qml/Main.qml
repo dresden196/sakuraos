@@ -402,19 +402,26 @@ QQC2.ApplicationWindow {
                         // Listed in the same order the engine resolves them,
                         // so the sidebar reads as the priority it actually is.
                         // From the engine, which knows what is actually
-                        // present. A hardcoded list showed Snap on machines
+                        // present -- a hardcoded list showed Snap on machines
                         // with no snapd, where the filter could only ever
                         // return nothing.
-                        model: [{k: "all", n: "Everything", avail: true}].concat(
-                            (backend.sources || [])
-                                .filter(function (s) { return s.available })
-                                .map(function (s) {
-                                    return {k: s.id, n: s.label, avail: true}
-                                }))
+                        //
+                        // Unavailable sources are shown rather than dropped.
+                        // Hiding them means nobody can discover that the AUR
+                        // exists, let alone that it is theirs to switch on.
+                        // The name comes from sourceLabel so the sidebar and
+                        // the chips on the tiles say the same word.
+                        model: [{k: "all", n: "Everything", avail: true, why: ""}].concat(
+                            (backend.sources || []).map(function (s) {
+                                return {k: s.id, n: root.sourceLabel(s.id),
+                                        avail: s.available, why: s.reason || ""}
+                            }))
                         delegate: RowLayout {
                             required property var modelData
+                            readonly property bool usable: modelData.avail
                             Layout.fillWidth: true
                             spacing: 9
+                            opacity: usable ? 1 : 0.45
                             Rectangle {
                                 width: 15; height: 15; radius: 4
                                 color: root.sourceFilter === modelData.k ? root.accent : "transparent"
@@ -426,13 +433,28 @@ QQC2.ApplicationWindow {
                                     color: root.accentText; font.pixelSize: 10
                                 }
                             }
-                            QQC2.Label {
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                text: modelData.n
-                                color: root.sourceFilter === modelData.k ? root.text : root.dim
-                                font.pixelSize: 13
+                                spacing: 0
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.n
+                                    color: root.sourceFilter === modelData.k ? root.text : root.dim
+                                    font.pixelSize: 13
+                                }
+                                // Why a source cannot be used, said here
+                                // rather than by the filter quietly returning
+                                // nothing.
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    visible: !!modelData.why
+                                    text: modelData.why
+                                    wrapMode: Text.WordWrap
+                                    color: root.dim; font.pixelSize: 10
+                                }
                             }
                             TapHandler {
+                                enabled: parent.usable
                                 onTapped: {
                                     root.sourceFilter = modelData.k
                                     if (root.lastQuery) backend.search(root.lastQuery, modelData.k)
