@@ -41,6 +41,7 @@ QQC2.ApplicationWindow {
 
     // ---- collected answers -------------------------------------------------
     property var answers: ({
+        locale: "en_US.UTF-8",
         keyboard: "us",
         timezone: "UTC",
         hour24: true,
@@ -61,6 +62,7 @@ QQC2.ApplicationWindow {
 
     property int step: -1
     readonly property var steps: [
+        { title: "Language",   blurb: "What this machine speaks" },
         { title: "Keyboard",   blurb: "How your keys are laid out" },
         { title: "Time",       blurb: "Where you are, and how you read a clock" },
         { title: "Appearance", blurb: "Light or dark" },
@@ -75,8 +77,8 @@ QQC2.ApplicationWindow {
 
     function canContinue() {
         switch (step) {
-        case 3: return answers.disk !== ""
-        case 4: return answers.username.length > 0 && answers.password.length >= 4
+        case 4: return answers.disk !== ""
+        case 5: return answers.username.length > 0 && answers.password.length >= 4
         default: return true
         }
     }
@@ -364,15 +366,18 @@ QQC2.ApplicationWindow {
                     anchors.horizontalCenter: parent.horizontalCenter
                     sourceComponent: {
                         switch (root.step) {
-                        case 0: return keyboardPage
-                        case 1: return timePage
-                        case 2: return themePage
-                        case 3: return diskPage
-                        case 4: return accountPage
-                        case 5: return browserPage
-                        case 6: return updatesPage
-                        case 7: return featuresPage
-                        case 8: return privacyPage
+                        // Language first: everything after this is easier to
+                        // read once it is in a language you know.
+                        case 0: return languagePage
+                        case 1: return keyboardPage
+                        case 2: return timePage
+                        case 3: return themePage
+                        case 4: return diskPage
+                        case 5: return accountPage
+                        case 6: return browserPage
+                        case 7: return updatesPage
+                        case 8: return featuresPage
+                        case 9: return privacyPage
                         default: return installPage
                         }
                     }
@@ -415,8 +420,10 @@ QQC2.ApplicationWindow {
                 }
                 Item { Layout.fillWidth: true }
                 QQC2.Button {
-                    text: root.step === 8 ? "Install SakuraOS" : "Continue"
-                    visible: root.step < 9
+                    // Ten screens now that language leads: 0..9, with the
+                    // install itself at 10.
+                    text: root.step === 9 ? "Install SakuraOS" : "Continue"
+                    visible: root.step < 10
                     enabled: root.canContinue()
                     padding: 11
                     leftPadding: 26
@@ -441,6 +448,88 @@ QQC2.ApplicationWindow {
 
     // ---- pages -------------------------------------------------------------
     Component {
+        id: languagePage
+        ColumnLayout {
+            spacing: 18
+            Item { Layout.preferredHeight: 34 }
+            Heading {
+                title: "Language"
+                subtitle: "This sets the language of the desktop and how dates, numbers and currency are written."
+            }
+            Field {
+                id: langFilter
+                placeholderText: "Search languages…"
+                Layout.maximumWidth: 460
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 300
+                radius: 12
+                color: root.card
+                border.width: 1; border.color: root.line
+
+                QQC2.ScrollView {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    clip: true
+                    ListView {
+                        id: langList
+                        // Searchable in the language itself and in English, so
+                        // it works whether you are finding your own language
+                        // or being talked through it by somebody else.
+                        model: backend.languages().filter(function (l) {
+                            var q = langFilter.text.toLowerCase()
+                            return q === ""
+                                || l.native.toLowerCase().indexOf(q) !== -1
+                                || l.english.toLowerCase().indexOf(q) !== -1
+                                || l.code.toLowerCase().indexOf(q) !== -1
+                        })
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: langList.width
+                            height: 44
+                            radius: 8
+                            color: root.answers.locale === modelData.code
+                                   ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.18)
+                                   : (langHover.hovered ? root.cardUp : "transparent")
+                            HoverHandler { id: langHover; cursorShape: Qt.PointingHandCursor }
+                            TapHandler {
+                                onTapped: {
+                                    root.answers.locale = modelData.code
+                                    root.answersChanged()
+                                }
+                            }
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 14; anchors.rightMargin: 14
+                                spacing: 10
+                                ColumnLayout {
+                                    spacing: 0
+                                    QQC2.Label {
+                                        text: modelData.native
+                                        color: root.text; font.pixelSize: 14
+                                    }
+                                    QQC2.Label {
+                                        text: modelData.english
+                                        color: root.dim; font.pixelSize: 11
+                                    }
+                                }
+                                Item { Layout.fillWidth: true }
+                                QQC2.Label {
+                                    visible: root.answers.locale === modelData.code
+                                    text: "\u2713"
+                                    color: root.accent; font.pixelSize: 15
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Item { Layout.fillHeight: true }
+        }
+    }
+
+    Component {
         id: keyboardPage
         ColumnLayout {
             spacing: 18
@@ -458,6 +547,64 @@ QQC2.ApplicationWindow {
                 Component.onCompleted: currentIndex = indexOfValue(root.answers.keyboard)
                 onActivated: { root.answers.keyboard = currentValue; root.answersChanged() }
             }
+            // The layout, drawn. Reading "German (no dead keys)" tells you
+            // very little; seeing where Z and Y sit tells you immediately
+            // whether this is the keyboard in front of you.
+            ColumnLayout {
+                id: kbPreview
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                spacing: 5
+                property var rows: backend.keyboardPreview(root.answers.keyboard)
+
+                Connections {
+                    target: root
+                    function onAnswersChanged() {
+                        kbPreview.rows = backend.keyboardPreview(root.answers.keyboard)
+                    }
+                }
+
+                Repeater {
+                    model: kbPreview.rows
+                    delegate: RowLayout {
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        spacing: 5
+                        // Each row on a real board starts a little further in
+                        // than the one above it.
+                        Item {
+                            Layout.preferredWidth: [0, 14, 22, 38][index] || 0
+                            Layout.preferredHeight: 1
+                        }
+                        Repeater {
+                            model: modelData
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 38
+                                Layout.minimumWidth: 26
+                                radius: 6
+                                color: root.card
+                                border.width: 1
+                                border.color: root.line
+                                QQC2.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData || ""
+                                    color: root.text
+                                    font.pixelSize: modelData && modelData.length > 2 ? 10 : 14
+                                }
+                            }
+                        }
+                    }
+                }
+                QQC2.Label {
+                    visible: kbPreview.rows.length === 0
+                    text: "This layout could not be drawn, but it will still be used."
+                    color: root.dim; font.pixelSize: 12
+                }
+            }
+
             Field { placeholderText: "Try typing here…"; Layout.maximumWidth: 460 }
             Item { Layout.fillHeight: true }
         }

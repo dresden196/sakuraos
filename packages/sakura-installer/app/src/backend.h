@@ -27,6 +27,10 @@ public:
     Q_INVOKABLE QVariantList disks() const;
     Q_INVOKABLE QStringList timezones() const;
     Q_INVOKABLE QVariantList keyboardLayouts() const;
+    Q_INVOKABLE QVariantList languages() const;
+    // The characters a layout actually produces, so the keyboard screen can
+    // show the layout being chosen rather than describe it.
+    Q_INVOKABLE QVariantList keyboardPreview(const QString &layout) const;
     Q_INVOKABLE QStringList avatars() const;
     Q_INVOKABLE QString guessTimezone() const;
     Q_INVOKABLE void install(const QVariantMap &answers);

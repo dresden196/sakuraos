@@ -353,6 +353,63 @@ void Backend::remove(const QString &id, const QString &source, bool deleteData)
     });
 }
 
+void Backend::installLocalAppImage(const QString &path)
+{
+    if (m_busy) {
+        return;
+    }
+    m_busy = true;
+    m_error.clear();
+    m_errorDetail.clear();
+    m_percent = 0;
+    m_stage = QStringLiteral("resolving");
+    m_detail.clear();
+    Q_EMIT progressChanged();
+
+    auto *p = new QProcess(this);
+    p->setProcessChannelMode(QProcess::MergedChannels);
+    connect(p, &QProcess::readyReadStandardOutput, this, [this, p] {
+        while (p->canReadLine()) {
+            const QJsonObject o =
+                QJsonDocument::fromJson(p->readLine()).object();
+            if (o.isEmpty()) {
+                continue;
+            }
+            const QString stage = o[QStringLiteral("stage")].toString();
+            if (stage == QLatin1String("failed")) {
+                m_error = o[QStringLiteral("error")].toString();
+                m_errorDetail = o[QStringLiteral("detail")].toString();
+            } else {
+                m_stage = stage;
+                const QString d = o[QStringLiteral("detail")].toString();
+                if (!d.isEmpty()) {
+                    m_detail = d;
+                }
+            }
+            Q_EMIT progressChanged();
+        }
+    });
+    connect(p, &QProcess::finished, this,
+            [this, p](int code, QProcess::ExitStatus status) {
+        const QString trailing = QString::fromUtf8(p->readAll()).trimmed();
+        p->deleteLater();
+        m_busy = false;
+        if (m_error.isEmpty() && (code != 0 || status != QProcess::NormalExit)) {
+            m_error = trailing.isEmpty()
+                ? tr("The AppImage could not be installed.")
+                : trailing.section(QLatin1Char('\n'), -1);
+        }
+        m_stage = m_error.isEmpty() ? QStringLiteral("done")
+                                    : QStringLiteral("failed");
+        m_percent = m_error.isEmpty() ? 100 : 0;
+        Q_EMIT progressChanged();
+        loadInstalled();
+    });
+    p->start(QString::fromLatin1(ENGINE),
+             {QStringLiteral("install"), QStringLiteral("--source"),
+              QStringLiteral("appimage"), QStringLiteral("--file"), path});
+}
+
 void Backend::clearError()
 {
     // A failure that follows you onto the next page reads as though it just

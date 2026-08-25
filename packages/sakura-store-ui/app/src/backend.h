@@ -79,6 +79,9 @@ public:
     Q_INVOKABLE void openPermissions(const QString &id);
     // Dismiss a failure the user has read.
     Q_INVOKABLE void clearError();
+    // Install an AppImage the user already has, rather than one from a
+    // catalogue. There is nothing to look it up in.
+    Q_INVOKABLE void installLocalAppImage(const QString &path);
 
 Q_SIGNALS:
     void stateChanged();

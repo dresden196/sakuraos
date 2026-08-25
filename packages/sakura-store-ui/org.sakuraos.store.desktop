@@ -3,8 +3,15 @@ Type=Application
 Name=Sakura Store
 GenericName=Software Centre
 Comment=Find and install applications
-Exec=sakura-store-ui
+Exec=sakura-store-ui %f
 Icon=system-software-install
 Terminal=false
 Categories=System;PackageManager;
 Keywords=software;apps;install;flatpak;appimage;snap;aur;
+# So an AppImage somebody downloaded can be opened with the store instead of
+# being made executable by hand from a terminal, which is the step that stops
+# most people using AppImages at all. Both types are in use: the first is what
+# the format registers, the second is what file(1) reports for the ISO-based
+# ones.
+MimeType=application/vnd.appimage;application/x-iso9660-appimage;
+

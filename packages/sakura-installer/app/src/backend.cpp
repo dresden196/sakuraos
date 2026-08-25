@@ -2,6 +2,13 @@
 
 #include <QDir>
 #include <QFile>
+#include <QLocale>
+#include <QSet>
+#include <algorithm>
+
+// Key labels come from the same library the session itself uses, so what the
+// installer shows is what the machine will actually type.
+#include <xkbcommon/xkbcommon.h>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -94,6 +101,128 @@ QString Backend::guessTimezone() const
     return out.isEmpty() ? QStringLiteral("UTC") : out;
 }
 
+namespace {
+// Evdev keycodes for the three letter rows and the number row, in the order
+// they sit on the board. xkb keycodes are evdev + 8.
+const int ROW_NUMBER[] = {49, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21};
+const int ROW_TOP[]    = {24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35};
+const int ROW_HOME[]   = {38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 51};
+const int ROW_BOTTOM[] = {52, 53, 54, 55, 56, 57, 58, 59, 60, 61};
+
+QVariantList rowFor(xkb_state *state, const int *codes, int count)
+{
+    QVariantList row;
+    for (int i = 0; i < count; ++i) {
+        char buffer[32] = {0};
+        const int len = xkb_state_key_get_utf8(state, codes[i], buffer,
+                                               sizeof(buffer));
+        QString label = len > 0 ? QString::fromUtf8(buffer, len) : QString();
+        // Dead keys produce nothing here; showing an empty cap is honest but
+        // useless, so fall back to the keysym's name.
+        if (label.trimmed().isEmpty()) {
+            const xkb_keysym_t sym = xkb_state_key_get_one_sym(state, codes[i]);
+            char name[64] = {0};
+            if (xkb_keysym_get_name(sym, name, sizeof(name)) > 0) {
+                label = QString::fromLatin1(name);
+                if (label.startsWith(QLatin1String("dead_"))) {
+                    label = label.mid(5);
+                }
+            }
+        }
+        row.append(label);
+    }
+    return row;
+}
+} // namespace
+
+QVariantList Backend::keyboardPreview(const QString &layout) const
+{
+    // Asked of xkbcommon rather than kept in a table here. A table would
+    // cover the handful of layouts somebody thought of and quietly show the
+    // wrong characters for the other two hundred -- on the screen whose whole
+    // job is letting you check the layout before you commit to it.
+    QVariantList rows;
+    xkb_context *ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (!ctx) {
+        return rows;
+    }
+
+    xkb_rule_names names{};
+    const QByteArray layoutBytes = layout.toUtf8();
+    names.layout = layoutBytes.constData();
+
+    xkb_keymap *keymap = xkb_keymap_new_from_names(ctx, &names,
+                                                   XKB_KEYMAP_COMPILE_NO_FLAGS);
+    xkb_state *state = keymap ? xkb_state_new(keymap) : nullptr;
+    if (state) {
+        rows.append(QVariant(rowFor(state, ROW_NUMBER, 13)));
+        rows.append(QVariant(rowFor(state, ROW_TOP, 12)));
+        rows.append(QVariant(rowFor(state, ROW_HOME, 12)));
+        rows.append(QVariant(rowFor(state, ROW_BOTTOM, 10)));
+        xkb_state_unref(state);
+    }
+    if (keymap) {
+        xkb_keymap_unref(keymap);
+    }
+    xkb_context_unref(ctx);
+    return rows;
+}
+
+QVariantList Backend::languages() const
+{
+    // glibc's own list of what it can generate, which is the same list
+    // locale-gen works from -- so nothing can be offered here that the
+    // installed system then cannot produce.
+    QVariantList out;
+    QFile f(QStringLiteral("/usr/share/i18n/SUPPORTED"));
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return out;
+    }
+
+    QTextStream in(&f);
+    QSet<QString> seen;
+    while (!in.atEnd()) {
+        const QString line = in.readLine().trimmed();
+        // "en_GB.UTF-8 UTF-8" -- only UTF-8, because shipping a system in a
+        // legacy encoding in 2026 creates problems nobody asked for.
+        if (!line.endsWith(QLatin1String(" UTF-8"))) {
+            continue;
+        }
+        const QString code = line.section(QLatin1Char(' '), 0, 0);
+        if (!code.endsWith(QLatin1String(".UTF-8")) || seen.contains(code)) {
+            continue;
+        }
+        seen.insert(code);
+
+        const QLocale locale(code.left(code.indexOf(QLatin1Char('.'))));
+        // The name in the language itself. Somebody who cannot read the
+        // current interface language has to be able to find their own.
+        QString native = locale.nativeLanguageName();
+        if (native.isEmpty()) {
+            continue;
+        }
+        native[0] = native[0].toUpper();
+        const QString territory = locale.nativeTerritoryName();
+
+        out.append(QVariantMap{
+            {QStringLiteral("code"), code},
+            {QStringLiteral("native"), territory.isEmpty()
+                 ? native : QStringLiteral("%1 (%2)").arg(native, territory)},
+            // English too, so the list is searchable by someone helping over
+            // the phone.
+            {QStringLiteral("english"), QStringLiteral("%1 (%2)").arg(
+                 QLocale::languageToString(locale.language()),
+                 QLocale::territoryToString(locale.territory()))},
+        });
+    }
+
+    std::sort(out.begin(), out.end(), [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value(QStringLiteral("native")).toString().localeAwareCompare(
+               b.toMap().value(QStringLiteral("native")).toString()) < 0;
+    });
+    return out;
+}
+
 QVariantList Backend::keyboardLayouts() const
 {
     QVariantList out;
@@ -176,6 +305,7 @@ void Backend::install(const QVariantMap &answers)
         // the first login prompt. It has to reach the backend for that warning
         // to mean anything.
         QStringLiteral("--keymap"), answers[QStringLiteral("keyboard")].toString(),
+        QStringLiteral("--locale"), answers[QStringLiteral("locale")].toString(),
         QStringLiteral("--feedback"),
         answers[QStringLiteral("crashReports")].toBool() ? QStringLiteral("on")
                                                          : QStringLiteral("off"),

@@ -457,6 +457,47 @@ def removal_plan(name: str, source: str) -> dict:
             "reason": "", "extra": [p for p in cascade if p != name]}
 
 
+def install_appimage_file(path: str, name: str = "") -> tuple[int, str]:
+    """Install an AppImage the user already has on disk.
+
+    The other sources are catalogues; this one is a file somebody downloaded.
+    Nothing verifies it -- there is no signature to check and no publisher to
+    check it against -- so the honest thing is to install it and say where it
+    came from, not to imply a review that did not happen.
+    """
+    import appimage
+
+    src = Path(path).expanduser()
+    if not src.is_file():
+        emit(FAILED, error=f"{src} is not a file.", recoverable=False)
+        return 2, ""
+    if not os.access(src, os.R_OK):
+        emit(FAILED, error=f"{src.name} cannot be read.", recoverable=False)
+        return 2, ""
+
+    # The name it will be known by. Taken from the file, since a local
+    # AppImage has no catalogue entry to name it.
+    stem = name or src.stem
+    stem = re.sub(r"[-_.]?(x86_64|amd64|linux)$", "", stem, flags=re.I)
+    stem = re.sub(r"[^A-Za-z0-9._-]", "-", stem).strip("-") or "appimage"
+
+    emit(RESOLVING, source="appimage", app=stem, detail=str(src))
+    emit(INSTALLING, source="appimage", app=stem,
+         detail="adding it to your applications")
+    try:
+        # The user's own file is copied, not moved: it stays where they left
+        # it.
+        appimage.install(src, stem, keep_original=True)
+    except Exception as exc:
+        emit(FAILED, error=f"{src.name} could not be installed: {exc}",
+             recoverable=False)
+        return 1, ""
+    emit(CONFIGURING, detail="checking whether it can update itself")
+    # The caller needs the derived name: it is what the app is now called, and
+    # a "done" event naming nothing is no use to a UI that has to show it.
+    return 0, stem
+
+
 def install_aur(name: str) -> int:
     """Not reachable until the review step exists.
 

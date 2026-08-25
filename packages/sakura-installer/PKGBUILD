@@ -10,7 +10,7 @@ pkgdesc="SakuraOS graphical installer"
 arch=('x86_64')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
-depends=('sakura-install' 'qt6-base' 'qt6-declarative' 'kirigami' 'ki18n'
+depends=('libxkbcommon' 'sakura-install' 'qt6-base' 'qt6-declarative' 'kirigami' 'ki18n'
          'qqc2-desktop-style' 'polkit' 'util-linux')
 makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools')
 

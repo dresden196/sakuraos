@@ -25,4 +25,9 @@ package() {
     DESTDIR="$pkgdir" cmake --install "$srcdir/build"
     install -Dm644 "$startdir/org.sakuraos.store.desktop" \
         "$pkgdir/usr/share/applications/org.sakuraos.store.desktop"
+    # Registers what an AppImage is. Nothing on a stock system knows, so
+    # without this there is nothing to open one with and the file just sits
+    # there looking like a document that will not open.
+    install -Dm644 "$startdir/sakura-appimage.xml" \
+        "$pkgdir/usr/share/mime/packages/sakura-appimage.xml"
 }

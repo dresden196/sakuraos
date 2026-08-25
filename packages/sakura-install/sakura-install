@@ -187,7 +187,12 @@ sed -i 's/fmask=0022,dmask=0022/fmask=0077,dmask=0077/' /mnt/etc/fstab
 step "Configuring the system"
 echo "$HOSTNAME_" > /mnt/etc/hostname
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /mnt/etc/localtime
-echo "$LOCALE UTF-8" > /mnt/etc/locale.gen
+# en_US.UTF-8 stays alongside the chosen one: a great deal of software
+# assumes it exists, and generating a second locale costs almost nothing.
+{
+    echo "$LOCALE UTF-8"
+    [ "$LOCALE" = "en_US.UTF-8" ] || echo "en_US.UTF-8 UTF-8"
+} > /mnt/etc/locale.gen
 echo "LANG=$LOCALE" > /mnt/etc/locale.conf
 
 # Keyboard layout, for both the graphical session and the console.
@@ -352,6 +357,24 @@ fi
 # the basic system information the screen describes. This goes to KDE and
 # never to SakuraOS, which is why it is the only telemetry question asked.
 install -d -o "$USERNAME" -g "$USERNAME" "/home/$USERNAME/.config"
+
+# The desktop's language, which is not the same thing as the C library's
+# locale. LANG in /etc/locale.conf decides how dates, numbers and currency are
+# written; Plasma reads plasma-localerc to decide which translation to load,
+# and without it a system installed in German formats dates German and then
+# shows every menu in English.
+#
+# This is the file KDE's own Region & Language page writes, so changing it
+# there later works normally and does not fight anything we did here.
+LANG_CODE="${LOCALE%%.*}"
+cat > "/home/$USERNAME/.config/plasma-localerc" <<LOCALERC
+[Formats]
+LANG=$LOCALE
+
+[Translations]
+LANGUAGE=$LANG_CODE
+LOCALERC
+chown "$USERNAME:$USERNAME" "/home/$USERNAME/.config/plasma-localerc"
 if [ "$FEEDBACK" = "on" ]; then
     printf '[Global]\nFeedbackLevel=16\n' > "/home/$USERNAME/.config/PlasmaUserFeedback"
 else
