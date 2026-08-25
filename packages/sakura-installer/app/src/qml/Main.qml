@@ -47,6 +47,9 @@ QQC2.ApplicationWindow {
     // ---- collected answers -------------------------------------------------
     property var answers: ({
         locale: "en_US.UTF-8",
+        encrypt: false,
+        encryptPassword: "",
+        encryptConfirm: "",
         keyboard: "us",
         timezone: "UTC",
         hour24: true,
@@ -72,6 +75,7 @@ QQC2.ApplicationWindow {
         { title: "Time",       blurb: "Where you are, and how you read a clock" },
         { title: "Appearance", blurb: "Light or dark" },
         { title: "Disk",       blurb: "Where SakuraOS goes" },
+        { title: "Encryption", blurb: "Whether the disk is readable without you" },
         { title: "Account",    blurb: "Who this machine belongs to" },
         { title: "Browser",    blurb: "How you get online" },
         { title: "Updates",    blurb: "Staying current, safely" },
@@ -83,7 +87,12 @@ QQC2.ApplicationWindow {
     function canContinue() {
         switch (step) {
         case 4: return answers.disk !== ""
-        case 5: return answers.username.length > 0 && answers.password.length >= 4
+        // Both fields, matching. A mistyped passphrase on an encrypted disk
+        // is discovered at the next boot, when it is far too late.
+        case 5: return !answers.encrypt
+                    || (answers.encryptPassword.length >= 6
+                        && answers.encryptPassword === answers.encryptConfirm)
+        case 6: return answers.username.length > 0 && answers.password.length >= 4
         default: return true
         }
     }
@@ -531,11 +540,12 @@ QQC2.ApplicationWindow {
                         case 2: return timePage
                         case 3: return themePage
                         case 4: return diskPage
-                        case 5: return accountPage
-                        case 6: return browserPage
-                        case 7: return updatesPage
-                        case 8: return featuresPage
-                        case 9: return privacyPage
+                        case 5: return encryptPage
+                        case 6: return accountPage
+                        case 7: return browserPage
+                        case 8: return updatesPage
+                        case 9: return featuresPage
+                        case 10: return privacyPage
                         default: return installPage
                         }
                     }
@@ -556,7 +566,11 @@ QQC2.ApplicationWindow {
 
                 QQC2.Button {
                     text: "Back"
-                    visible: root.step > 0 && root.step < 9
+                    // Every question screen, including the last one. The
+                    // bound was left behind when language was added, so Back
+                    // vanished on the final screen -- the one place somebody
+                    // is most likely to want to check an earlier answer.
+                    visible: root.step > 0 && root.step < 11
                     padding: 11
                     leftPadding: 20
                     rightPadding: 20
@@ -580,8 +594,8 @@ QQC2.ApplicationWindow {
                 QQC2.Button {
                     // Ten screens now that language leads: 0..9, with the
                     // install itself at 10.
-                    text: root.step === 9 ? "Install SakuraOS" : "Continue"
-                    visible: root.step < 10
+                    text: root.step === 10 ? "Install SakuraOS" : "Continue"
+                    visible: root.step < 11
                     enabled: root.canContinue()
                     padding: 11
                     leftPadding: 26
@@ -791,21 +805,71 @@ QQC2.ApplicationWindow {
             Item { Layout.preferredHeight: 34 }
             Heading { title: "Time"; subtitle: "Used for your clock, and for checking that updates are signed correctly." }
             QQC2.Label { text: "Time zone"; color: root.dim; font.pixelSize: 13 }
-            QQC2.ComboBox {
+            Field {
+                id: tzFilter
                 Layout.fillWidth: true
-                model: backend.timezones()
-                editable: true
+                placeholderText: "Search for a city…"
                 Component.onCompleted: {
                     var guess = backend.guessTimezone()
-                    var idx = find(guess)
-                    if (idx < 0) {
-                        guess = "UTC"
-                        idx = find(guess)
-                    }
-                    root.answers.timezone = guess
-                    currentIndex = idx
+                    root.answers.timezone = guess === "" ? "UTC" : guess
+                    root.answersChanged()
                 }
-                onActivated: { root.answers.timezone = currentText; root.answersChanged() }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 150
+                radius: 12
+                color: root.card
+                border.width: 1; border.color: root.line
+                QQC2.ScrollView {
+                    anchors.fill: parent
+                    anchors.margins: 7
+                    clip: true
+                    ListView {
+                        id: tzList
+                        // Matches the city, the region or the identifier, so
+                        // "new york", "america" and "New_York" all find it.
+                        model: backend.timezoneChoices().filter(function (z) {
+                            var q = tzFilter.text.toLowerCase().trim()
+                            return q === "" || z.search.indexOf(q) !== -1
+                        })
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: tzList.width
+                            height: 36
+                            radius: 7
+                            color: root.answers.timezone === modelData.id
+                                   ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.18)
+                                   : (tzHover.hovered ? root.cardUp : "transparent")
+                            HoverHandler { id: tzHover; cursorShape: Qt.PointingHandCursor }
+                            TapHandler {
+                                onTapped: {
+                                    root.answers.timezone = modelData.id
+                                    root.answersChanged()
+                                }
+                            }
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12; anchors.rightMargin: 12
+                                spacing: 8
+                                QQC2.Label {
+                                    text: modelData.city
+                                    color: root.text; font.pixelSize: 13
+                                }
+                                QQC2.Label {
+                                    text: modelData.region
+                                    color: root.dim; font.pixelSize: 11
+                                }
+                                Item { Layout.fillWidth: true }
+                                QQC2.Label {
+                                    visible: root.answers.timezone === modelData.id
+                                    text: "\u2713"
+                                    color: root.accent; font.pixelSize: 13
+                                }
+                            }
+                        }
+                    }
+                }
             }
             // What time it is in the zone that is selected. This is the one
             // thing on this screen a person can check against the watch on
@@ -1042,6 +1106,86 @@ QQC2.ApplicationWindow {
                 color: root.dim
                 font.pixelSize: 13
                 text: "SakuraOS will use BTRFS with automatic restore points, so a bad update can be undone from the boot menu."
+            }
+            Item { Layout.fillHeight: true }
+        }
+    }
+
+    Component {
+        id: encryptPage
+        ColumnLayout {
+            spacing: 18
+            Item { Layout.preferredHeight: 34 }
+            Heading {
+                title: "Encryption"
+                subtitle: "Without it, anyone who takes this machine can read everything on it by putting the disk in another computer."
+            }
+            Choice {
+                heading: "Encrypt this disk"
+                detail: "You enter a passphrase each time the machine starts"
+                selected: root.answers.encrypt
+                onPicked: { root.answers.encrypt = true; root.answersChanged() }
+            }
+            Choice {
+                heading: "Leave it unencrypted"
+                detail: "The machine starts straight to the login screen"
+                selected: !root.answers.encrypt
+                onPicked: { root.answers.encrypt = false; root.answersChanged() }
+            }
+
+            ColumnLayout {
+                visible: root.answers.encrypt
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                spacing: 8
+                Field {
+                    id: cryptPass
+                    Layout.fillWidth: true
+                    echoMode: TextInput.Password
+                    placeholderText: "Passphrase"
+                    onTextChanged: {
+                        root.answers.encryptPassword = text
+                        root.answersChanged()
+                    }
+                }
+                Field {
+                    id: cryptConfirm
+                    Layout.fillWidth: true
+                    echoMode: TextInput.Password
+                    placeholderText: "Passphrase again"
+                    onTextChanged: {
+                        root.answers.encryptConfirm = text
+                        root.answersChanged()
+                    }
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    visible: cryptConfirm.text.length > 0
+                             && cryptConfirm.text !== cryptPass.text
+                    text: "These do not match."
+                    color: "#ff9db0"; font.pixelSize: 12
+                }
+                // The one thing about disk encryption that people are not
+                // told until it is too late.
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "There is no way to recover this passphrase. If you forget it, "
+                        + "everything on the disk is gone \u2014 not locked, gone. It is separate "
+                        + "from your login password, and you type it before the machine starts."
+                    color: root.dim; font.pixelSize: 12
+                    lineHeight: 1.3
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Restore points and going back to one work exactly the same on an "
+                        + "encrypted disk. You can also turn encryption off later without "
+                        + "reinstalling."
+                    color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.8)
+                    font.pixelSize: 12
+                }
             }
             Item { Layout.fillHeight: true }
         }
