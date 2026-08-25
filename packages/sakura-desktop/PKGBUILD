@@ -126,6 +126,9 @@ depends=(
     # not carry a disk-erasing wizard.
     'sakura-store'
     'sakura-store-ui'
+    # Windows applications. Wine itself is not installed until somebody asks
+    # for it; this is the switch, the guard, and the database behind it.
+    'sakura-wine'
     # The store needs Flatpak present; AppStream metadata drives its listings
     'flatpak'
     'archlinux-appstream-data'

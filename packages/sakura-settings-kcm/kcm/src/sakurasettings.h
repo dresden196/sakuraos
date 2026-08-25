@@ -31,6 +31,13 @@ class SakuraSettings : public KQuickConfigModule
                WRITE setAurHelper NOTIFY changed)
     Q_PROPERTY(bool updatesAutoApply READ updatesAutoApply
                WRITE setUpdatesAutoApply NOTIFY changed)
+    // Not a stored setting like the others: this reports whether Wine is
+    // actually installed, because that is the only honest answer to "is this
+    // on". A config key could disagree with the machine.
+    Q_PROPERTY(bool wineEnabled READ wineEnabled NOTIFY wineChanged)
+    Q_PROPERTY(bool wineBusy READ wineBusy NOTIFY wineChanged)
+    Q_PROPERTY(QString wineStatus READ wineStatus NOTIFY wineChanged)
+
     Q_PROPERTY(bool storeAutoUpdate READ storeAutoUpdate
                WRITE setStoreAutoUpdate NOTIFY changed)
     Q_PROPERTY(bool updatesRequireCanary READ updatesRequireCanary
@@ -61,6 +68,11 @@ public:
 
     bool updatesAutoApply() const { return m_updatesAutoApply; }
     bool storeAutoUpdate() const { return m_storeAutoUpdate; }
+    bool wineEnabled() const { return m_wineEnabled; }
+    bool wineBusy() const { return m_wineBusy; }
+    QString wineStatus() const { return m_wineStatus; }
+    Q_INVOKABLE void setWineEnabled(bool value);
+    Q_INVOKABLE void refreshWine();
     void setUpdatesAutoApply(bool value);
     void setStoreAutoUpdate(bool value);
 
@@ -81,6 +93,7 @@ public:
 
 Q_SIGNALS:
     void changed();
+    void wineChanged();
     void saveErrorChanged();
 
 private:
@@ -94,6 +107,9 @@ private:
     QString m_aurHelper;
     bool m_updatesAutoApply = true;
     bool m_storeAutoUpdate = true;
+    bool m_wineEnabled = false;
+    bool m_wineBusy = false;
+    QString m_wineStatus;
     bool m_updatesRequireCanary = true;
     bool m_updatesRequireAC = true;
     QString m_updatesWindow;

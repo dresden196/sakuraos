@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Windows program
+Comment=Decide what to do with a Windows executable
+Exec=/usr/lib/sakura/wine/sakura-windows-app %f
+Icon=application-x-ms-dos-executable
+Terminal=false
+NoDisplay=true
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/x-msi;application/vnd.microsoft.portable-executable;

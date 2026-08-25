@@ -1,0 +1,34 @@
+# Windows application support, as something that can be switched off again.
+#
+# Wine is nearly a gigabyte with its runtimes, and every other distribution
+# that offers it offers only the installing half. This package exists so the
+# switch in System Settings can be turned back.
+pkgname=sakura-wine
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Windows application support for SakuraOS, and the guard in front of it"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL-3.0-or-later')
+# Not wine: the point is that wine is installed on demand and removed again.
+# kdialog is Plasma's own dialog tool, which is what the guard asks with.
+depends=('python' 'pacman' 'polkit' 'kdialog')
+source=('sakura-wine' 'sakura-windows-app' 'app_db.json'
+        'org.sakuraos.windows-app.desktop' 'org.sakuraos.wine.policy'
+        'ATTRIBUTION')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+package() {
+    install -Dm755 "$srcdir/sakura-wine" \
+        "$pkgdir/usr/lib/sakura/wine/sakura-wine"
+    install -Dm755 "$srcdir/sakura-windows-app" \
+        "$pkgdir/usr/lib/sakura/wine/sakura-windows-app"
+    install -Dm644 "$srcdir/app_db.json" \
+        "$pkgdir/usr/share/sakura/wine/app_db.json"
+    install -Dm644 "$srcdir/org.sakuraos.windows-app.desktop" \
+        "$pkgdir/usr/share/applications/org.sakuraos.windows-app.desktop"
+    install -Dm644 "$srcdir/org.sakuraos.wine.policy" \
+        "$pkgdir/usr/share/polkit-1/actions/org.sakuraos.wine.policy"
+    install -Dm644 "$srcdir/ATTRIBUTION" \
+        "$pkgdir/usr/share/licenses/$pkgname/ATTRIBUTION"
+}
