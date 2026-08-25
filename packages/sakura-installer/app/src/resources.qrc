@@ -6,5 +6,13 @@
     <file>assets/browser-firefox.png</file>
     <file>assets/browser-brave.png</file>
     <file>assets/browser-chrome.png</file>
+    <!-- Bundled because they are not on the machine: KDE's own logo from
+         kde.org's brand assets, and Limine's from its repository. Arch's is
+         absent on purpose; it ships in the filesystem package, so it is read
+         from disk and matches whatever version the system has.
+         (No two consecutive hyphens: XML forbids them inside a comment, and
+         rcc rejects the whole file.) -->
+    <file>assets/credit-kde.svg</file>
+    <file>assets/credit-limine.png</file>
   </qresource>
 </RCC>
