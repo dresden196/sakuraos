@@ -392,7 +392,12 @@ chmod 440 /etc/sudoers.d/10-wheel
 # stack costs nothing until something actually prints. bluetooth.service is
 # what bluedevil talks to -- the Plasma page is inert without it.
 systemctl enable sddm NetworkManager sakura-updates.timer \
-    bluetooth.service cups.socket snapd.socket >/dev/null 2>&1
+    bluetooth.service cups.socket snapd.socket \
+    sakura-store-updates.timer >/dev/null 2>&1
+# The other half of application updates: AppImages live in a home directory,
+# so that timer is a user one and is enabled for every account created from
+# here on.
+systemctl --global enable sakura-store-updates.timer >/dev/null 2>&1
 
 # Classic snaps look for /snap. Arch puts the mount point at
 # /var/lib/snapd/snap, so without this symlink every classic snap fails at

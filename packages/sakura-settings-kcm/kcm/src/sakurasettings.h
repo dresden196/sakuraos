@@ -31,6 +31,8 @@ class SakuraSettings : public KQuickConfigModule
                WRITE setAurHelper NOTIFY changed)
     Q_PROPERTY(bool updatesAutoApply READ updatesAutoApply
                WRITE setUpdatesAutoApply NOTIFY changed)
+    Q_PROPERTY(bool storeAutoUpdate READ storeAutoUpdate
+               WRITE setStoreAutoUpdate NOTIFY changed)
     Q_PROPERTY(bool updatesRequireCanary READ updatesRequireCanary
                WRITE setUpdatesRequireCanary NOTIFY changed)
     Q_PROPERTY(bool updatesRequireAC READ updatesRequireAC
@@ -58,7 +60,9 @@ public:
     void setAurHelper(const QString &value);
 
     bool updatesAutoApply() const { return m_updatesAutoApply; }
+    bool storeAutoUpdate() const { return m_storeAutoUpdate; }
     void setUpdatesAutoApply(bool value);
+    void setStoreAutoUpdate(bool value);
 
     bool updatesRequireCanary() const { return m_updatesRequireCanary; }
     void setUpdatesRequireCanary(bool value);
@@ -89,6 +93,7 @@ private:
     bool m_aurCampaignScanning = true;
     QString m_aurHelper;
     bool m_updatesAutoApply = true;
+    bool m_storeAutoUpdate = true;
     bool m_updatesRequireCanary = true;
     bool m_updatesRequireAC = true;
     QString m_updatesWindow;

@@ -17,13 +17,22 @@ depends=('python' 'flatpak' 'sakura-settings-core' 'archlinux-appstream-data' 'p
          # pactree, which computes what a removal would cascade into.
          # Without it the store cannot tell a safe uninstall from one
          # that would take the desktop with it.
-         'pacman-contrib')
+         'pacman-contrib'
+         # checkupdates, which is how repository updates are found without a
+         # -Sy against the real database, refuses to run without fakeroot.
+         # Missing, it fails with an error the store then reported as
+         # "everything is up to date".
+         'fakeroot')
 optdepends=('zsync2: AppImage delta updates'
             'snapd: Snap support'
             'binutils: reading AppImage update information')
 source=('sakura-store' 'appimage.py' 'transaction.py'
-        'sakura-store.tmpfiles')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+        'sakura-store.tmpfiles'
+        'sakura-store-updates.service'
+        'sakura-store-updates.timer'
+        'sakura-store-updates-user.service'
+        'sakura-store-updates-user.timer')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/sakura-store" "$pkgdir/usr/bin/sakura-store"
@@ -33,6 +42,16 @@ package() {
         "$pkgdir/usr/lib/sakura/store/transaction.py"
     # The lock is created at boot under /run by tmpfiles, not shipped in
     # /var/lib -- see sakura-store.tmpfiles for why.
+    # Two timers because the work splits in two: what needs root, and what
+    # lives in a home directory. See the units for why.
+    install -Dm644 "$srcdir/sakura-store-updates.service" \
+        "$pkgdir/usr/lib/systemd/system/sakura-store-updates.service"
+    install -Dm644 "$srcdir/sakura-store-updates.timer" \
+        "$pkgdir/usr/lib/systemd/system/sakura-store-updates.timer"
+    install -Dm644 "$srcdir/sakura-store-updates-user.service" \
+        "$pkgdir/usr/lib/systemd/user/sakura-store-updates.service"
+    install -Dm644 "$srcdir/sakura-store-updates-user.timer" \
+        "$pkgdir/usr/lib/systemd/user/sakura-store-updates.timer"
     install -Dm644 "$srcdir/sakura-store.tmpfiles" \
         "$pkgdir/usr/lib/tmpfiles.d/sakura-store.conf"
 }

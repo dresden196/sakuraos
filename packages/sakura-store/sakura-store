@@ -133,6 +133,16 @@ class Source:
         """
         return self.installed()
 
+    def updates(self) -> list[dict]:
+        """What is installed here and has a newer version waiting.
+
+        Each entry is {id, name, current, available}. A source that cannot
+        answer returns nothing rather than guessing -- "no updates" and "I
+        could not check" look the same to a user, so the difference is
+        recorded in FAILURES instead.
+        """
+        return []
+
     def display_names(self) -> dict[str, str]:
         """source_id -> the name to show a person.
 
@@ -165,6 +175,26 @@ class FlatpakSource(Source):
             if len(parts) == 2 and parts[0]:
                 names[parts[0]] = parts[1]
         return names
+
+    def updates(self) -> list[dict]:
+        out = run(["flatpak", "remote-ls", "--updates",
+                   "--columns=application,version"])
+        if out is None:
+            FAILURES["Flatpak"] = "could not check for updates"
+            return []
+        have = self.installed()
+        found = []
+        for line in out.splitlines():
+            parts = [p.strip() for p in line.split("\t")]
+            app = parts[0] if parts else ""
+            # remote-ls lists runtimes too. Only things the user installed
+            # deliberately belong in a list they are asked to look at.
+            if not app or app not in have:
+                continue
+            found.append({"id": app, "name": app,
+                          "current": have.get(app, ""),
+                          "available": parts[1] if len(parts) > 1 else ""})
+        return found
 
     def local_icons(self) -> dict[str, str]:
         # flatpak keeps the remote's AppStream icons unpacked under
@@ -329,6 +359,25 @@ class RepoSource(Source):
         return {l.split()[0]: l.split()[1]
                 for l in out.splitlines() if len(l.split()) == 2}
 
+    def updates(self) -> list[dict]:
+        # checkupdates syncs into a temporary database rather than the real
+        # one, so this cannot leave the system half-way through a -Sy.
+        out = run(["checkupdates"])
+        if out is None:
+            return []
+        apps = self.installed_apps()
+        index = appstream_index()
+        found = []
+        for line in out.splitlines():
+            # "gimp 3.2.4-2 -> 3.2.5-1"
+            parts = line.split()
+            if len(parts) < 4 or parts[0] not in apps:
+                continue
+            found.append({"id": parts[0],
+                          "name": index.get(parts[0], {}).get("name", parts[0]),
+                          "current": parts[1], "available": parts[3]})
+        return found
+
     def installed_apps(self) -> dict[str, str]:
         """Only the applications, not the operating system.
 
@@ -339,7 +388,19 @@ class RepoSource(Source):
         beside the user's actual applications. Explicitly-installed packages
         that have an AppStream component are the applications.
         """
-        out = run(["pacman", "-Qen"])
+        # Every native package that AppStream calls a desktop application --
+        # not only the explicitly-installed ones.
+        #
+        # -Qen was wrong in a way that only a real install shows. Everything
+        # here arrives through sakura-desktop, so pacman records it as a
+        # dependency: on a freshly installed machine exactly four packages are
+        # explicit, and the Installed tab listed one application. On the live
+        # image, where packages had been installed by hand, it looked fine.
+        #
+        # Install reason answers "who asked for this", which is a packaging
+        # question. The tab is answering "what applications are on this
+        # machine", and Konsole is one of those however it arrived.
+        out = run(["pacman", "-Qn"])
         index = appstream_index()
         return {p[0]: p[1] for p in (l.split() for l in out.splitlines())
                 if len(p) == 2
@@ -446,6 +507,22 @@ class SnapSource(Source):
             parts = line.split()
             if len(parts) >= 2:
                 found[parts[0]] = parts[1]
+        return found
+
+    def updates(self) -> list[dict]:
+        out = run(["snap", "refresh", "--list"])
+        if out is None:
+            return []
+        have = self.installed()
+        found = []
+        for line in out.splitlines()[1:]:      # first line is the header
+            parts = line.split()
+            # "name version rev publisher notes"
+            if len(parts) < 2 or parts[0] not in have:
+                continue
+            found.append({"id": parts[0], "name": parts[0],
+                          "current": have.get(parts[0], ""),
+                          "available": parts[1]})
         return found
 
     def search(self, query: str) -> list[App]:
@@ -990,6 +1067,103 @@ def cmd_remove(args) -> int:
     return rc
 
 
+def all_updates() -> list[dict]:
+    """Everything installed, from every source, that has a newer version.
+
+    AppImages are included even though they are not a catalogue: each one
+    carries its own update information, which is the whole reason the format
+    is bearable to live with.
+    """
+    found: list[dict] = []
+    for src in SOURCES:
+        if not src.available():
+            continue
+        try:
+            for u in src.updates():
+                found.append({**u, "source": src.name})
+        except Exception as exc:
+            FAILURES[src.label] = f"could not check for updates ({exc})"
+
+    import appimage
+    for a in appimage.installed():
+        state = a.get("update")
+        if state == "available":
+            found.append({"source": "appimage", "id": a["name"],
+                          "name": a["name"], "current": "", "available": ""})
+    return found
+
+
+def cmd_updates(args) -> int:
+    ups = all_updates()
+    if args.json:
+        print(json.dumps({"updates": ups, "unavailable": FAILURES}, indent=2))
+        return 0
+    if not ups:
+        print("  Everything is up to date.")
+        return 0
+    for u in ups:
+        arrow = f"  {u['current']} -> {u['available']}" if u["available"] else ""
+        print(f"  {u['source']:<9} {u['name']}{arrow}")
+    return 0
+
+
+def cmd_update(args) -> int:
+    """Apply updates. What can be done without asking for a password is done
+    first, so a machine left alone still gets most of the way there."""
+    import transaction as tx
+
+    # The setting is read before anything else happens. Checking first and
+    # obeying afterwards would mean a machine with automatic updates switched
+    # off still going out to Flathub, Snapcraft and every AppImage's update
+    # URL every night -- which is most of what the setting is meant to stop.
+    if args.unattended:
+        if read_config().get("Store", {}).get("AutoUpdate", "true") != "true":
+            tx.emit(tx.DONE, detail="automatic updates for applications are off")
+            return 0
+
+    ups = all_updates()
+    if args.id:
+        ups = [u for u in ups if u["id"] == args.id]
+    if args.source:
+        ups = [u for u in ups if u["source"] == args.source]
+    if not ups:
+        tx.emit(tx.DONE, detail="everything is up to date")
+        return 0
+
+    if args.unattended:
+        # Repository packages belong to the update engine, which already
+        # takes a snapshot and runs a full -Syu every night. Updating them
+        # here as well would do the same work twice and, worse, without that
+        # snapshot.
+        ups = [u for u in ups if u["source"] != "repo"]
+
+        # What this run can actually reach. Flatpak system installs and snaps
+        # need root; AppImages and per-user Flatpaks live in a home directory
+        # that root has no business writing to. Splitting it is what lets both
+        # halves run unattended without either asking for a password.
+        if args.scope == "system":
+            ups = [u for u in ups if u["source"] in ("flatpak", "snap")]
+        elif args.scope == "user":
+            ups = [u for u in ups if u["source"] == "appimage"]
+        if not ups:
+            tx.emit(tx.DONE, detail="nothing to do in this scope")
+            return 0
+
+    failed = 0
+    with tx.transaction_lock():
+        for u in ups:
+            rc = tx.update_one(u["source"], u["id"], unattended=args.unattended)
+            if rc != 0:
+                failed += 1
+    if failed:
+        tx.emit(tx.FAILED,
+                error=f"{failed} of {len(ups)} could not be updated.",
+                recoverable=True)
+        return 1
+    tx.emit(tx.DONE, detail=f"updated {len(ups)}")
+    return 0
+
+
 def cmd_installed(args) -> int:
     import appimage
     rows = []
@@ -1142,6 +1316,20 @@ def main() -> int:
     n.add_argument("id")
     n.add_argument("--json", action="store_true")
     n.set_defaults(fn=cmd_info)
+
+    up = sub.add_parser("updates", help="what has a newer version")
+    up.add_argument("--json", action="store_true")
+    up.set_defaults(fn=cmd_updates)
+
+    ap = sub.add_parser("update", help="install newer versions")
+    ap.add_argument("--id", help="just this one")
+    ap.add_argument("--source", help="just this source")
+    # Passed by the timer, never by a person: it is what makes the settings
+    # apply, and what keeps anything needing a password out of the way.
+    ap.add_argument("--unattended", action="store_true")
+    ap.add_argument("--scope", choices=["system", "user"],
+                    help="which half of an unattended run this is")
+    ap.set_defaults(fn=cmd_update)
 
     l = sub.add_parser("installed")
     l.add_argument("--json", action="store_true")
