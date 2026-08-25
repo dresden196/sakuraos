@@ -219,6 +219,164 @@ QQC2.ApplicationWindow {
 
     // ---- layout ------------------------------------------------------------
     // ---- welcome -----------------------------------------------------------
+    // ---- what this is built on ---------------------------------------------
+    // Off the tour rather than in the sequence: nobody should have to page
+    // past a credits screen to install an operating system, and burying it
+    // where nobody finds it is not much better than not having one.
+    Item {
+        anchors.fill: parent
+        visible: root.step === -3
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            width: Math.min(760, parent.width - 100)
+            spacing: 20
+
+            QQC2.Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: "Built on other people's work"
+                color: root.text
+                font.pixelSize: 30
+                font.weight: Font.Light
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: "SakuraOS is an arrangement of things other people built and gave away. None of it would exist otherwise."
+                color: root.dim
+                font.pixelSize: 14
+            }
+
+            Item { Layout.preferredHeight: 6 }
+
+            RowLayout {
+                id: creditRow
+                Layout.fillWidth: true
+                spacing: 18
+                // Same reason as the tour cards: two boxes of different
+                // heights side by side reads as a layout that went wrong.
+                property real cardHeight: 0
+                function measure() {
+                    var tallest = 0
+                    for (var i = 0; i < children.length; ++i) {
+                        var c = children[i]
+                        if (c.contentHeight !== undefined && c.contentHeight > tallest) {
+                            tallest = c.contentHeight
+                        }
+                    }
+                    cardHeight = tallest
+                }
+                Repeater {
+                    model: [
+                        {
+                            // The logos already on the machine, from the
+                            // projects' own packages. Nothing is bundled and
+                            // nothing was taken off a clip-art site, which
+                            // matters for a mark somebody else owns.
+                            icon: "file:///usr/share/pixmaps/archlinux-logo.svg",
+                            name: "Arch Linux",
+                            body: "The distribution SakuraOS is built from, and the repositories "
+                                + "it installs from. Its packaging, its documentation and its "
+                                + "insistence on keeping things simple are why this could be "
+                                + "built at all."
+                        },
+                        {
+                            icon: "file:///usr/share/icons/breeze-dark/places/96/start-here-kde-plasma.svg",
+                            name: "KDE Plasma",
+                            body: "The desktop. Almost everything anyone will touch on this "
+                                + "system \u2014 the panel, the settings, the file manager, the "
+                                + "login screen \u2014 is KDE's, and made by KDE."
+                        }
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        readonly property real contentHeight: credit.implicitHeight + 36
+                        onContentHeightChanged: creditRow.measure()
+                        Component.onCompleted: creditRow.measure()
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.max(creditRow.cardHeight,
+                                                         contentHeight)
+                        radius: 14
+                        color: root.card
+                        border.width: 1
+                        border.color: root.line
+                        ColumnLayout {
+                            id: credit
+                            anchors.left: parent.left; anchors.right: parent.right
+                            anchors.top: parent.top; anchors.margins: 18
+                            spacing: 10
+                            Image {
+                                Layout.alignment: Qt.AlignHCenter
+                                source: modelData.icon
+                                sourceSize: Qt.size(140, 64)
+                                fillMode: Image.PreserveAspectFit
+                                Layout.preferredHeight: 56
+                            }
+                            QQC2.Label {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: modelData.name
+                                color: root.accent
+                                font.pixelSize: 16; font.weight: Font.DemiBold
+                            }
+                            QQC2.Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                horizontalAlignment: Text.AlignHCenter
+                                text: modelData.body
+                                color: root.dim
+                                font.pixelSize: 13
+                                lineHeight: 1.3
+                            }
+                        }
+                    }
+                }
+            }
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+                // Named because they are load-bearing, not as a list of
+                // dependencies. Each of these is doing something SakuraOS
+                // claims as its own on the previous screen.
+                text: "And, among others: BTRFS and snapper for the restore points, limine "
+                    + "for the boot menu, mkinitcpio for the recovery environment, Flatpak, "
+                    + "Snap and AppImage for the software, ODRS for the reviews, and "
+                    + "cryptsetup for the encryption."
+                color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.85)
+                font.pixelSize: 12
+                lineHeight: 1.3
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: "Wallpaper credits are in /usr/share/licenses/sakura-wallpapers."
+                color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.7)
+                font.pixelSize: 11
+            }
+
+            QQC2.Button {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 6
+                text: "Back"
+                padding: 12; leftPadding: 34; rightPadding: 34
+                onClicked: root.step = -1
+                contentItem: QQC2.Label {
+                    text: parent.text; color: root.text
+                    font.pixelSize: 14
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 9; color: parent.down ? root.cardUp : "transparent"
+                    border.width: 1; border.color: root.line
+                }
+            }
+        }
+    }
+
     // ---- what this distribution actually does differently -------------------
     // Between the welcome and the questions, because somebody who has just
     // booted an unfamiliar system has no idea what they are agreeing to set
@@ -252,10 +410,30 @@ QQC2.ApplicationWindow {
             Item { Layout.preferredHeight: 6 }
 
             GridLayout {
+                id: tourGrid
                 Layout.fillWidth: true
                 columns: width > 700 ? 2 : 1
                 columnSpacing: 18
                 rowSpacing: 18
+
+                // Every card the height of the tallest.
+                //
+                // Sized to their own text they came out ragged -- six boxes of
+                // six different heights, which reads as a broken layout rather
+                // than as six things worth reading. Recomputed rather than
+                // only ever growing, so it still settles correctly when the
+                // window is resized and the text reflows.
+                property real cardHeight: 0
+                function measure() {
+                    var tallest = 0
+                    for (var i = 0; i < children.length; ++i) {
+                        var c = children[i]
+                        if (c.contentHeight !== undefined && c.contentHeight > tallest) {
+                            tallest = c.contentHeight
+                        }
+                    }
+                    cardHeight = tallest
+                }
 
                 Repeater {
                     model: [
@@ -303,8 +481,14 @@ QQC2.ApplicationWindow {
                     ]
                     delegate: Rectangle {
                         required property var modelData
+                        // What this card would need if it were alone. The
+                        // grid takes the largest and gives it to all of them.
+                        readonly property real contentHeight: card.implicitHeight + 34
+                        onContentHeightChanged: tourGrid.measure()
+                        Component.onCompleted: tourGrid.measure()
                         Layout.fillWidth: true
-                        Layout.preferredHeight: card.implicitHeight + 34
+                        Layout.preferredHeight: Math.max(tourGrid.cardHeight,
+                                                         contentHeight)
                         radius: 14
                         color: root.card
                         border.width: 1
@@ -337,6 +521,21 @@ QQC2.ApplicationWindow {
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: 14
+                QQC2.Button {
+                    text: "Built on"
+                    padding: 12; leftPadding: 26; rightPadding: 26
+                    onClicked: root.step = -3
+                    contentItem: QQC2.Label {
+                        text: parent.text; color: root.text
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 9; color: parent.down ? root.cardUp : "transparent"
+                        border.width: 1; border.color: root.line
+                    }
+                }
                 QQC2.Button {
                     text: "Back"
                     padding: 12; leftPadding: 26; rightPadding: 26
