@@ -38,6 +38,45 @@ trap 'rm -f "$tmp"' EXIT
         echo "    protocol: efi"
         echo "    path: boot():/$EFI_DIR/sakura-recovery.efi"
     fi
+
+    # Anything else that boots from this ESP.
+    #
+    # Installing beside another system and then not offering it is the same,
+    # from the far side of a reboot, as having deleted it. limine boots any
+    # EFI binary with the protocol we already use for our own, so a chainload
+    # is one more entry rather than a second bootloader.
+    #
+    # Matched by the paths these live at rather than by asking os-prober,
+    # which needs to mount filesystems and is not available in every context
+    # this script runs from -- a pacman hook during a kernel upgrade included.
+    for other in \
+        "EFI/Microsoft/Boot/bootmgfw.efi:Windows Boot Manager" \
+        "EFI/ubuntu/shimx64.efi:Ubuntu" \
+        "EFI/fedora/shimx64.efi:Fedora" \
+        "EFI/debian/shimx64.efi:Debian" \
+        "EFI/opensuse/shimx64.efi:openSUSE" \
+        "EFI/pop/shimx64.efi:Pop!_OS" \
+        "EFI/Boot/bootx64.efi:Other operating system"
+    do
+        path="${other%%:*}"
+        label="${other#*:}"
+        # Our own removable-path copy lives at EFI/Boot/bootx64.efi. Offering
+        # it as "another operating system" would be offering this one twice.
+        case "$path" in
+            EFI/Boot/bootx64.efi)
+                if cmp -s "$ESP/$path" "$ESP/$EFI_DIR/limine.efi" 2>/dev/null; then
+                    continue
+                fi
+                ;;
+        esac
+        if [ -f "$ESP/$path" ]; then
+            echo
+            echo "/$label"
+            echo "    comment: Installed on this machine before SakuraOS"
+            echo "    protocol: efi"
+            echo "    path: boot():/$path"
+        fi
+    done
 } > "$tmp"
 
 # Replace atomically. A half-written limine.conf on an ESP is an unbootable
