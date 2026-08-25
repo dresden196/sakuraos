@@ -196,7 +196,7 @@ QQC2.ApplicationWindow {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                text: "A UI-first, terminal-second distribution. Everything below is already here \u2014 not planned."
+                text: "A UI-first, terminal-second distribution."
                 color: root.dim
                 font.pixelSize: 14
             }
@@ -212,32 +212,45 @@ QQC2.ApplicationWindow {
                 Repeater {
                     model: [
                         {
+                            title: "Built for a modern machine",
+                            body: "A kernel tuned for better scheduling and built for the processors "
+                                + "people actually own, rather than for the oldest one still "
+                                + "supported. The same hardware, doing more."
+                        },
+                        {
                             title: "It can undo itself",
-                            body: "The disk is BTRFS, and a restore point is taken automatically before "
-                                + "every change. Take one yourself before doing something risky, from the "
-                                + "Update Center. If an update goes wrong, go back \u2014 your documents and "
-                                + "photos are never part of a restore point and are left alone."
+                            body: "The disk is BTRFS with automatic snapshots. A restore point is taken "
+                                + "before every change, and you can take one yourself from the Update "
+                                + "Center before doing something risky. If an update goes wrong, go "
+                                + "back \u2014 your documents and photos are never part of a restore point."
                         },
                         {
                             title: "Updates just happen",
-                            body: "Checked and applied on their own, overnight and on mains power, always "
-                                + "behind a restore point. Applications from Flatpak, Snap and AppImage "
-                                + "keep themselves current too. Nothing waits for you to remember."
+                            body: "Checked and applied seamlessly in the background, overnight and on "
+                                + "mains power, always behind a restore point. Applications keep "
+                                + "themselves current too. Nothing waits for you to remember."
                         },
                         {
                             title: "Terminal Assist",
-                            body: "A terminal is unforgiving, and a single mistyped command can take a "
-                                + "system with it. Terminal Assist recognises the commands that do real "
-                                + "damage \u2014 partial upgrades, removing the last kernel, force-removing "
-                                + "packages other things depend on \u2014 stops them, and says what to run "
-                                + "instead. It cannot be bypassed by accident."
+                            body: "Using a terminal for the first time is daunting, and one command can "
+                                + "take a whole system with it. Terminal Assist recognises the commands "
+                                + "that do real damage \u2014 partial upgrades, removing the last kernel, "
+                                + "force-removing packages other things depend on \u2014 stops them, and "
+                                + "tells you what to run instead."
                         },
                         {
-                            title: "A store built for this",
-                            body: "Flatpak, Snap, AppImage and SakuraOS's own packages in one place, with "
-                                + "the same app matched across them so you can choose where it comes from. "
-                                + "It tells you which you are installing and what it will cost. AppImages "
-                                + "install by opening the file."
+                            title: "A store built from scratch",
+                            body: "Flatpak, Snap, AppImage, the AUR and SakuraOS's own packages in one "
+                                + "place, with the same app matched across them so you choose where it "
+                                + "comes from. It keeps your applications updated, installs AppImages by "
+                                + "opening the file, and can bring your software with you if you move to "
+                                + "another SakuraOS machine."
+                        },
+                        {
+                            title: "Private by default",
+                            body: "Nothing here reports what you install, what you run, or who you are. "
+                                + "The only telemetry on this system is KDE's own, it goes to KDE and "
+                                + "never to us, and it is off unless you switch it on."
                         }
                     ]
                     delegate: Rectangle {
