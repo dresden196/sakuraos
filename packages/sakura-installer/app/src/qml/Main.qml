@@ -44,6 +44,28 @@ QQC2.ApplicationWindow {
     // max-width and hugging the left edge of a much wider pane.
     readonly property int contentWidth: 620
 
+    // The summary shows what was chosen, not the codes those choices are
+    // stored as. "en_US.UTF-8" and "us" are what the system wants; nobody
+    // checks their answers against them.
+    function localeName(code) {
+        var all = backend.languages()
+        for (var i = 0; i < all.length; ++i) {
+            if (all[i].code === code) {
+                return all[i].native
+            }
+        }
+        return code
+    }
+    function layoutName(code) {
+        var all = backend.keyboardLayouts()
+        for (var i = 0; i < all.length; ++i) {
+            if (all[i].code === code) {
+                return all[i].name
+            }
+        }
+        return code
+    }
+
     // ---- collected answers -------------------------------------------------
     property var answers: ({
         locale: "en_US.UTF-8",
@@ -81,6 +103,7 @@ QQC2.ApplicationWindow {
         { title: "Updates",    blurb: "Staying current, safely" },
         { title: "Sakura",     blurb: "What this system does for you" },
         { title: "Privacy",    blurb: "What leaves this machine" },
+        { title: "Summary",    blurb: "Check before anything is written" },
         { title: "Install",    blurb: "" }
     ]
 
@@ -546,6 +569,7 @@ QQC2.ApplicationWindow {
                         case 8: return updatesPage
                         case 9: return featuresPage
                         case 10: return privacyPage
+                        case 11: return summaryPage
                         default: return installPage
                         }
                     }
@@ -570,7 +594,7 @@ QQC2.ApplicationWindow {
                     // bound was left behind when language was added, so Back
                     // vanished on the final screen -- the one place somebody
                     // is most likely to want to check an earlier answer.
-                    visible: root.step > 0 && root.step < 11
+                    visible: root.step > 0 && root.step < 12
                     padding: 11
                     leftPadding: 20
                     rightPadding: 20
@@ -594,8 +618,8 @@ QQC2.ApplicationWindow {
                 QQC2.Button {
                     // Ten screens now that language leads: 0..9, with the
                     // install itself at 10.
-                    text: root.step === 10 ? "Install SakuraOS" : "Continue"
-                    visible: root.step < 11
+                    text: root.step === 11 ? "Install SakuraOS" : "Continue"
+                    visible: root.step < 12
                     enabled: root.canContinue()
                     padding: 11
                     leftPadding: 26
@@ -624,9 +648,77 @@ QQC2.ApplicationWindow {
         ColumnLayout {
             spacing: 18
             Item { Layout.preferredHeight: 34 }
-            Heading {
-                title: "Language"
-                subtitle: "This sets the language of the desktop and how dates, numbers and currency are written."
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 22
+                Heading {
+                    Layout.fillWidth: true
+                    title: "Language"
+                    subtitle: "This sets the language of the desktop and how dates, numbers and currency are written."
+                }
+                // A turning globe. It says "this is the question about where
+                // in the world you are" faster than the heading does, and it
+                // is the first screen anybody sees -- worth a few lines.
+                Canvas {
+                    id: globe
+                    Layout.preferredWidth: 96
+                    Layout.preferredHeight: 96
+                    Layout.alignment: Qt.AlignVCenter
+                    // Degrees turned. Animated rather than redrawn on a timer
+                    // so it stays smooth while the language list is being
+                    // filtered on the GUI thread.
+                    property real spin: 0
+                    NumberAnimation on spin {
+                        from: 0; to: 360
+                        duration: 24000
+                        loops: Animation.Infinite
+                        running: globe.visible
+                    }
+                    onSpinChanged: requestPaint()
+
+                    onPaint: {
+                        var ctx = getContext("2d")
+                        ctx.reset()
+                        var cx = width / 2, cy = height / 2
+                        var r = Math.min(cx, cy) - 4
+
+                        ctx.strokeStyle = root.line
+                        ctx.lineWidth = 1.5
+                        ctx.beginPath()
+                        ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                        ctx.stroke()
+
+                        // Lines of latitude: circles on the sphere, so
+                        // ellipses once flattened, and none of them turn.
+                        ctx.strokeStyle = Qt.rgba(root.accent.r, root.accent.g,
+                                                  root.accent.b, 0.55)
+                        ctx.lineWidth = 1
+                        for (var lat = -60; lat <= 60; lat += 30) {
+                            var rad = lat * Math.PI / 180
+                            var y = cy - r * Math.sin(rad)
+                            var rx = r * Math.cos(rad)
+                            ctx.beginPath()
+                            ctx.ellipse(cx - rx, y - rx * 0.16, rx * 2, rx * 0.32)
+                            ctx.stroke()
+                        }
+
+                        // Lines of longitude. Each is a circle seen edge-on at
+                        // some angle, which flattens to an ellipse whose width
+                        // is the cosine of how far round it has turned. Drawn
+                        // only while facing us, so the globe reads as solid
+                        // rather than as a wireframe cage.
+                        for (var lon = 0; lon < 180; lon += 30) {
+                            var a = (lon + globe.spin) * Math.PI / 180
+                            var w = Math.cos(a)
+                            ctx.globalAlpha = 0.25 + 0.45 * Math.abs(w)
+                            ctx.beginPath()
+                            ctx.ellipse(cx - Math.abs(w) * r, cy - r,
+                                        Math.abs(w) * r * 2, r * 2)
+                            ctx.stroke()
+                        }
+                        ctx.globalAlpha = 1
+                    }
+                }
             }
             Field {
                 id: langFilter
@@ -719,15 +811,32 @@ QQC2.ApplicationWindow {
                 Component.onCompleted: currentIndex = indexOfValue(root.answers.keyboard)
                 onActivated: { root.answers.keyboard = currentValue; root.answersChanged() }
             }
-            // The layout, drawn. Reading "German (no dead keys)" tells you
-            // very little; seeing where Z and Y sit tells you immediately
-            // whether this is the keyboard in front of you.
+            // The layout, drawn as a keyboard rather than as four rows of
+            // squares. Reading "German (no dead keys)" tells you very little;
+            // seeing where Z and Y sit tells you immediately whether this is
+            // the board in front of you -- but only if it looks enough like
+            // one to compare against.
+            //
+            // The character keys come from xkbcommon. The modifiers are drawn
+            // in because they are the same everywhere and their widths are
+            // most of what makes a keyboard recognisable: the stepped left
+            // edge, the long Enter, the space bar.
             ColumnLayout {
                 id: kbPreview
                 Layout.fillWidth: true
                 Layout.topMargin: 4
-                spacing: 5
+                spacing: 4
                 property var rows: backend.keyboardPreview(root.answers.keyboard)
+                // One key-width. Everything else is a multiple of it, which is
+                // how a real board is specified.
+                //
+                // Taken from the page width, not from this item's own width:
+                // the caps size from the unit and the container sizes from
+                // the caps, so deriving it from `width` is a loop, and the
+                // loop resolves to zero -- every key collapsed on top of the
+                // next.
+                readonly property real unit:
+                    Math.max(16, (root.contentWidth - 14 * spacing) / 15)
 
                 Connections {
                     target: root
@@ -736,40 +845,85 @@ QQC2.ApplicationWindow {
                     }
                 }
 
-                Repeater {
-                    model: kbPreview.rows
-                    delegate: RowLayout {
-                        required property var modelData
-                        required property int index
-                        Layout.fillWidth: true
-                        spacing: 5
-                        // Each row on a real board starts a little further in
-                        // than the one above it.
-                        Item {
-                            Layout.preferredWidth: [0, 14, 22, 38][index] || 0
-                            Layout.preferredHeight: 1
-                        }
-                        Repeater {
-                            model: modelData
-                            delegate: Rectangle {
-                                required property var modelData
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 38
-                                Layout.minimumWidth: 26
-                                radius: 6
-                                color: root.card
-                                border.width: 1
-                                border.color: root.line
-                                QQC2.Label {
-                                    anchors.centerIn: parent
-                                    text: modelData || ""
-                                    color: root.text
-                                    font.pixelSize: modelData && modelData.length > 2 ? 10 : 14
-                                }
-                            }
-                        }
+                component Cap : Rectangle {
+                    property string label: ""
+                    property real units: 1
+                    property bool modifier: false
+                    Layout.preferredWidth: kbPreview.unit * units
+                    Layout.preferredHeight: 34
+                    radius: 5
+                    color: modifier ? Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.13)
+                                    : root.card
+                    border.width: 1
+                    border.color: root.line
+                    QQC2.Label {
+                        anchors.centerIn: parent
+                        text: label
+                        color: modifier ? root.dim : root.text
+                        font.pixelSize: label.length > 2 ? 9 : 13
                     }
                 }
+
+                // Characters for one xkb row, as caps. Takes a list rather
+                // than a row index so the caller can move a key: xkb puts the
+                // backslash keycode at the end of the home row, where an
+                // ANSI board has it above Enter instead.
+                component CharRow : Repeater {
+                    property var keys: []
+                    model: keys
+                    delegate: Cap {
+                        required property var modelData
+                        label: modelData || ""
+                    }
+                }
+
+                readonly property var rowNumber: rows.length > 0 ? rows[0] : []
+                // Top row plus the key xkb files under the home row.
+                readonly property var rowTop:
+                    rows.length > 2 ? rows[1].concat(rows[2].slice(-1))
+                                    : (rows.length > 1 ? rows[1] : [])
+                readonly property var rowHome:
+                    rows.length > 2 ? rows[2].slice(0, -1) : []
+                readonly property var rowBottom: rows.length > 3 ? rows[3] : []
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: kbPreview.spacing
+                    CharRow { keys: kbPreview.rowNumber }
+                    Cap { label: "Backspace"; units: 2; modifier: true }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: kbPreview.spacing
+                    Cap { label: "Tab"; units: 1.5; modifier: true }
+                    CharRow { keys: kbPreview.rowTop }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: kbPreview.spacing
+                    Cap { label: "Caps"; units: 1.75; modifier: true }
+                    CharRow { keys: kbPreview.rowHome }
+                    Cap { label: "Enter"; units: 2.25; modifier: true }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: kbPreview.spacing
+                    Cap { label: "Shift"; units: 2.25; modifier: true }
+                    CharRow { keys: kbPreview.rowBottom }
+                    Cap { label: "Shift"; units: 2.75; modifier: true }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: kbPreview.spacing
+                    Cap { label: "Ctrl"; units: 1.25; modifier: true }
+                    Cap { label: "Meta"; units: 1.25; modifier: true }
+                    Cap { label: "Alt";  units: 1.25; modifier: true }
+                    Cap { label: "";     units: 6.25; modifier: true }
+                    Cap { label: "Alt";  units: 1.25; modifier: true }
+                    Cap { label: "Meta"; units: 1.25; modifier: true }
+                    Cap { label: "Ctrl"; units: 1.25; modifier: true }
+                }
+
                 QQC2.Label {
                     visible: kbPreview.rows.length === 0
                     text: "This layout could not be drawn, but it will still be used."
@@ -1508,6 +1662,94 @@ QQC2.ApplicationWindow {
                 detail: "You can change this later in System Settings under User Feedback."
                 selected: root.answers.crashReports
                 onPicked: { root.answers.crashReports = !root.answers.crashReports; root.answersChanged() }
+            }
+            Item { Layout.fillHeight: true }
+        }
+    }
+
+    Component {
+        id: summaryPage
+        ColumnLayout {
+            spacing: 16
+            Item { Layout.preferredHeight: 34 }
+            Heading {
+                title: "Before anything is written"
+                subtitle: "Nothing has been changed on this machine yet. Everything below happens when you continue."
+            }
+
+            // The destructive part, on its own and stated in the plainest
+            // words available. It names the disk, because "the disk" is not
+            // specific enough to check and this is the last chance to notice
+            // the wrong one is selected.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: warnCol.implicitHeight + 30
+                radius: 12
+                color: Qt.rgba(0.78, 0.32, 0.31, 0.16)
+                border.width: 1
+                border.color: Qt.rgba(0.78, 0.32, 0.31, 0.55)
+                ColumnLayout {
+                    id: warnCol
+                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.top: parent.top; anchors.margins: 15
+                    spacing: 5
+                    QQC2.Label {
+                        text: "Everything on " + root.answers.disk + " will be erased"
+                        color: "#ff9db0"
+                        font.pixelSize: 16; font.weight: Font.DemiBold
+                    }
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: "Every file, every other operating system, and every partition on "
+                            + "that disk. This cannot be undone, and it starts as soon as you "
+                            + "press Install. Other disks in this machine are not touched."
+                        color: root.dim; font.pixelSize: 13
+                        lineHeight: 1.3
+                    }
+                }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                columnSpacing: 26
+                rowSpacing: 9
+                Repeater {
+                    model: [
+                        { k: "Language",  v: root.localeName(root.answers.locale) },
+                        { k: "Keyboard",  v: root.layoutName(root.answers.keyboard) },
+                        { k: "Time zone", v: root.answers.timezone },
+                        { k: "Clock",     v: root.answers.hour24 ? "24-hour" : "12-hour" },
+                        { k: "Appearance", v: root.answers.dark ? "Dark" : "Light" },
+                        { k: "Disk",      v: root.answers.disk },
+                        { k: "Encryption", v: root.answers.encrypt
+                                              ? "On \u2014 you enter a passphrase at every start"
+                                              : "Off" },
+                        { k: "Computer name", v: root.answers.hostname },
+                        { k: "Your account",  v: root.answers.username },
+                        { k: "Browser",   v: root.answers.browser === "none"
+                                             ? "None" : root.answers.browser },
+                        { k: "Updates",   v: "Installed automatically, behind a restore point" }
+                    ]
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        Layout.columnSpan: 2
+                        spacing: 12
+                        QQC2.Label {
+                            Layout.preferredWidth: 130
+                            text: modelData.k
+                            color: root.dim; font.pixelSize: 13
+                        }
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: modelData.v
+                            color: root.text; font.pixelSize: 13
+                        }
+                    }
+                }
             }
             Item { Layout.fillHeight: true }
         }
