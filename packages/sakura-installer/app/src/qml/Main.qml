@@ -96,7 +96,7 @@ QQC2.ApplicationWindow {
         crashReports: false
     })
 
-    property int step: -2
+    property int step: -3
     readonly property var steps: [
         { title: "Language",   blurb: "What this machine speaks" },
         { title: "Keyboard",   blurb: "How your keys are laid out" },
@@ -225,16 +225,16 @@ QQC2.ApplicationWindow {
     // where nobody finds it is not much better than not having one.
     Item {
         anchors.fill: parent
-        visible: root.step === -3
+        visible: root.step === -1
 
         ColumnLayout {
             anchors.centerIn: parent
-            width: Math.min(760, parent.width - 100)
+            width: Math.min(940, parent.width - 100)
             spacing: 20
 
             QQC2.Label {
                 Layout.alignment: Qt.AlignHCenter
-                text: "Built on other people's work"
+                text: "Made possible by"
                 color: root.text
                 font.pixelSize: 30
                 font.weight: Font.Light
@@ -243,7 +243,7 @@ QQC2.ApplicationWindow {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                text: "SakuraOS is an arrangement of things other people built and gave away. None of it would exist otherwise."
+                text: "SakuraOS would not exist without these projects, and the people who give their work away so that things like it can be built."
                 color: root.dim
                 font.pixelSize: 14
             }
@@ -270,10 +270,12 @@ QQC2.ApplicationWindow {
                 Repeater {
                     model: [
                         {
-                            // The logos already on the machine, from the
-                            // projects' own packages. Nothing is bundled and
-                            // nothing was taken off a clip-art site, which
-                            // matters for a mark somebody else owns.
+                            // Arch's logo ships in the filesystem package, so
+                            // it is read from disk and matches whatever the
+                            // machine has. KDE's and Limine's are bundled,
+                            // taken from kde.org's brand assets and Limine's
+                            // own repository -- their marks, from their own
+                            // hands, rather than off a clip-art site.
                             icon: "file:///usr/share/pixmaps/archlinux-logo.svg",
                             name: "Arch Linux",
                             body: "The distribution SakuraOS is built from, and the repositories "
@@ -282,11 +284,18 @@ QQC2.ApplicationWindow {
                                 + "built at all."
                         },
                         {
-                            icon: "file:///usr/share/icons/breeze-dark/places/96/start-here-kde-plasma.svg",
-                            name: "KDE Plasma",
-                            body: "The desktop. Almost everything anyone will touch on this "
-                                + "system \u2014 the panel, the settings, the file manager, the "
-                                + "login screen \u2014 is KDE's, and made by KDE."
+                            icon: "qrc:/assets/credit-kde.svg",
+                            name: "KDE",
+                            body: "Plasma is the desktop: the panel, the settings, the file "
+                                + "manager, the login screen. Almost everything anyone will "
+                                + "touch on this system is KDE's, and made by KDE."
+                        },
+                        {
+                            icon: "qrc:/assets/credit-limine.png",
+                            name: "Limine",
+                            body: "The bootloader, and the menu that offers a restore point or "
+                                + "another operating system. Every recovery SakuraOS promises "
+                                + "starts with Limine handing over."
                         }
                     ]
                     delegate: Rectangle {
@@ -340,10 +349,10 @@ QQC2.ApplicationWindow {
                 // Named because they are load-bearing, not as a list of
                 // dependencies. Each of these is doing something SakuraOS
                 // claims as its own on the previous screen.
-                text: "And, among others: BTRFS and snapper for the restore points, limine "
-                    + "for the boot menu, mkinitcpio for the recovery environment, Flatpak, "
-                    + "Snap and AppImage for the software, ODRS for the reviews, and "
-                    + "cryptsetup for the encryption."
+                text: "And, among others: BTRFS and snapper for the restore points, "
+                    + "mkinitcpio for the recovery environment, Flatpak, Snap and AppImage "
+                    + "for the software, ODRS for the reviews, and cryptsetup for the "
+                    + "encryption."
                 color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.85)
                 font.pixelSize: 12
                 lineHeight: 1.3
@@ -357,21 +366,40 @@ QQC2.ApplicationWindow {
                 font.pixelSize: 11
             }
 
-            QQC2.Button {
+            RowLayout {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.topMargin: 6
-                text: "Back"
-                padding: 12; leftPadding: 34; rightPadding: 34
-                onClicked: root.step = -1
-                contentItem: QQC2.Label {
-                    text: parent.text; color: root.text
-                    font.pixelSize: 14
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                spacing: 14
+                QQC2.Button {
+                    text: "Back"
+                    padding: 12; leftPadding: 26; rightPadding: 26
+                    onClicked: root.step = -2
+                    contentItem: QQC2.Label {
+                        text: parent.text; color: root.text
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 9; color: parent.down ? root.cardUp : "transparent"
+                        border.width: 1; border.color: root.line
+                    }
                 }
-                background: Rectangle {
-                    radius: 9; color: parent.down ? root.cardUp : "transparent"
-                    border.width: 1; border.color: root.line
+                QQC2.Button {
+                    text: "Set it up"
+                    padding: 13; leftPadding: 40; rightPadding: 40
+                    onClicked: root.step = 0
+                    contentItem: QQC2.Label {
+                        text: parent.text
+                        color: root.accentText
+                        font.pixelSize: 15; font.weight: Font.DemiBold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 9
+                        color: parent.down ? Qt.darker(root.accent, 1.15) : root.accent
+                    }
                 }
             }
         }
@@ -384,7 +412,7 @@ QQC2.ApplicationWindow {
     // are not yet true are not on this page.
     Item {
         anchors.fill: parent
-        visible: root.step === -1
+        visible: root.step === -2
 
         ColumnLayout {
             anchors.centerIn: parent
@@ -522,7 +550,7 @@ QQC2.ApplicationWindow {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: 14
                 QQC2.Button {
-                    text: "Built on"
+                    text: "Back"
                     padding: 12; leftPadding: 26; rightPadding: 26
                     onClicked: root.step = -3
                     contentItem: QQC2.Label {
@@ -537,24 +565,9 @@ QQC2.ApplicationWindow {
                     }
                 }
                 QQC2.Button {
-                    text: "Back"
-                    padding: 12; leftPadding: 26; rightPadding: 26
-                    onClicked: root.step = -2
-                    contentItem: QQC2.Label {
-                        text: parent.text; color: root.text
-                        font.pixelSize: 14
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    background: Rectangle {
-                        radius: 9; color: parent.down ? root.cardUp : "transparent"
-                        border.width: 1; border.color: root.line
-                    }
-                }
-                QQC2.Button {
-                    text: "Set it up"
+                    text: "Continue"
                     padding: 13; leftPadding: 40; rightPadding: 40
-                    onClicked: root.step = 0
+                    onClicked: root.step = -1
                     contentItem: QQC2.Label {
                         text: parent.text
                         color: root.accentText
@@ -573,7 +586,7 @@ QQC2.ApplicationWindow {
 
     Item {
         anchors.fill: parent
-        visible: root.step === -2
+        visible: root.step === -3
 
         ColumnLayout {
             anchors.centerIn: parent
@@ -652,7 +665,7 @@ QQC2.ApplicationWindow {
                 padding: 13
                 leftPadding: 40
                 rightPadding: 40
-                onClicked: root.step = -1
+                onClicked: root.step = -2
                 contentItem: QQC2.Label {
                     text: parent.text
                     color: root.accentText
