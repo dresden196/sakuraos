@@ -28,6 +28,24 @@ the site.
 | Private by default | Installer tour, site | **Done** as stated. Nothing here phones home. The only telemetry is KDE's, off unless switched on. |
 | UI first, terminal second | Installer tour, site | **Done** in the sense claimed: install, update, roll back and manage software without a terminal. |
 
+## Installing beside another system
+
+Verified against a disk built to look like a machine with Windows on it: an
+EFI system partition with a bootloader in it, a data partition with a file in
+it, and unallocated space after them.
+
+After installing in alongside mode:
+
+- the data partition and its contents are untouched
+- the bootloader in the shared ESP is byte-for-byte what it was
+- SakuraOS is in the free space, as a new partition at the next free number
+- the boot menu offers SakuraOS, SakuraOS Recovery and Windows Boot Manager,
+  and every path it points at exists
+
+Not yet verified: actually booting the alongside install, or booting the other
+system from that menu. The configuration is right and every file it references
+is present, but that is not the same as having watched it start.
+
 ## Before any public build
 
 1. Everything above reads **Done**.
