@@ -1106,7 +1106,11 @@ QQC2.ApplicationWindow {
                 wrapMode: Text.WordWrap
                 visible: !backend.loadingInstalled
                 text: backend.installed.length + " applications, from every source. "
-                        + "System packages are not listed: this is what you installed, not what SakuraOS is made of."
+                        // Not "what you installed": most of these arrived
+                        // with the system rather than by anyone choosing
+                        // them, now that the list no longer filters on
+                        // install reason.
+                        + "Libraries and system packages are not listed."
                 color: root.dim; font.pixelSize: 14
             }
             // Updates first, because it is the only thing on this page that
