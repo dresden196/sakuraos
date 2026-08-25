@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 CONFIG = os.environ.get("SAKURA_SNAPPER_CONFIG", "root")
 # Long enough to be recognisable in a list a year from now, short enough to
@@ -66,7 +67,26 @@ def main() -> int:
         print("restore point deleted")
         return 0
 
-    return fail("usage: sakura-snapshot-manage create <description> | delete <number>")
+    # Ask the boot watchdog to start in recovery next time. Same mechanism the
+    # watchdog uses when it decides for itself, so there is one path into
+    # recovery rather than two that can disagree.
+    if args == ["recovery-next"]:
+        state = Path("/boot/EFI/sakura/state")
+        if not state.is_dir():
+            return fail("this system has no recovery state directory")
+        (state / "recovery-request").write_text("1\n")
+        os.sync()
+        print("recovery will start on the next boot")
+        return 0
+
+    if args == ["recovery-cancel"]:
+        (Path("/boot/EFI/sakura/state") / "recovery-request").unlink(missing_ok=True)
+        os.sync()
+        print("cancelled")
+        return 0
+
+    return fail("usage: sakura-snapshot-manage create <description> "
+                "| delete <number> | recovery-next | recovery-cancel")
 
 
 if __name__ == "__main__":

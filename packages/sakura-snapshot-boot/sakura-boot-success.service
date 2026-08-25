@@ -1,0 +1,20 @@
+[Unit]
+Description=Mark this boot as successful
+Documentation=file:///usr/lib/sakura/snapshot-boot/sakura-boot-success
+# After the display manager, because reaching it is what this counts as
+# success. DefaultDependencies stays on: if the boot is going badly enough
+# that basic targets fail, this must not run.
+After=display-manager.service graphical.target
+Wants=display-manager.service
+ConditionPathExists=/boot/EFI/sakura/state
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/sakura/snapshot-boot/sakura-boot-success
+# Long enough for the settle inside the script, short enough that a hung
+# check cannot sit in the boot transaction indefinitely.
+TimeoutStartSec=120
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical.target

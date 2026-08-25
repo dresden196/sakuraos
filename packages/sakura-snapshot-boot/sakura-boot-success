@@ -1,0 +1,43 @@
+#!/bin/sh
+# Clear the failed-boot counter once this boot has demonstrably worked.
+#
+# "Worked" is the whole question. Clearing at the wrong moment makes the
+# watchdog either useless or actively annoying, and there is no way to split
+# the difference:
+#
+#   Too early -- say, as soon as systemd finishes -- and a machine whose
+#   display manager crashes in a loop clears its own counter every time and
+#   never offers recovery.
+#
+#   Too late -- waiting for somebody to log in -- and a machine left sitting
+#   at its login screen looks like a failure. Boot it three times without
+#   logging in and it offers to repair a system that is working perfectly.
+#
+# So: the display manager has to be up, and still up a little later. That is
+# the same line Windows draws, and it catches what actually goes wrong --
+# kernel, initramfs, systemd, graphics, display manager -- while leaving a
+# machine nobody logged into alone.
+#
+# A desktop that crashes *after* login is a real failure this does not catch.
+# That one has a working system to ask from, and the Update Center offers
+# "start in recovery next time" for it.
+set -eu
+
+STATE=/boot/EFI/sakura/state
+SETTLE="${SAKURA_BOOT_SETTLE:-25}"
+
+# Nothing to do on a machine with no counter yet.
+[ -d "$STATE" ] || exit 0
+
+if ! systemctl is-active --quiet display-manager.service; then
+    exit 0
+fi
+
+sleep "$SETTLE"
+
+# Still up. A display manager that died during the settle leaves the count
+# alone, so the next boot adds to it.
+systemctl is-active --quiet display-manager.service || exit 0
+
+echo 0 > "$STATE/boot-count"
+sync

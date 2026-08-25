@@ -471,7 +471,7 @@ chmod 440 /etc/sudoers.d/10-wheel
 # what bluedevil talks to -- the Plasma page is inert without it.
 systemctl enable sddm NetworkManager sakura-updates.timer \
     bluetooth.service cups.socket snapd.socket \
-    sakura-store-updates.timer >/dev/null 2>&1
+    sakura-store-updates.timer sakura-boot-success.service >/dev/null 2>&1
 # The other half of application updates: AppImages live in a home directory,
 # so that timer is a user one and is enabled for every account created from
 # here on.
@@ -500,6 +500,11 @@ mkinitcpio -P
 # that relying solely on efibootmgr is how a machine becomes unbootable.
 cp /usr/share/limine/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI
 cp /usr/share/limine/BOOTX64.EFI /boot/EFI/sakura/limine.efi
+
+# Where the boot watchdog keeps its count. Created here so the first boot
+# has somewhere to write, and so sakura-boot-success has something to clear.
+install -d /mnt/boot/EFI/sakura/state
+echo 0 > /mnt/boot/EFI/sakura/state/boot-count
 
 sakura-boot-entries
 

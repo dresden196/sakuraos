@@ -6,6 +6,13 @@ build() {
     add_binary findfs
     add_binary mountpoint
     add_binary sync
+    # The boot counter lives on the ESP, so this image has to be able to mount
+    # a FAT filesystem. base provides mount, but not necessarily the module.
+    add_binary mount
+    add_binary umount
+    add_module vfat
+    add_module nls_cp437
+    add_module nls_iso8859-1
 
     add_file /usr/lib/sakura/snapshot-boot/lib.sh
     add_file /usr/lib/sakura/snapshot-boot/sakura-rollback
@@ -18,9 +25,12 @@ help() {
     cat <<'HELPEOF'
 Provides the SakuraOS recovery picker.
 
-Only activates when the kernel command line contains sakura.recovery, which is
-set on the recovery image and never on the normal one. Including this hook in
-the normal image is therefore harmless, and keeping the two images built from
-one preset is what stops them drifting apart.
+Both images carry it, and it does three things on every boot: honours
+sakura.recovery on the command line, carries out a rollback the desktop asked
+for, and counts boots so that a machine which repeatedly fails to reach a
+working desktop offers recovery by itself.
+
+The count is kept on the ESP rather than in the root filesystem, because the
+root filesystem is the thing most likely to be broken when this matters.
 HELPEOF
 }

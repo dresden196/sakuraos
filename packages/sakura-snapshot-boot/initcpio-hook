@@ -1,62 +1,154 @@
 #!/usr/bin/ash
-# mkinitcpio runtime hook: hand control to the recovery picker.
-
-# A rollback asked for from the desktop, carried out on the next boot.
+# mkinitcpio runtime hook: recovery, and the things that decide to enter it.
 #
-# This runs before the root filesystem is mounted, not after. The first
-# attempt used a late hook -- cheaper, because the request is just a file on
-# an already-mounted root -- and then had to unmount that root to hand over to
-# the recovery environment, which is the only place a root subvolume can be
-# replaced. Unmounting a root the kernel has just mounted is not something to
-# depend on, and when it silently failed the rollback simply never happened.
+# Three ways in, checked in this order on every boot:
 #
-# So the cost is paid instead: the btrfs top level is mounted read-only, one
-# file is checked, and it is unmounted again. That is a single mount of a
-# device the kernel has already scanned, on every boot, to make the recovery
-# story work at all.
-sakura_pending_rollback() {
-    local dev want top=/sakura-check
-    # SAKURA_ROOT_SUBVOL and SAKURA_ROLLBACK_REQUEST live here, so the hook
-    # and the picker cannot drift apart on where the request is kept.
-    . /usr/lib/sakura/snapshot-boot/lib.sh
+#   1. sakura.recovery on the kernel command line -- the Recovery entry in the
+#      boot menu, chosen deliberately.
+#   2. A request left by the desktop: either "roll back to this restore point"
+#      or "start in recovery next time".
+#   3. Too many boots in a row that never reached a working desktop.
+#
+# The third is the one that matters. A recovery environment nobody knows to
+# ask for is not a safety net, and somebody whose machine will not boot is in
+# no position to read documentation about boot menus.
 
-    # Which disk. The root= parameter is there on every boot, unlike
-    # sakura.root=, which only the recovery image carries.
+# Where the count and the requests live. On the ESP, not in the root
+# filesystem: this has to work when the root filesystem is the thing that is
+# broken, and the ESP is the one partition that must be readable for the
+# machine to have got this far at all.
+SAKURA_STATE_DIR="/sakura-esp/EFI/sakura/state"
+
+# Boots that reached the initramfs but never reached a working desktop before
+# recovery offers itself. Two is what Windows uses. Three, because a person
+# who holds the power button twice in a row while impatient has not had a
+# failure, and offering recovery to them teaches that the warning is noise.
+SAKURA_FAIL_THRESHOLD=3
+
+sakura_log() {
+    # kmsg, not console: this runs before there is a journal, and on a machine
+    # that then boots normally a console message scrolls past unread.
+    echo "sakura-recovery: $*" > /dev/kmsg 2>/dev/null || true
+}
+
+# Mount the ESP read-write at /sakura-esp. Returns non-zero if it cannot,
+# which is never fatal: a boot counter that cannot be read must not stop a
+# machine that would otherwise start.
+sakura_esp_mount() {
+    local dev
+    dev=$(findfs LABEL=SAKURA_ESP 2>/dev/null)
+    [ -n "$dev" ] && [ -b "$dev" ] || return 1
+    mkdir -p /sakura-esp
+    mount -t vfat -o rw "$dev" /sakura-esp 2>/dev/null || return 1
+    return 0
+}
+
+sakura_esp_umount() {
+    sync
+    umount /sakura-esp 2>/dev/null || true
+}
+
+# The disk holding the system, for handing to the picker. root= is on every
+# boot; sakura.root= is only on the recovery image's command line.
+sakura_root_device() {
+    local arg dev=""
     for arg in $(cat /proc/cmdline); do
         case "$arg" in
             root=*) dev="${arg#root=}" ;;
         esac
     done
-    # Progress goes to /dev/kmsg, not /dev/console: this runs before there is
-    # any journal, and a console message on a machine that then boots normally
-    # scrolls away before anyone can read it. kmsg survives into dmesg.
-    sakura_log() { echo "sakura-recovery: $*" > /dev/kmsg 2>/dev/null || true; }
-
-    [ -n "$dev" ] || { sakura_log "no root= on the command line"; return 0; }
+    [ -n "$dev" ] || return 1
     case "$dev" in
         UUID=*|LABEL=*|PARTUUID=*) dev=$(findfs "$dev" 2>/dev/null) ;;
     esac
-    [ -n "$dev" ] && [ -b "$dev" ] || {
-        sakura_log "could not resolve the root device"; return 0; }
+    [ -n "$dev" ] && [ -b "$dev" ] || return 1
+    printf '%s' "$dev"
+}
+
+# Read a counter file with the shell alone. head, tr and ls are not in this
+# initramfs, and a missing tool inside a command substitution is
+# indistinguishable from an empty result -- which has cost a day already.
+sakura_read_count() {
+    local n=""
+    [ -f "$SAKURA_STATE_DIR/boot-count" ] || { printf '0'; return; }
+    read -r n < "$SAKURA_STATE_DIR/boot-count" 2>/dev/null || n=""
+    case "$n" in
+        ''|*[!0-9]*) n=0 ;;
+    esac
+    printf '%s' "$n"
+}
+
+# Hand over to the picker. Never returns: the picker reboots either way, so a
+# failure here cannot fall through into mounting a root filesystem somebody
+# has just asked to replace.
+sakura_enter_recovery() {
+    local dev
+    dev=$(sakura_root_device) || {
+        sakura_log "cannot identify the root device; continuing to boot"
+        return 1
+    }
+    sakura_log "entering recovery: $1"
+    export SAKURA_ROOT_DEV="$dev"
+    export SAKURA_RECOVERY_REASON="$1"
+    /usr/lib/sakura/snapshot-boot/sakura-recovery-menu
+}
+
+# Count this boot, and decide whether the last few went badly enough to offer
+# recovery. Also handles an explicit request from the desktop.
+sakura_boot_watchdog() {
+    local count reason=""
+
+    sakura_esp_mount || {
+        sakura_log "could not read the boot state; not counting this boot"
+        return 0
+    }
+    mkdir -p "$SAKURA_STATE_DIR" 2>/dev/null
+
+    if [ -f "$SAKURA_STATE_DIR/recovery-request" ]; then
+        reason="you asked for it"
+        rm -f "$SAKURA_STATE_DIR/recovery-request"
+    fi
+
+    count=$(sakura_read_count)
+    count=$((count + 1))
+
+    if [ -z "$reason" ] && [ "$count" -gt "$SAKURA_FAIL_THRESHOLD" ]; then
+        reason="this machine has not started properly $SAKURA_FAIL_THRESHOLD times"
+    fi
+
+    # The count is cleared before entering recovery, not after. Leaving it
+    # high would send the next boot straight back here, which is a machine
+    # trapped in its own recovery environment -- a worse failure than the one
+    # being recovered from.
+    if [ -n "$reason" ]; then
+        echo 0 > "$SAKURA_STATE_DIR/boot-count" 2>/dev/null
+    else
+        echo "$count" > "$SAKURA_STATE_DIR/boot-count" 2>/dev/null
+    fi
+    sakura_esp_umount
+
+    [ -n "$reason" ] || return 0
+    sakura_enter_recovery "$reason"
+}
+
+# A rollback asked for from the desktop, carried out on the next boot.
+#
+# This runs before the root filesystem is mounted. An earlier version used a
+# late hook -- cheaper, since the request is a file on an already-mounted root
+# -- and then had to unmount that root to hand over, which is not something to
+# depend on: when it silently failed the rollback simply never happened.
+sakura_pending_rollback() {
+    local dev want top=/sakura-check
+    . /usr/lib/sakura/snapshot-boot/lib.sh
+
+    dev=$(sakura_root_device) || return 0
 
     mkdir -p "$top"
-    # subvolid=5 is the top level, where @ lives alongside the snapshots.
-    sakura_log "root device resolves to $dev"
-    # Read-write, deliberately. A read-only btrfs mount cannot replay the log
-    # tree, so anything written shortly before the reboot is simply not there
-    # -- which is exactly what happened: @/etc was visible and the request
-    # file written moments earlier was not. Mounting rw replays the log and
-    # sees the filesystem as it actually is.
     if ! mount -t btrfs -o rw,subvolid=5 "$dev" "$top" 2>/dev/null; then
         sakura_log "could not read the top level of $dev"
         return 0
     fi
 
-    # Read with the shell alone. The initramfs is a minimal busybox: head, tr
-    # and even ls are not there, and a missing tool in a command substitution
-    # is indistinguishable from an empty result -- which is what happened. The
-    # file was found every time and the snapshot number silently came back
-    # empty, so the rollback was skipped and the request left in place.
     want=""
     if [ -f "$top/$SAKURA_ROOT_SUBVOL/$SAKURA_ROLLBACK_REQUEST" ]; then
         read -r want < "$top/$SAKURA_ROOT_SUBVOL/$SAKURA_ROLLBACK_REQUEST" || want=""
@@ -64,37 +156,34 @@ sakura_pending_rollback() {
             ''|*[!0-9]*) want="" ;;
         esac
     fi
-
     umount "$top" 2>/dev/null
     rmdir "$top" 2>/dev/null
 
-    [ -n "$want" ] || { sakura_log "no rollback pending"; return 0; }
-    sakura_log "rollback to restore point $want pending"
+    [ -n "$want" ] || return 0
 
-    echo "sakura: restoring the point you chose before starting up" > /dev/console
-    # The picker mounts the top level itself, read-write, removes the request
-    # so a failure cannot repeat on every boot, and reboots either way.
-    SAKURA_ROOT_DEV="$dev" SAKURA_ROLLBACK_TARGET="$want" \
-        /usr/lib/sakura/snapshot-boot/sakura-recovery-menu
+    # Exported rather than prefixed to the call: a prefix on a *function*
+    # sets it in the current shell, and whether the child process started
+    # inside that function inherits it is not something to rely on.
+    export SAKURA_ROLLBACK_TARGET="$want"
+    sakura_enter_recovery "restoring the point you chose"
 }
 
 run_hook() {
-    # Before anything else: a rollback the user asked for has to happen while
-    # the root subvolume is still unmounted.
-    sakura_pending_rollback
-
-    # Both images carry this hook -- the preset adds it to the normal one with
-    # default_options -- so the flag on the kernel command line is what
-    # distinguishes them. Without it, boot proceeds untouched.
+    # The Recovery entry in the boot menu. Deliberate, so nothing else needs
+    # checking first.
     local arg
     for arg in $(cat /proc/cmdline); do
         case "$arg" in
             sakura.recovery|sakura.recovery=*)
-                # Never returns: the picker reboots either way, so a failure
-                # here cannot fall through into mounting a root filesystem
-                # that the user just asked to replace.
                 /usr/lib/sakura/snapshot-boot/sakura-recovery-menu
+                return
                 ;;
         esac
     done
+
+    # Order matters. A rollback the user asked for is a specific instruction
+    # and takes precedence over the watchdog's guess that something is wrong
+    # -- and it is very likely why the last boot failed in the first place.
+    sakura_pending_rollback
+    sakura_boot_watchdog
 }

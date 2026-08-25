@@ -44,6 +44,13 @@ main() {
     say "  SakuraOS Recovery"
     say "  ================="
     say ""
+    # Why this appeared. Somebody who chose Recovery from the boot menu knows;
+    # somebody whose machine brought them here does not, and "your computer
+    # did not start properly" is the difference between a tool and an omen.
+    if [ -n "${SAKURA_RECOVERY_REASON:-}" ]; then
+        say "  Started because $SAKURA_RECOVERY_REASON."
+        say ""
+    fi
 
     _spec=$(find_root_device) || {
         say "  Could not tell which disk holds your system."
