@@ -6,4 +6,4 @@ Exec=/usr/lib/sakura/wine/sakura-windows-app %f
 Icon=application-x-ms-dos-executable
 Terminal=false
 NoDisplay=true
-MimeType=application/x-ms-dos-executable;application/x-msdownload;application/x-msi;application/vnd.microsoft.portable-executable;
+MimeType=application/x-ms-dos-executable;application/x-msdownload;application/x-msi;application/vnd.microsoft.portable-executable;application/x-ms-shortcut;application/x-bat;application/x-mswinurl;application/x-wine-extension-msp;
