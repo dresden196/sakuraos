@@ -403,6 +403,12 @@ if includes[0] > cores[0]:
 p.write_text(text)
 PYCONF
 
+# Worked out here, not inside the chroot. The heredoc below is expanded by
+# this shell, so a variable the chroot would have to compute for itself has to
+# exist here first -- and under set -u, one that does not stops the install at
+# the very last step, after everything has been downloaded and written.
+LANG_CODE="${LOCALE%%.*}"
+
 arch-chroot /mnt /bin/bash -euo pipefail <<CHROOT
 locale-gen >/dev/null
 
@@ -438,7 +444,7 @@ install -d -o "$USERNAME" -g "$USERNAME" "/home/$USERNAME/.config"
 #
 # This is the file KDE's own Region & Language page writes, so changing it
 # there later works normally and does not fight anything we did here.
-LANG_CODE="${LOCALE%%.*}"
+
 cat > "/home/$USERNAME/.config/plasma-localerc" <<LOCALERC
 [Formats]
 LANG=$LOCALE
