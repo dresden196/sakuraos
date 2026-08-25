@@ -37,6 +37,9 @@ class SakuraSettings : public KQuickConfigModule
     Q_PROPERTY(bool wineEnabled READ wineEnabled NOTIFY wineChanged)
     Q_PROPERTY(bool wineBusy READ wineBusy NOTIFY wineChanged)
     Q_PROPERTY(QString wineStatus READ wineStatus NOTIFY wineChanged)
+    // The Windows programs that have actually been run, each in its own
+    // prefix. Read from the same place the guard writes it.
+    Q_PROPERTY(QVariantList windowsApps READ windowsApps NOTIFY windowsAppsChanged)
 
     Q_PROPERTY(bool storeAutoUpdate READ storeAutoUpdate
                WRITE setStoreAutoUpdate NOTIFY changed)
@@ -73,6 +76,9 @@ public:
     QString wineStatus() const { return m_wineStatus; }
     Q_INVOKABLE void setWineEnabled(bool value);
     Q_INVOKABLE void refreshWine();
+    QVariantList windowsApps() const { return m_windowsApps; }
+    Q_INVOKABLE void refreshWindowsApps();
+    Q_INVOKABLE void removeWindowsApp(const QString &slug);
     void setUpdatesAutoApply(bool value);
     void setStoreAutoUpdate(bool value);
 
@@ -94,6 +100,7 @@ public:
 Q_SIGNALS:
     void changed();
     void wineChanged();
+    void windowsAppsChanged();
     void saveErrorChanged();
 
 private:
@@ -110,6 +117,7 @@ private:
     bool m_wineEnabled = false;
     bool m_wineBusy = false;
     QString m_wineStatus;
+    QVariantList m_windowsApps;
     bool m_updatesRequireCanary = true;
     bool m_updatesRequireAC = true;
     QString m_updatesWindow;

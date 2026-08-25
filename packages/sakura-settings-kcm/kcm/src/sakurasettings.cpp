@@ -1,5 +1,6 @@
 #include "sakurasettings.h"
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QJsonDocument>
 
 #include <KConfig>
@@ -215,6 +216,7 @@ void SakuraSettings::setUpdatesWindow(const QString &value)
 
 namespace {
 const char WINE_HELPER[] = "/usr/lib/sakura/wine/sakura-wine";
+const char WINE_GUARD[] = "/usr/lib/sakura/wine/sakura-windows-app";
 }
 
 void SakuraSettings::refreshWine()
@@ -233,6 +235,39 @@ void SakuraSettings::refreshWine()
     const QString version = o[QStringLiteral("version")].toString();
     m_wineStatus = m_wineEnabled && !version.isEmpty() ? version : QString();
     Q_EMIT wineChanged();
+    refreshWindowsApps();
+}
+
+void SakuraSettings::refreshWindowsApps()
+{
+    // Runs as the user, not through pkexec: the prefixes are in the user's
+    // own home and removing one needs no more privilege than deleting a
+    // directory, because that is all it is.
+    m_windowsApps.clear();
+    QProcess p;
+    p.start(QString::fromLatin1(WINE_GUARD), {QStringLiteral("--list")});
+    if (p.waitForFinished(5000)) {
+        const QJsonArray apps =
+            QJsonDocument::fromJson(p.readAllStandardOutput()).array();
+        for (const QJsonValue &v : apps) {
+            const QJsonObject o = v.toObject();
+            m_windowsApps.append(QVariantMap{
+                {QStringLiteral("slug"), o[QStringLiteral("slug")].toString()},
+                {QStringLiteral("name"), o[QStringLiteral("name")].toString()},
+                {QStringLiteral("prefix"), o[QStringLiteral("prefix")].toString()},
+            });
+        }
+    }
+    Q_EMIT windowsAppsChanged();
+}
+
+void SakuraSettings::removeWindowsApp(const QString &slug)
+{
+    QProcess p;
+    p.start(QString::fromLatin1(WINE_GUARD),
+            {QStringLiteral("--remove"), slug});
+    p.waitForFinished(30000);
+    refreshWindowsApps();
 }
 
 void SakuraSettings::setWineEnabled(bool value)

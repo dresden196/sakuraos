@@ -16,3 +16,13 @@ written against apt and Zorin's own packages, neither of which exists on an
 Arch-based system. The idea -- that double-clicking "Firefox Setup.exe" on
 Linux is somebody trying to get Firefox rather than somebody trying to use
 Wine, and that the right answer is to offer them Firefox -- is theirs.
+
+Design note: one prefix per application
+---------------------------------------
+The separate-prefix model is Bottles' (usebottles.com, GPL-3.0), reached via
+zorin-windows-app-support 2.0, which installs Bottles from Flathub alongside
+Wine. Bottles itself is not shipped -- it is a GTK4/libadwaita Flatpak, and on
+Plasma it looks like a guest -- and this is not a reimplementation of it. It
+takes one idea: an application gets its own prefix, so removing it is deleting
+a directory. Bottles does runner management, dependency installation and
+sandboxing; this does not.

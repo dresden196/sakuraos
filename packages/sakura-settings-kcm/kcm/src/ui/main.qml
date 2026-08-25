@@ -17,6 +17,39 @@ KCM.SimpleKCM {
         visible: cfg.saveError !== ""
     }
 
+    // Removing a Windows program deletes the prefix it lives in, and that
+    // takes everything it installed with it. Worth asking first.
+    Kirigami.PromptDialog {
+        id: confirmRemove
+
+        property string slug: ""
+        property string appName: ""
+
+        function ask(app) {
+            slug = app.slug;
+            appName = app.name !== "" ? app.name : app.slug;
+            open();
+        }
+
+        title: i18n("Remove %1?", appName)
+        subtitle: i18n("This deletes the Windows environment it runs in, "
+                     + "along with anything it saved there. Files in your "
+                     + "home folder are not touched.")
+        standardButtons: Kirigami.Dialog.NoButton
+        customFooterActions: [
+            Kirigami.Action {
+                text: i18n("Remove")
+                icon.name: "edit-delete"
+                onTriggered: { cfg.removeWindowsApp(confirmRemove.slug); confirmRemove.close(); }
+            },
+            Kirigami.Action {
+                text: i18n("Cancel")
+                icon.name: "dialog-cancel"
+                onTriggered: confirmRemove.close()
+            }
+        ]
+    }
+
     Kirigami.FormLayout {
         id: form
 
@@ -167,6 +200,41 @@ KCM.SimpleKCM {
             font: Kirigami.Theme.smallFont
             // The part that makes this better than installing Wine yourself.
             text: i18n("Opening a Windows program asks first. Where a Linux version of the same application exists, SakuraOS offers that instead \u2014 running an installer through a compatibility layer is rarely what anybody actually wanted.")
+        }
+
+        // Each Windows program runs in its own prefix, so this list is also
+        // the uninstall: removing one is deleting its directory, with nothing
+        // of it left behind in a shared one.
+        QQC2.Label {
+            visible: cfg.wineEnabled && cfg.windowsApps.length > 0
+            Kirigami.FormData.label: i18n("Installed:")
+            font: Kirigami.Theme.smallFont
+            color: Kirigami.Theme.disabledTextColor
+            text: i18np("%1 Windows program", "%1 Windows programs",
+                        cfg.windowsApps.length)
+        }
+
+        Repeater {
+            model: cfg.wineEnabled ? cfg.windowsApps : []
+            delegate: RowLayout {
+                required property var modelData
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 24
+                spacing: Kirigami.Units.smallSpacing
+
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    text: modelData.name !== "" ? modelData.name : modelData.slug
+                }
+                QQC2.ToolButton {
+                    icon.name: "edit-delete"
+                    text: i18n("Remove")
+                    display: QQC2.AbstractButton.IconOnly
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: i18n("Remove this program and everything it installed")
+                    onClicked: confirmRemove.ask(modelData)
+                }
+            }
         }
 
         // ---- Updates ------------------------------------------------------

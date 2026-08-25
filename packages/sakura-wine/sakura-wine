@@ -28,13 +28,22 @@ import sys
 PACKAGES = ["wine", "wine-mono", "wine-gecko"]
 
 # What a Windows executable is, as far as the desktop is concerned. All four
-# are in the shared MIME database already; between them they cover .exe, .msi
-# and the older DOS binaries.
+# are in the shared MIME database already; between them they cover .exe, .msi,
+# .msp, .lnk, .bat, .url and the older DOS binaries.
+#
+# The last four matter more than they look. Wine's own desktop entries claim
+# them, so leaving them out does not mean "we ignore those files" -- it means
+# Wine handles them directly and the guard never sees them. A .bat opened from
+# a download would have run with no warning at all.
 MIME_TYPES = [
     "application/x-ms-dos-executable",
     "application/x-msdownload",
     "application/x-msi",
     "application/vnd.microsoft.portable-executable",
+    "application/x-ms-shortcut",
+    "application/x-bat",
+    "application/x-mswinurl",
+    "application/x-wine-extension-msp",
 ]
 
 HANDLER = "org.sakuraos.windows-app.desktop"

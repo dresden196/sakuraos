@@ -25,6 +25,141 @@ DB = Path(os.environ.get("SAKURA_APP_DB",
                          "/usr/share/sakura/wine/app_db.json"))
 
 
+# One prefix per application, rather than the single shared ~/.wine that Wine
+# gives you by default. This is the idea worth taking from Bottles: a shared
+# prefix means one program's DLL overrides, installed runtimes and registry
+# edits are also every other program's, so fixing one app breaks another and
+# there is no way to undo an install except to delete everything.
+HOME = Path(os.environ.get("SAKURA_WINE_HOME") or
+            Path(os.environ.get("XDG_DATA_HOME",
+                                Path.home() / ".local/share")) / "sakura/wine")
+REGISTRY = HOME / "apps.json"
+
+# Version numbers and architecture tags in installer filenames: dropped so
+# that "Firefox Setup 133.0.exe" and "Firefox Setup 134.0.exe" land in the
+# same prefix instead of accumulating one per upgrade.
+VERSIONISH = re.compile(
+    r"[-_. ]+(v?\d[\d.]*|x64|x86|win32|win64|amd64|setup|installer|inst)$",
+    re.IGNORECASE)
+
+
+def slug_for(entry: dict | None, filename: str) -> str:
+    """A stable identity for the application this file belongs to.
+
+    When the database knows the file we use the application's name, which is
+    already version-free -- that is the whole reason to prefer it over the
+    filename.
+    """
+    base = (entry or {}).get("name") or Path(filename).stem
+    if not (entry or {}).get("name"):
+        previous = None
+        while previous != base:
+            previous, base = base, VERSIONISH.sub("", base)
+    slug = re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-")
+    return slug or "windows-app"
+
+
+# Installers that carry no identity in their name at all. Two unrelated
+# programs both shipped as "setup.exe" sharing one prefix is precisely the
+# collision separate prefixes exist to avoid, so these get told apart by
+# what is in the file instead.
+GENERIC = {"setup", "install", "installer", "windows-app", "update",
+           "updater", "launcher", "start", "main", "app", "program"}
+
+
+def unique_slug(entry: dict | None, path: Path) -> str:
+    slug = slug_for(entry, path.name)
+    if entry or slug not in GENERIC:
+        return slug
+    return f"{slug}-{_fingerprint(path)}"
+
+
+def _fingerprint(path: Path) -> str:
+    """Enough of the file to tell two installers apart, and stable for one.
+
+    Size plus the head of the file: reading the whole of a 4 GB installer to
+    decide where to put it would be its own kind of wrong.
+    """
+    import hashlib
+    h = hashlib.sha256()
+    try:
+        h.update(str(path.stat().st_size).encode())
+        with path.open("rb") as fh:
+            h.update(fh.read(65536))
+    except OSError:
+        h.update(path.name.encode())
+    return h.hexdigest()[:8]
+
+
+def display_name(entry: dict | None, filename: str) -> str:
+    """What to call this program in a list a person reads.
+
+    The slug is for directories; this is for the eye. Same version-stripping,
+    but kept readable -- "AcmeWidget_v2.1_x64.exe" is a filename, "AcmeWidget"
+    is what somebody looking for it in a list would expect to see.
+    """
+    if (entry or {}).get("name"):
+        return entry["name"]
+    base = Path(filename).stem
+    previous = None
+    while previous != base:
+        previous, base = base, VERSIONISH.sub("", base)
+    return re.sub(r"[_.]+", " ", base).strip() or Path(filename).stem
+
+
+def load_registry() -> dict:
+    try:
+        return json.loads(REGISTRY.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def save_registry(reg: dict) -> None:
+    try:
+        HOME.mkdir(parents=True, exist_ok=True)
+        REGISTRY.write_text(json.dumps(reg, indent=2, sort_keys=True) + "\n",
+                            encoding="utf-8")
+    except OSError:
+        # Losing the list is not a reason to refuse to run the program.
+        pass
+
+
+def record(slug: str, name: str, source: Path, prefix: Path) -> None:
+    reg = load_registry()
+    entry = reg.setdefault(slug, {"added": _now()})
+    entry.update({"name": name, "source": str(source),
+                  "prefix": str(prefix), "lastRun": _now()})
+    save_registry(reg)
+
+
+def _now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def wine_command(path: Path) -> list[str]:
+    """How to hand this file to Wine.
+
+    Measured, not assumed: `wine file.msi` and `wine file.bat` both work --
+    Wine's loader recognises them and reaches for msiexec or cmd itself. So
+    this table is not fixing a bug. It is here because that dispatch is
+    undocumented behaviour we would rather not depend on, because .msp needs
+    msiexec in patch mode either way, and because when something does fail it
+    is worth being able to see which loader was asked for.
+    """
+    ext = path.suffix.lower()
+    if ext == ".msi":
+        return ["wine", "msiexec", "/i", str(path)]
+    if ext == ".msp":
+        return ["wine", "msiexec", "/p", str(path)]
+    if ext in (".bat", ".cmd"):
+        return ["wine", "cmd", "/c", str(path)]
+    if ext in (".lnk", ".url"):
+        return ["wine", "start", "/unix", str(path)]
+    return ["wine", str(path)]
+
+
+
 def lookup(filename: str) -> dict | None:
     """The database entry matching this executable, if there is one.
 
@@ -75,8 +210,14 @@ def native_offer(entry: dict) -> dict | None:
 
 
 def main() -> int:
+    if len(sys.argv) == 2 and sys.argv[1] == "--list":
+        return list_apps()
+    if len(sys.argv) == 3 and sys.argv[1] == "--remove":
+        return remove_app(sys.argv[2])
     if len(sys.argv) != 2:
-        print("usage: sakura-windows-app <file.exe>", file=sys.stderr)
+        print("usage: sakura-windows-app <file.exe>\n"
+              "       sakura-windows-app --list\n"
+              "       sakura-windows-app --remove <slug>", file=sys.stderr)
         return 1
 
     target = Path(sys.argv[1]).expanduser()
@@ -86,6 +227,7 @@ def main() -> int:
 
     entry = lookup(target.name)
     offer = native_offer(entry) if entry else None
+    slug = unique_slug(entry, target)
 
     facts = {
         "file": str(target),
@@ -95,6 +237,9 @@ def main() -> int:
         "message": (entry or {}).get("mainMessage", ""),
         "offer": offer,
         "wineInstalled": have("wine"),
+        "slug": slug,
+        "display": display_name(entry, target.name),
+        "prefix": str(HOME / slug),
     }
 
     # --json for anything driving this programmatically, and for testing it
@@ -185,8 +330,71 @@ def run_with_wine(facts: dict) -> int:
                         "Windows app support is not switched on. Turn it on in "
                         "SakuraOS Settings, under Windows programs."])
         return 1
-    os.execvp("wine", ["wine", facts["file"]])
+
+    target = Path(facts["file"])
+    prefix = Path(facts["prefix"])
+    record(facts["slug"], facts["display"], target, prefix)
+
+    env = dict(os.environ)
+    env["WINEPREFIX"] = str(prefix)
+    # Wine creates the prefix itself on first use. Both runtimes are installed
+    # as packages, so it finds them locally instead of offering to download
+    # them -- which is the dialog that makes a first run look broken.
+    #
+    # winemenubuilder is deliberately left enabled. It is what writes a
+    # launcher for anything that creates a Start Menu entry, with this
+    # prefix baked into the Exec line -- which, once each app has its own
+    # prefix, is the only thing that makes an installed app launchable
+    # afterwards.
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+
+    argv = wine_command(target)
+    os.execvpe(argv[0], argv, env)
     return 1
+
+
+def list_apps() -> int:
+    reg = load_registry()
+    print(json.dumps([{"slug": k, **v} for k, v in sorted(reg.items())],
+                     indent=2))
+    return 0
+
+
+def remove_app(slug: str) -> int:
+    """Forget an application, and delete the prefix it lived in.
+
+    This is what the separate prefixes buy: removing a Windows program is
+    deleting one directory, with nothing of it left behind in a shared one.
+    """
+    import shutil
+    reg = load_registry()
+    entry = reg.get(slug)
+    if not entry:
+        print(f"no such Windows app: {slug}", file=sys.stderr)
+        return 1
+
+    prefix = Path(entry.get("prefix", ""))
+    # Only ever inside our own directory: a corrupted registry must not turn
+    # this into a delete of somewhere else.
+    if prefix.is_dir() and HOME in prefix.parents:
+        shutil.rmtree(prefix, ignore_errors=True)
+
+    # Wine writes launchers for anything with a Start Menu entry. Drop the
+    # ones belonging to this prefix, so the app menu does not keep offering a
+    # program that is gone.
+    apps = Path(os.environ.get("XDG_DATA_HOME",
+                               Path.home() / ".local/share")) / "applications"
+    for desktop in apps.rglob("*.desktop"):
+        try:
+            if str(prefix) in desktop.read_text(encoding="utf-8"):
+                desktop.unlink()
+        except OSError:
+            continue
+
+    del reg[slug]
+    save_registry(reg)
+    print(json.dumps({"removed": slug, "prefix": str(prefix)}))
+    return 0
 
 
 if __name__ == "__main__":
