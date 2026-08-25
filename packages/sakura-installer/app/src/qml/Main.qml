@@ -74,6 +74,7 @@ QQC2.ApplicationWindow {
     // ---- collected answers -------------------------------------------------
     property var answers: ({
         locale: "en_US.UTF-8",
+        diskMode: "wipe",
         encrypt: false,
         encryptPassword: "",
         encryptConfirm: "",
@@ -1375,7 +1376,7 @@ QQC2.ApplicationWindow {
             Item { Layout.preferredHeight: 34 }
             Heading {
                 title: "Where should SakuraOS go?"
-                subtitle: "Everything on the disk you choose will be erased."
+                subtitle: "Choose a disk, then choose whether to keep what is already on it."
             }
             Repeater {
                 model: backend.disks()
@@ -1384,9 +1385,86 @@ QQC2.ApplicationWindow {
                     heading: (modelData.model !== "" ? modelData.model : "Disk") + "  ·  " + modelData.sizeText
                     detail: modelData.device + (modelData.removable ? "  ·  removable" : "")
                     selected: root.answers.disk === modelData.device
-                    onPicked: { root.answers.disk = modelData.device; root.answersChanged() }
+                    onPicked: {
+                        root.answers.disk = modelData.device
+                        // A disk with nothing on it has nothing to install
+                        // beside, so the safe answer becomes the obvious one
+                        // only where it is actually a choice.
+                        var l = backend.diskLayout(modelData.device)
+                        root.answers.diskMode =
+                            (l.hasEsp && l.freeMiB >= 25600) ? "alongside" : "wipe"
+                        root.answersChanged()
+                    }
                 }
             }
+
+            // What is on the chosen disk, and therefore what the two options
+            // actually mean here. Shown only once a disk is picked, because
+            // before that it would be describing nothing.
+            ColumnLayout {
+                visible: root.answers.disk !== ""
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                spacing: 12
+                property var layout: root.answers.disk === ""
+                                     ? null : backend.diskLayout(root.answers.disk)
+
+                Choice {
+                    readonly property var l: parent.layout
+                    enabled: !!(l && l.hasEsp && l.freeMiB >= 25600)
+                    opacity: enabled ? 1 : 0.45
+                    heading: "Install alongside what is here"
+                    detail: {
+                        var l2 = parent.layout
+                        if (!l2) return ""
+                        if (!l2.hasEsp)
+                            return "Not possible: nothing on this disk boots in UEFI mode"
+                        if (l2.freeMiB < 25600)
+                            return "Not possible: only " + Math.round(l2.freeMiB / 1024)
+                                 + " GB unallocated, and 25 GB is needed"
+                        return "Uses " + Math.round(l2.freeMiB / 1024)
+                             + " GB of unallocated space"
+                             + (l2.systems.length > 0
+                                ? ", keeping " + l2.systems.join(" and ") : "")
+                    }
+                    selected: root.answers.diskMode === "alongside"
+                    onPicked: {
+                        if (!enabled) return
+                        root.answers.diskMode = "alongside"
+                        root.answersChanged()
+                    }
+                }
+                Choice {
+                    heading: "Erase the whole disk"
+                    detail: {
+                        var l3 = parent.layout
+                        return l3 && l3.systems.length > 0
+                            ? "Removes " + l3.systems.join(" and ") + " and everything else"
+                            : "Everything on this disk is replaced"
+                    }
+                    selected: root.answers.diskMode === "wipe"
+                    onPicked: { root.answers.diskMode = "wipe"; root.answersChanged() }
+                }
+
+                // Said here rather than discovered afterwards. Shrinking a
+                // Windows partition is the one step SakuraOS deliberately
+                // does not do: Windows can move its own unmovable files and
+                // we cannot, and getting it wrong costs somebody data that no
+                // restore point of ours can bring back.
+                QQC2.Label {
+                    visible: !!(parent.layout && parent.layout.freeMiB < 25600
+                                && parent.layout.systems.length > 0)
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "To keep what is here, there has to be unallocated space for "
+                        + "SakuraOS to go into. Shrink an existing partition first \u2014 from "
+                        + "Windows' own Disk Management if this machine has Windows on it \u2014 "
+                        + "then come back."
+                    color: root.dim; font.pixelSize: 12
+                    lineHeight: 1.3
+                }
+            }
+
             QQC2.Label {
                 wrapMode: Text.WordWrap
                 color: root.dim
@@ -1817,23 +1895,36 @@ QQC2.ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: warnCol.implicitHeight + 30
                 radius: 12
-                color: Qt.rgba(0.78, 0.32, 0.31, 0.16)
+                color: root.answers.diskMode === "alongside"
+                       ? root.card : Qt.rgba(0.78, 0.32, 0.31, 0.16)
                 border.width: 1
-                border.color: Qt.rgba(0.78, 0.32, 0.31, 0.55)
+                border.color: root.answers.diskMode === "alongside"
+                              ? root.line : Qt.rgba(0.78, 0.32, 0.31, 0.55)
                 ColumnLayout {
                     id: warnCol
                     anchors.left: parent.left; anchors.right: parent.right
                     anchors.top: parent.top; anchors.margins: 15
                     spacing: 5
                     QQC2.Label {
-                        text: "Everything on " + root.answers.disk + " will be erased"
-                        color: "#ff9db0"
+                        text: root.answers.diskMode === "alongside"
+                            ? "SakuraOS will be added to " + root.answers.disk
+                            : "Everything on " + root.answers.disk + " will be erased"
+                        color: root.answers.diskMode === "alongside"
+                               ? root.text : "#ff9db0"
                         font.pixelSize: 16; font.weight: Font.DemiBold
                     }
                     QQC2.Label {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: "Every file, every other operating system, and every partition on "
+                        // Two different things happen here, and the warning
+                        // has to say which. A screen that shouts about erasing
+                        // a disk it is not going to erase teaches people to
+                        // skip the warning that matters.
+                        text: root.answers.diskMode === "alongside"
+                            ? "It goes into unallocated space. Existing partitions are not "
+                            + "touched, and the systems already installed here keep working \u2014 "
+                            + "they will be offered in the boot menu alongside SakuraOS."
+                            : "Every file, every other operating system, and every partition on "
                             + "that disk. This cannot be undone, and it starts as soon as you "
                             + "press Install. Other disks in this machine are not touched."
                         color: root.dim; font.pixelSize: 13
@@ -1854,7 +1945,10 @@ QQC2.ApplicationWindow {
                         { k: "Time zone", v: root.answers.timezone },
                         { k: "Clock",     v: root.answers.hour24 ? "24-hour" : "12-hour" },
                         { k: "Appearance", v: root.answers.dark ? "Dark" : "Light" },
-                        { k: "Disk",      v: root.answers.disk },
+                        { k: "Disk",      v: root.answers.disk
+                                             + (root.answers.diskMode === "alongside"
+                                                ? "  \u00b7  installing alongside what is there"
+                                                : "  \u00b7  erasing everything") },
                         { k: "Encryption", v: root.answers.encrypt
                                               ? "On \u2014 you enter a passphrase at every start"
                                               : "Off" },

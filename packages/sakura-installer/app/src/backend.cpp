@@ -102,6 +102,66 @@ QVariantList Backend::timezoneChoices() const
     return out;
 }
 
+QVariantMap Backend::diskLayout(const QString &device) const
+{
+    QVariantMap out{
+        {QStringLiteral("freeMiB"), 0},
+        {QStringLiteral("hasEsp"), false},
+        {QStringLiteral("systems"), QStringList{}},
+    };
+    if (device.isEmpty()) {
+        return out;
+    }
+
+    // An EFI system partition already here means something else boots from
+    // this disk, and that its bootloader must not be written over.
+    const QString parts = runCapture(QStringLiteral("lsblk"),
+        {QStringLiteral("-lnpo"), QStringLiteral("NAME,PARTTYPE,PARTLABEL,FSTYPE"),
+         device});
+    QStringList systems;
+    for (const QString &line : parts.split(QLatin1Char('\n'))) {
+        const QStringList f = line.simplified().split(QLatin1Char(' '));
+        if (f.size() < 2) {
+            continue;
+        }
+        if (f.at(1).compare(QLatin1String("c12a7328-f81f-11d2-ba4b-00a0c93ec93b"),
+                            Qt::CaseInsensitive) == 0) {
+            out[QStringLiteral("hasEsp")] = true;
+        }
+        // Named by filesystem rather than by probing: ntfs almost always
+        // means Windows, and this only has to be good enough to tell somebody
+        // what they are about to keep or erase.
+        const QString fs = f.last();
+        if (fs == QLatin1String("ntfs") && !systems.contains(QStringLiteral("Windows"))) {
+            systems << QStringLiteral("Windows");
+        } else if ((fs == QLatin1String("ext4") || fs == QLatin1String("btrfs")
+                    || fs == QLatin1String("xfs"))
+                   && !systems.contains(QStringLiteral("another Linux system"))) {
+            systems << QStringLiteral("another Linux system");
+        }
+    }
+    out[QStringLiteral("systems")] = systems;
+
+    // The largest run of unallocated space. parted reports free regions as
+    // rows of their own in machine-readable mode.
+    const QString free = runCapture(QStringLiteral("parted"),
+        {QStringLiteral("-ms"), device, QStringLiteral("unit"),
+         QStringLiteral("MiB"), QStringLiteral("print"), QStringLiteral("free")});
+    double best = 0;
+    for (const QString &line : free.split(QLatin1Char('\n'))) {
+        const QStringList f = line.split(QLatin1Char(':'));
+        if (f.size() < 5 || !f.at(4).startsWith(QLatin1String("free"))) {
+            continue;
+        }
+        const double size = f.at(3).chopped(3).toDouble();   // strip "MiB"
+        if (size > best) {
+            best = size;
+        }
+    }
+    out[QStringLiteral("freeMiB")] = static_cast<int>(best);
+    return out;
+}
+
 QStringList Backend::timezones() const
 {
     // UTC is a legitimate answer and is what a machine with no configured
@@ -349,6 +409,7 @@ void Backend::install(const QVariantMap &answers)
         // to mean anything.
         QStringLiteral("--keymap"), answers[QStringLiteral("keyboard")].toString(),
         QStringLiteral("--locale"), answers[QStringLiteral("locale")].toString(),
+        QStringLiteral("--mode"), answers[QStringLiteral("diskMode")].toString(),
         QStringLiteral("--encrypt"),
         answers[QStringLiteral("encrypt")].toBool() ? QStringLiteral("on")
                                                     : QStringLiteral("off"),

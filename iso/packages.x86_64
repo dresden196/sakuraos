@@ -191,3 +191,5 @@ sbctl
 snapper
 snap-pac
 pacman-contrib
+ntfs-3g
+os-prober

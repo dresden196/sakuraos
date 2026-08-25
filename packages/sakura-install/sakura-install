@@ -20,6 +20,7 @@ LOCALE="en_US.UTF-8"
 KEYMAP="us"
 FEEDBACK="off"
 ENCRYPT="off"
+MODE="wipe"
 CRYPTPASS=""
 CRYPTPASS_STDIN=0
 SECUREBOOT="auto"
@@ -43,6 +44,7 @@ while [[ $# -gt 0 ]]; do
         --keymap)     KEYMAP="$2"; shift 2 ;;
         --feedback)   FEEDBACK="$2"; shift 2 ;;   # on | off
         --encrypt)    ENCRYPT="$2"; shift 2 ;;    # on | off
+        --mode)       MODE="$2"; shift 2 ;;        # wipe | alongside
         # Read from standard input, never taken as an argument: anything on a
         # command line is in /proc for every process on the machine to read,
         # and this is the one secret here that outlives the install.
@@ -88,25 +90,92 @@ fi
 
 # Partition naming differs between /dev/sda2 and /dev/nvme0n1p2.
 partname() { [[ "$DISK" =~ [0-9]$ ]] && echo "${DISK}p$1" || echo "${DISK}$1"; }
-ESP=$(partname 1)
-ROOT=$(partname 2)
 
-step "Partitioning $DISK"
-# Anything still holding the disk makes partitioning silently not take effect.
+# The EFI system partition already on this disk, if there is one. An installed
+# Windows or another Linux keeps its bootloader there, and reformatting it is
+# how a dual-boot install destroys the system it was supposed to sit beside.
+find_existing_esp() {
+    local part
+    for part in $(lsblk -lnpo NAME,PARTTYPE "$DISK" 2>/dev/null \
+                  | awk 'tolower($2) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" {print $1}'); do
+        printf '%s' "$part"
+        return 0
+    done
+    return 1
+}
+
+# The largest run of unallocated space, in MiB, as "start end size".
+largest_free_space() {
+    parted -ms "$DISK" unit MiB print free 2>/dev/null \
+        | awk -F: '$5 == "free;" {
+              gsub(/MiB/, "", $2); gsub(/MiB/, "", $3); gsub(/MiB/, "", $4)
+              if ($4 + 0 > best + 0) { best = $4; s = $2; e = $3 }
+          }
+          END { if (best > 0) print s, e, best }'
+}
+
 swapoff -a 2>/dev/null || true
 umount -R /mnt 2>/dev/null || true
-wipefs -af "$DISK" >/dev/null
-sgdisk --zap-all "$DISK" >/dev/null
 
-# 1 GiB ESP: a UKI is the kernel plus the whole initramfs, and there are two of
-# them (system and recovery). The usual 512 MiB runs out during a kernel
-# upgrade, which is the worst possible moment to discover it.
-sgdisk -n 1:0:+1G   -t 1:ef00 -c 1:"SAKURA_ESP"  "$DISK" >/dev/null
-sgdisk -n 2:0:0     -t 2:8304 -c 2:"SAKURA_ROOT" "$DISK" >/dev/null
-partprobe "$DISK"; udevadm settle
+if [[ "$MODE" == "alongside" ]]; then
+    step "Making room on $DISK without disturbing what is there"
 
-step "Creating filesystems"
-mkfs.fat -F32 -n SAKURA_ESP "$ESP" >/dev/null
+    ESP=$(find_existing_esp) || die "no EFI system partition found on $DISK. \
+SakuraOS can only install alongside a system that already boots in UEFI mode."
+
+    read -r FREE_START FREE_END FREE_SIZE <<<"$(largest_free_space)"
+    [[ -n "${FREE_SIZE:-}" ]] || die "no unallocated space on $DISK. \
+Shrink an existing partition first -- from Windows' own Disk Management if \
+this machine has Windows on it, which can move files SakuraOS cannot."
+    # 25 GiB is the point below which the system fits and then immediately
+    # runs out during its first update.
+    (( ${FREE_SIZE%.*} >= 25600 )) || die "only ${FREE_SIZE%.*} MiB free on $DISK; \
+SakuraOS needs at least 25 GiB."
+
+    info "reusing the existing EFI partition at $ESP"
+    info "installing into ${FREE_SIZE%.*} MiB of free space"
+
+    # -n 0: the next free partition number, so nothing existing is renumbered.
+    #
+    # One MiB short of where parted says the free space ends. When that space
+    # runs to the end of the disk, the last sectors belong to the backup GPT
+    # header, and asking for them makes sgdisk refuse the whole operation --
+    # safely, but the install stops. A MiB is far more slack than the header
+    # needs and is invisible against 25 GiB.
+    FREE_END_MIB=$(( ${FREE_END%.*} - 1 ))
+    sgdisk -n "0:${FREE_START%.*}MiB:${FREE_END_MIB}MiB" -t 0:8304 \
+        -c 0:"SAKURA_ROOT" "$DISK" >/dev/null
+    partprobe "$DISK"; udevadm settle
+
+    # Whichever partition now carries our name. Reading it back rather than
+    # assuming a number is what keeps this correct on a disk that already has
+    # partitions in an order nobody chose.
+    ROOT=$(lsblk -lnpo NAME,PARTLABEL "$DISK" \
+           | awk '$2 == "SAKURA_ROOT" {print $1; exit}')
+    [[ -n "$ROOT" && -b "$ROOT" ]] || die "could not find the partition just created"
+    step "Creating filesystems"
+    # The ESP is deliberately not formatted: it belongs to the system already
+    # installed here, and our files go alongside theirs.
+else
+    ESP=$(partname 1)
+    ROOT=$(partname 2)
+
+    step "Partitioning $DISK"
+    # Anything still holding the disk makes partitioning silently not take
+    # effect.
+    wipefs -af "$DISK" >/dev/null
+    sgdisk --zap-all "$DISK" >/dev/null
+
+    # 1 GiB ESP: a UKI is the kernel plus the whole initramfs, and there are
+    # two of them (system and recovery). The usual 512 MiB runs out during a
+    # kernel upgrade, which is the worst possible moment to discover it.
+    sgdisk -n 1:0:+1G   -t 1:ef00 -c 1:"SAKURA_ESP"  "$DISK" >/dev/null
+    sgdisk -n 2:0:0     -t 2:8304 -c 2:"SAKURA_ROOT" "$DISK" >/dev/null
+    partprobe "$DISK"; udevadm settle
+
+    step "Creating filesystems"
+    mkfs.fat -F32 -n SAKURA_ESP "$ESP" >/dev/null
+fi
 
 # Encryption, if asked for.
 #
@@ -469,13 +538,23 @@ chmod 440 /etc/sudoers.d/10-wheel
 # cups.socket rather than cups.service: socket activation means the printing
 # stack costs nothing until something actually prints. bluetooth.service is
 # what bluedevil talks to -- the Plasma page is inert without it.
-systemctl enable sddm NetworkManager sakura-updates.timer \
-    bluetooth.service cups.socket snapd.socket \
-    sakura-store-updates.timer sakura-boot-success.service >/dev/null 2>&1
-# The other half of application updates: AppImages live in a home directory,
-# so that timer is a user one and is enabled for every account created from
-# here on.
-systemctl --global enable sakura-store-updates.timer >/dev/null 2>&1
+# Enabled one at a time, and a missing one is reported rather than fatal.
+#
+# systemctl enable fails the whole list if any single unit is absent, and
+# under set -e that ends the install -- leaving a machine with a filesystem, a
+# user and no bootloader. That is a far worse outcome than starting without
+# one service, and it is exactly what happened when the published repository
+# was a version behind and three units were not in the target yet.
+for unit in sddm NetworkManager sakura-updates.timer bluetooth.service \
+            cups.socket snapd.socket sakura-store-updates.timer \
+            sakura-boot-success.service; do
+    if ! systemctl enable "\$unit" >/dev/null 2>&1; then
+        echo "[sakura-install] warning: could not enable \$unit"
+    fi
+done
+# Per-user timers, same reasoning.
+systemctl --global enable sakura-store-updates.timer >/dev/null 2>&1 \
+    || echo "[sakura-install] warning: could not enable the per-user update timer"
 
 # Classic snaps look for /snap. Arch puts the mount point at
 # /var/lib/snapd/snap, so without this symlink every classic snap fails at

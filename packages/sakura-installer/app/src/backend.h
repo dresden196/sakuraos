@@ -25,6 +25,10 @@ public:
     explicit Backend(QObject *parent = nullptr);
 
     Q_INVOKABLE QVariantList disks() const;
+    // What is already on a disk, and whether there is room beside it. The
+    // difference between erasing somebody's machine and installing next to
+    // what they have.
+    Q_INVOKABLE QVariantMap diskLayout(const QString &device) const;
     Q_INVOKABLE QStringList timezones() const;
     Q_INVOKABLE QVariantList timezoneChoices() const;
     Q_INVOKABLE QVariantList keyboardLayouts() const;
