@@ -57,6 +57,9 @@ void SakuraSettings::load()
 
     const KConfigGroup updates = config.group(QStringLiteral("Updates"));
     m_updatesAutoApply = updates.readEntry("AutoApply", m_updatesAutoApply);
+
+    const KConfigGroup store(&config, QStringLiteral("Store"));
+    m_storeAutoUpdate = store.readEntry(QStringLiteral("AutoUpdate"), m_storeAutoUpdate);
     m_updatesRequireCanary = updates.readEntry("RequireCanaryEvidence", m_updatesRequireCanary);
     m_updatesRequireAC = updates.readEntry("RequireACPower", m_updatesRequireAC);
     m_updatesWindow = updates.readEntry("Window", m_updatesWindow);
@@ -80,7 +83,11 @@ void SakuraSettings::save()
         "Updates.AutoApply=%6\n"
         "Updates.RequireCanaryEvidence=%7\n"
         "Updates.RequireACPower=%8\n"
-        "Updates.Window=%9\n")
+        "Updates.Window=%9\n"
+        // %10 last, and its argument last: arg() fills by number, so an
+        // argument inserted in the middle of the list silently lands in
+        // somebody else's placeholder.
+        "Store.AutoUpdate=%10\n")
         .arg(m_terminalAssistMode,
              m_aurEnabled ? QStringLiteral("true") : QStringLiteral("false"),
              m_aurReview ? QStringLiteral("true") : QStringLiteral("false"),
@@ -89,7 +96,8 @@ void SakuraSettings::save()
              m_updatesAutoApply ? QStringLiteral("true") : QStringLiteral("false"),
              m_updatesRequireCanary ? QStringLiteral("true") : QStringLiteral("false"),
              m_updatesRequireAC ? QStringLiteral("true") : QStringLiteral("false"),
-             m_updatesWindow);
+             m_updatesWindow)
+        .arg(m_storeAutoUpdate ? QStringLiteral("true") : QStringLiteral("false"));
 
     QProcess writer;
     writer.start(QStringLiteral("pkexec"), {QString::fromLatin1(WriterPath)});
@@ -171,6 +179,12 @@ void SakuraSettings::setUpdatesAutoApply(bool value)
 {
     if (m_updatesAutoApply == value) return;
     m_updatesAutoApply = value;
+    markChanged();
+}
+void SakuraSettings::setStoreAutoUpdate(bool value)
+{
+    if (m_storeAutoUpdate == value) return;
+    m_storeAutoUpdate = value;
     markChanged();
 }
 

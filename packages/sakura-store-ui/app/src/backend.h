@@ -21,6 +21,8 @@ class Backend : public QObject
     Q_PROPERTY(QVariantList featured READ featured NOTIFY featuredChanged)
     Q_PROPERTY(QVariantList popular READ popular NOTIFY featuredChanged)
     Q_PROPERTY(QVariantList installed READ installed NOTIFY installedChanged)
+    Q_PROPERTY(QVariantList updates READ updates NOTIFY updatesChanged)
+    Q_PROPERTY(bool checkingUpdates READ checkingUpdates NOTIFY updatesChanged)
     Q_PROPERTY(QVariantMap removalPlan READ removalPlan NOTIFY removalPlanChanged)
     Q_PROPERTY(bool planningRemoval READ planningRemoval NOTIFY removalPlanChanged)
     Q_PROPERTY(QVariantList categories READ categories CONSTANT)
@@ -49,6 +51,8 @@ public:
     QVariantList featured() const { return m_featured; }
     QVariantList popular() const { return m_popular; }
     QVariantList installed() const { return m_installed; }
+    QVariantList updates() const { return m_updates; }
+    bool checkingUpdates() const { return m_checkingUpdates; }
     QVariantMap removalPlan() const { return m_removalPlan; }
     bool planningRemoval() const { return m_planningRemoval; }
     QVariantList categories() const { return m_categories; }
@@ -70,6 +74,9 @@ public:
     Q_INVOKABLE void openApp(const QString &id);
     Q_INVOKABLE void loadFeatured();
     Q_INVOKABLE void loadInstalled();
+    Q_INVOKABLE void checkUpdates();
+    // Empty id updates everything that has one waiting.
+    Q_INVOKABLE void applyUpdates(const QString &id, const QString &source);
     Q_INVOKABLE void loadCategory(const QString &id, const QString &label);
     Q_INVOKABLE void install(const QString &id, const QString &source);
     Q_INVOKABLE void planRemoval(const QString &id, const QString &source);
@@ -88,6 +95,7 @@ Q_SIGNALS:
     void resultsChanged();
     void featuredChanged();
     void installedChanged();
+    void updatesChanged();
     void removalPlanChanged();
     void removed(const QString &id, const QString &source);
     void categoryChanged();
@@ -104,7 +112,8 @@ private:
     bool m_planningRemoval = false;
     QVariantMap m_removalPlan;
     bool m_loadingCategory = false;
-    QVariantList m_categories, m_categoryApps, m_sources;
+    QVariantList m_categories, m_categoryApps, m_sources, m_updates;
+    bool m_checkingUpdates = false;
     QString m_categoryName;
     QVariantMap m_app, m_unavailable;
     QString m_errorDetail;

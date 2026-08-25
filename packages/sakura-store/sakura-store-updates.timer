@@ -1,0 +1,12 @@
+[Unit]
+Description=Update Flatpak and Snap applications
+
+[Timer]
+# An hour after the system update window, so the two are not competing for
+# the same network and the same transaction lock at three in the morning.
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target

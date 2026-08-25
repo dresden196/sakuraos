@@ -1093,7 +1093,7 @@ QQC2.ApplicationWindow {
         ColumnLayout {
             id: installedRoot
             spacing: 15
-            Component.onCompleted: backend.loadInstalled()
+            Component.onCompleted: { backend.loadInstalled(); backend.checkUpdates() }
 
             QQC2.Label {
                 Layout.leftMargin: 26; Layout.topMargin: 6
@@ -1109,6 +1109,60 @@ QQC2.ApplicationWindow {
                         + "System packages are not listed: this is what you installed, not what SakuraOS is made of."
                 color: root.dim; font.pixelSize: 14
             }
+            // Updates first, because it is the only thing on this page that
+            // asks anything of the reader.
+            Rectangle {
+                visible: backend.updates.length > 0
+                Layout.fillWidth: true
+                Layout.leftMargin: 26; Layout.rightMargin: 26
+                Layout.preferredHeight: upRow.implicitHeight + 26
+                radius: 12
+                color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.12)
+                border.width: 1
+                border.color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.4)
+
+                RowLayout {
+                    id: upRow
+                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 16; anchors.rightMargin: 16
+                    spacing: 14
+                    ColumnLayout {
+                        spacing: 2
+                        QQC2.Label {
+                            text: backend.updates.length === 1
+                                ? "1 application has an update"
+                                : backend.updates.length + " applications have updates"
+                            color: root.text
+                            font.pixelSize: 15; font.weight: Font.DemiBold
+                        }
+                        QQC2.Label {
+                            // Names them rather than only counting them: "3
+                            // updates" tells you nothing about whether you
+                            // want them now.
+                            Layout.maximumWidth: 520
+                            elide: Text.ElideRight
+                            text: backend.updates.map(function (u) {
+                                return u.name
+                            }).join(", ")
+                            color: root.dim; font.pixelSize: 12
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                    Action {
+                        text: backend.busy ? "Updating…" : "Update all"
+                        enabled: !backend.busy
+                        onClicked: backend.applyUpdates("", "")
+                    }
+                }
+            }
+            QQC2.Label {
+                visible: backend.checkingUpdates && backend.updates.length === 0
+                Layout.leftMargin: 26
+                text: "Checking for updates…"
+                color: root.dim; font.pixelSize: 12
+            }
+
             Loading {
                 visible: backend.loadingInstalled
                 Layout.fillWidth: true

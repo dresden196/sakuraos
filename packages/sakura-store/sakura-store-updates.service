@@ -1,0 +1,17 @@
+[Unit]
+Description=Update Flatpak and Snap applications
+Documentation=man:sakura-store(1)
+After=network-online.target
+Wants=network-online.target
+
+# Same reasoning as the system update timer: an application update
+# interrupted by a flat battery is the half-finished state everything here
+# works to avoid.
+ConditionACPower=true
+
+[Service]
+Type=oneshot
+# System scope only. Repository packages are the update engine's, and
+# anything in a home directory belongs to the user timer.
+ExecStart=/usr/bin/sakura-store update --unattended --scope system
+TimeoutStartSec=1h

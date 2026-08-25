@@ -498,6 +498,66 @@ def install_appimage_file(path: str, name: str = "") -> tuple[int, str]:
     return 0, stem
 
 
+def update_one(source: str, app_id: str, unattended: bool = False) -> int:
+    """Update one application, whichever kind it is.
+
+    Unattended matters: a nightly run has nobody to answer a password prompt,
+    so anything needing one is skipped rather than left hanging on a dialog
+    nobody will ever see. Those are reported, not silently dropped -- an
+    update that never happens and never says so is the worst outcome here.
+    """
+    needs_root = source in ("repo", "snap")
+    if unattended and needs_root and os.geteuid() != 0:
+        emit(CONFIGURING,
+             detail=f"{app_id} needs administrator rights; leaving it for you")
+        return 0
+
+    if source == "flatpak":
+        emit(DOWNLOADING, source=source, app=app_id)
+        return stream(["flatpak", "update", "--noninteractive", "--assumeyes",
+                       app_id], DOWNLOADING, _flatpak_progress)
+
+    if source == "snap":
+        emit(DOWNLOADING, source=source, app=app_id)
+        return stream(["snap", "refresh", app_id], DOWNLOADING)
+
+    if source == "repo":
+        if not _is_installed_package(app_id):
+            emit(FAILED, error=f"{app_id} is not installed.", recoverable=False)
+            return 2
+        emit(DOWNLOADING, source=source, app=app_id)
+        # -S --needed on the one package rather than -Syu: this is an
+        # application update, and taking the whole system with it is the
+        # update engine's job and its snapshot, not this one's.
+        cmd = ["pacman", "-S", "--noconfirm", "--needed", "--", app_id]
+        if os.geteuid() != 0:
+            cmd = ["pkexec", *cmd]
+        return stream(cmd, DOWNLOADING, _pacman_progress)
+
+    if source == "appimage":
+        import appimage
+        emit(DOWNLOADING, source=source, app=app_id)
+        path = appimage.APPS / f"{app_id}.AppImage"
+        if not path.is_file():
+            emit(FAILED, error=f"{app_id} is no longer there.",
+                 recoverable=False)
+            return 2
+        try:
+            ok = appimage.update(path)
+        except Exception as exc:
+            emit(FAILED, error=f"{app_id} could not be updated: {exc}",
+                 recoverable=True)
+            return 1
+        if not ok:
+            emit(FAILED, error=f"{app_id} could not be updated.",
+                 recoverable=True)
+            return 1
+        return 0
+
+    emit(FAILED, error=f"Unknown source: {source}", recoverable=False)
+    return 2
+
+
 def install_aur(name: str) -> int:
     """Not reachable until the review step exists.
 

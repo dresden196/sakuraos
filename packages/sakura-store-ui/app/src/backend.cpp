@@ -151,6 +151,90 @@ void Backend::loadCategory(const QString &id, const QString &label)
     });
 }
 
+void Backend::checkUpdates()
+{
+    m_checkingUpdates = true;
+    Q_EMIT updatesChanged();
+    auto *p = run({QStringLiteral("updates"), QStringLiteral("--json")});
+    connect(p, &QProcess::finished, this, [this, p] {
+        const QJsonObject root =
+            QJsonDocument::fromJson(p->readAllStandardOutput()).object();
+        p->deleteLater();
+        m_updates.clear();
+        for (const QJsonValue &v : root[QStringLiteral("updates")].toArray()) {
+            m_updates.append(toMap(v.toObject()));
+        }
+        m_unavailable = root[QStringLiteral("unavailable")].toObject().toVariantMap();
+        m_checkingUpdates = false;
+        Q_EMIT updatesChanged();
+        Q_EMIT resultsChanged();
+    });
+}
+
+void Backend::applyUpdates(const QString &id, const QString &source)
+{
+    if (m_busy) {
+        return;
+    }
+    m_busy = true;
+    m_error.clear();
+    m_errorDetail.clear();
+    m_percent = 0;
+    m_stage = QStringLiteral("resolving");
+    Q_EMIT progressChanged();
+
+    QStringList args{QStringLiteral("update")};
+    if (!id.isEmpty()) {
+        args << QStringLiteral("--id") << id;
+    }
+    if (!source.isEmpty()) {
+        args << QStringLiteral("--source") << source;
+    }
+
+    auto *p = run(args);
+    p->setProcessChannelMode(QProcess::MergedChannels);
+    connect(p, &QProcess::readyReadStandardOutput, this, [this, p] {
+        while (p->canReadLine()) {
+            const QJsonObject o =
+                QJsonDocument::fromJson(p->readLine()).object();
+            if (o.isEmpty()) {
+                continue;
+            }
+            const QString stage = o[QStringLiteral("stage")].toString();
+            if (stage == QLatin1String("failed")) {
+                m_error = o[QStringLiteral("error")].toString();
+                m_errorDetail = o[QStringLiteral("detail")].toString();
+            } else {
+                m_stage = stage;
+                const QString d = o[QStringLiteral("detail")].toString();
+                if (!d.isEmpty()) {
+                    m_detail = d;
+                }
+                if (o.contains(QStringLiteral("percent"))) {
+                    m_percent = o[QStringLiteral("percent")].toInt();
+                }
+            }
+            Q_EMIT progressChanged();
+        }
+    });
+    connect(p, &QProcess::finished, this,
+            [this, p](int code, QProcess::ExitStatus status) {
+        const QString trailing = QString::fromUtf8(p->readAll()).trimmed();
+        p->deleteLater();
+        m_busy = false;
+        if (m_error.isEmpty() && (code != 0 || status != QProcess::NormalExit)) {
+            m_error = trailing.isEmpty() ? tr("Some updates did not finish.")
+                                         : trailing.section(QLatin1Char('\n'), -1);
+        }
+        m_stage = m_error.isEmpty() ? QStringLiteral("done")
+                                    : QStringLiteral("failed");
+        Q_EMIT progressChanged();
+        // The list has changed either way, and what is left is what failed.
+        checkUpdates();
+        loadInstalled();
+    });
+}
+
 void Backend::loadInstalled()
 {
     m_loadingInstalled = true;

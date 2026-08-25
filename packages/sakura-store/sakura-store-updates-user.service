@@ -1,0 +1,11 @@
+[Unit]
+Description=Update AppImages
+Documentation=man:sakura-store(1)
+
+[Service]
+Type=oneshot
+# A user service, because an AppImage lives in the user's home. Root has no
+# business writing there, and this needs no privileges at all -- which is
+# half of why people like the format.
+ExecStart=/usr/bin/sakura-store update --unattended --scope user
+TimeoutStartSec=1h

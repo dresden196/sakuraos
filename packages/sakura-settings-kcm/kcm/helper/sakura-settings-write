@@ -35,6 +35,9 @@ SCHEMA: dict[tuple[str, str], object] = {
     ("Updates", "RequireCanaryEvidence"): BOOL,
     ("Updates", "RequireACPower"): BOOL,
     ("Updates", "Window"): re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$"),
+    # Applications keeping themselves current, which is a different question
+    # from the operating system doing so -- see the comment in sakura.conf.
+    ("Store", "AutoUpdate"): BOOL,
 }
 
 MAX_LINES = 200  # far above the schema size; bounds a hostile caller

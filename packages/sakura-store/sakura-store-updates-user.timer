@@ -1,0 +1,13 @@
+[Unit]
+Description=Update AppImages
+
+[Timer]
+# After login rather than at a fixed hour: a user timer only runs while
+# somebody is logged in, so a wall-clock time would simply be missed on a
+# machine that is off overnight.
+OnStartupSec=15m
+OnUnitActiveSec=1d
+Persistent=true
+
+[Install]
+WantedBy=timers.target
