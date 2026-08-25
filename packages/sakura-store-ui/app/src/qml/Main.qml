@@ -1076,6 +1076,7 @@ QQC2.ApplicationWindow {
             // an app that is not installed, and an "Also available from"
             // heading with nothing under it.
             id: appRoot
+            property bool showDetail: false
             spacing: 22
             property var a: backend.app
 
@@ -1283,6 +1284,9 @@ QQC2.ApplicationWindow {
                     }
                 }
                 Rectangle {
+                    // No progress bar once it has failed: a bar frozen at 40%
+                    // beside an error reads as though it is still trying.
+                    visible: backend.error === ""
                     Layout.fillWidth: true
                     Layout.maximumWidth: 520
                     implicitHeight: 5; radius: 2.5
@@ -1296,8 +1300,50 @@ QQC2.ApplicationWindow {
                 QQC2.Label {
                     visible: backend.error !== ""
                     Layout.fillWidth: true
-                    text: backend.error; color: "#ff9db0"; font.pixelSize: 12
+                    Layout.maximumWidth: 620
+                    text: backend.error; color: "#ff9db0"; font.pixelSize: 13
                     wrapMode: Text.WordWrap
+                }
+                RowLayout {
+                    visible: backend.error !== ""
+                    spacing: 14
+                    // The tool's own words, for when the sentence above is
+                    // wrong or not specific enough to act on.
+                    QQC2.Label {
+                        visible: backend.errorDetail !== ""
+                        text: appRoot.showDetail ? "Hide details" : "Show details"
+                        color: root.accent; font.pixelSize: 12
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: appRoot.showDetail = !appRoot.showDetail }
+                    }
+                    QQC2.Label {
+                        text: "Dismiss"
+                        color: root.dim; font.pixelSize: 12
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        TapHandler {
+                            onTapped: { appRoot.showDetail = false; backend.clearError() }
+                        }
+                    }
+                }
+                Rectangle {
+                    visible: backend.error !== "" && appRoot.showDetail
+                             && backend.errorDetail !== ""
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(160, rawText.implicitHeight + 18)
+                    radius: 9
+                    color: root.bg
+                    QQC2.ScrollView {
+                        anchors.fill: parent; anchors.margins: 9
+                        clip: true
+                        QQC2.Label {
+                            id: rawText
+                            width: parent.width
+                            text: backend.errorDetail
+                            color: root.dim
+                            font.pixelSize: 11; font.family: "monospace"
+                            wrapMode: Text.Wrap
+                        }
+                    }
                 }
             }
 

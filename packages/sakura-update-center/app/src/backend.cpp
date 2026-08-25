@@ -124,6 +124,57 @@ void Backend::apply()
     m_proc->start(QString::fromLatin1(ENGINE), {QStringLiteral("apply")});
 }
 
+namespace {
+// Both actions go through the same privileged helper and differ only in the
+// verb, so the plumbing is written once.
+const char SNAPSHOT_HELPER[] =
+    "/usr/lib/sakura/snapshot-boot/sakura-snapshot-manage";
+}
+
+void Backend::runSnapshotHelper(const QString &verb, const QString &argument)
+{
+    if (m_busy) {
+        return;
+    }
+    m_busy = true;
+    m_error.clear();
+    Q_EMIT stateChanged();
+
+    auto *p = new QProcess(this);
+    p->setProcessChannelMode(QProcess::MergedChannels);
+    connect(p, &QProcess::finished, this,
+            [this, p](int code, QProcess::ExitStatus status) {
+        const QString out = QString::fromUtf8(p->readAll()).trimmed();
+        p->deleteLater();
+        m_busy = false;
+        if (code != 0 || status != QProcess::NormalExit) {
+            m_error = (code == 126 || code == 127)
+                ? tr("Authentication was cancelled; nothing has changed.")
+                : (out.isEmpty() ? tr("That did not work.")
+                                 : out.section(QLatin1Char('\n'), -1));
+        }
+        // Reload either way: on success the list has changed, and on failure
+        // it is worth showing what is actually there rather than what the
+        // screen happened to be showing before.
+        loadHistory();
+        Q_EMIT stateChanged();
+    });
+    p->start(QStringLiteral("pkexec"),
+             {QString::fromLatin1(SNAPSHOT_HELPER), verb, argument});
+}
+
+void Backend::createRestorePoint(const QString &description)
+{
+    runSnapshotHelper(QStringLiteral("create"),
+                      description.trimmed().isEmpty()
+                          ? tr("Saved by you") : description.trimmed());
+}
+
+void Backend::deleteRestorePoint(const QString &number)
+{
+    runSnapshotHelper(QStringLiteral("delete"), number);
+}
+
 void Backend::rollback(const QString &number)
 {
     if (m_busy) {

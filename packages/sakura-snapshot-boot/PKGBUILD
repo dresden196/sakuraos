@@ -21,9 +21,10 @@ source=(
     'initcpio-install'
     'initcpio-hook'
     'sakura-schedule-rollback'
+    'sakura-snapshot-manage'
     'org.sakuraos.rollback.policy'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm644 "$srcdir/lib.sh"              "$pkgdir/usr/lib/sakura/snapshot-boot/lib.sh"
@@ -32,6 +33,8 @@ package() {
     install -Dm755 "$srcdir/sakura-boot-entries" "$pkgdir/usr/bin/sakura-boot-entries"
     # Scheduling a rollback is a privileged action reachable from the desktop;
     # performing one still only happens in the recovery environment.
+    install -Dm755 "$srcdir/sakura-snapshot-manage" \
+        "$pkgdir/usr/lib/sakura/snapshot-boot/sakura-snapshot-manage"
     install -Dm755 "$srcdir/sakura-schedule-rollback" \
         "$pkgdir/usr/lib/sakura/snapshot-boot/sakura-schedule-rollback"
     install -Dm644 "$srcdir/org.sakuraos.rollback.policy" \

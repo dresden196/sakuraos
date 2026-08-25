@@ -42,6 +42,8 @@ public:
     Q_INVOKABLE void apply();
     Q_INVOKABLE void loadHistory();
     Q_INVOKABLE void rollback(const QString &number);
+    Q_INVOKABLE void createRestorePoint(const QString &description);
+    Q_INVOKABLE void deleteRestorePoint(const QString &number);
     Q_INVOKABLE QVariantMap schedule() const;
     Q_INVOKABLE void setSchedule(const QVariantMap &values);
 
@@ -52,6 +54,7 @@ Q_SIGNALS:
     void applyFinished(bool ok);
 
 private:
+    void runSnapshotHelper(const QString &verb, const QString &argument);
     void setBusy(bool b);
 
     QProcess *m_proc = nullptr;

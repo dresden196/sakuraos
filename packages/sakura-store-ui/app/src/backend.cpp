@@ -58,6 +58,11 @@ QProcess *Backend::run(const QStringList &args)
 
 void Backend::search(const QString &query, const QString &source)
 {
+    // Moving somewhere else clears a failure from the last thing. Left in
+    // place it reappears over a page it has nothing to do with, which reads
+    // as the new page having failed.
+    m_error.clear();
+    m_errorDetail.clear();
     if (query.trimmed().isEmpty()) {
         m_results.clear();
         Q_EMIT resultsChanged();
@@ -182,6 +187,11 @@ void Backend::loadInstalled()
 
 void Backend::openApp(const QString &id)
 {
+    // Moving somewhere else clears a failure from the last thing. Left in
+    // place it reappears over a page it has nothing to do with, which reads
+    // as the new page having failed.
+    m_error.clear();
+    m_errorDetail.clear();
     m_loadingApp = true;
     m_app.clear();
     Q_EMIT stateChanged();
@@ -205,6 +215,7 @@ void Backend::install(const QString &id, const QString &source)
     }
     m_busy = true;
     m_error.clear();
+    m_errorDetail.clear();
     m_percent = 0;
     m_stage = QStringLiteral("resolving");
     m_detail.clear();
@@ -225,6 +236,7 @@ void Backend::install(const QString &id, const QString &source)
             const QString stage = o[QStringLiteral("stage")].toString();
             if (stage == QLatin1String("failed")) {
                 m_error = o[QStringLiteral("error")].toString();
+                m_errorDetail = o[QStringLiteral("detail")].toString();
             } else {
                 m_stage = stage;
                 if (o.contains(QStringLiteral("percent"))) {
@@ -315,6 +327,7 @@ void Backend::remove(const QString &id, const QString &source, bool deleteData)
     }
     m_busy = true;
     m_error.clear();
+    m_errorDetail.clear();
     m_stage = QStringLiteral("removing");
     m_detail = tr("removing");
     Q_EMIT progressChanged();
@@ -338,6 +351,22 @@ void Backend::remove(const QString &id, const QString &source, bool deleteData)
         const QString shown = m_app.value(QStringLiteral("id")).toString();
         Q_EMIT removed(shown.isEmpty() ? id : shown, source);
     });
+}
+
+void Backend::clearError()
+{
+    // A failure that follows you onto the next page reads as though it just
+    // happened again. It stays until the user dismisses it or starts
+    // something new, and no longer than that.
+    if (m_error.isEmpty() && m_errorDetail.isEmpty()) {
+        return;
+    }
+    m_error.clear();
+    m_errorDetail.clear();
+    if (m_stage == QLatin1String("failed")) {
+        m_stage.clear();
+    }
+    Q_EMIT progressChanged();
 }
 
 void Backend::openPermissions(const QString &id)
