@@ -605,7 +605,23 @@ QQC2.ApplicationWindow {
                 }
             }
 
-            Field { placeholderText: "Try typing here…"; Layout.maximumWidth: 460 }
+            // Directly under the keyboard and the same width as it. It was
+            // half the width and hanging off to the left, which made it read
+            // as belonging to something else rather than as the place to test
+            // the layout drawn immediately above it.
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 2
+                spacing: 6
+                QQC2.Label {
+                    text: "Try it here"
+                    color: root.dim; font.pixelSize: 12
+                }
+                Field {
+                    Layout.fillWidth: true
+                    placeholderText: "Type a few keys to check they come out right…"
+                }
+            }
             Item { Layout.fillHeight: true }
         }
     }
@@ -633,16 +649,156 @@ QQC2.ApplicationWindow {
                 }
                 onActivated: { root.answers.timezone = currentText; root.answersChanged() }
             }
+            // What time it is in the zone that is selected. This is the one
+            // thing on this screen a person can check against the watch on
+            // their wrist, which makes it worth more than the zone's name.
+            Item {
+                id: clock
+                Layout.fillWidth: true
+                Layout.preferredHeight: 158
+                Layout.topMargin: 6
+
+                // Epoch milliseconds, shifted into the chosen zone. Reading
+                // the UTC parts of that then gives that zone's wall clock,
+                // without needing a timezone database in QML.
+                property real shifted: 0
+                readonly property int hours:   new Date(shifted).getUTCHours()
+                readonly property int minutes: new Date(shifted).getUTCMinutes()
+                readonly property int seconds: new Date(shifted).getUTCSeconds()
+
+                function retime() {
+                    shifted = Date.now() + backend.utcOffset(root.answers.timezone) * 1000
+                    face.requestPaint()
+                }
+                Component.onCompleted: retime()
+                Timer {
+                    interval: 1000; running: true; repeat: true
+                    onTriggered: clock.retime()
+                }
+                Connections {
+                    target: root
+                    function onAnswersChanged() { clock.retime() }
+                }
+
+                RowLayout {
+                    anchors.fill: parent
+                    spacing: 26
+
+                    Canvas {
+                        id: face
+                        Layout.preferredWidth: 136
+                        Layout.preferredHeight: 136
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.reset()
+                            var cx = width / 2, cy = height / 2
+                            var r = Math.min(cx, cy) - 3
+
+                            ctx.strokeStyle = root.line
+                            ctx.lineWidth = 2
+                            ctx.beginPath()
+                            ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                            ctx.stroke()
+
+                            // Twelve marks, the quarters longer. Numbers at
+                            // this size would be unreadable.
+                            for (var i = 0; i < 12; i++) {
+                                var a = i * Math.PI / 6
+                                var inner = r - (i % 3 === 0 ? 12 : 6)
+                                ctx.strokeStyle = i % 3 === 0 ? root.text : root.dim
+                                ctx.lineWidth = i % 3 === 0 ? 2 : 1
+                                ctx.beginPath()
+                                ctx.moveTo(cx + Math.sin(a) * inner, cy - Math.cos(a) * inner)
+                                ctx.lineTo(cx + Math.sin(a) * (r - 2), cy - Math.cos(a) * (r - 2))
+                                ctx.stroke()
+                            }
+
+                            function hand(angle, length, width, colour) {
+                                ctx.strokeStyle = colour
+                                ctx.lineWidth = width
+                                ctx.lineCap = "round"
+                                ctx.beginPath()
+                                ctx.moveTo(cx, cy)
+                                ctx.lineTo(cx + Math.sin(angle) * length,
+                                           cy - Math.cos(angle) * length)
+                                ctx.stroke()
+                            }
+                            // The hour hand moves with the minutes, as a real
+                            // one does; a clock that jumps on the hour looks
+                            // broken.
+                            var m = clock.minutes + clock.seconds / 60
+                            var h = (clock.hours % 12) + m / 60
+                            hand(h * Math.PI / 6, r * 0.52, 4, root.text)
+                            hand(m * Math.PI / 30, r * 0.74, 3, root.text)
+                            hand(clock.seconds * Math.PI / 30, r * 0.80, 1.5, root.accent)
+
+                            ctx.fillStyle = root.accent
+                            ctx.beginPath()
+                            ctx.arc(cx, cy, 3.5, 0, Math.PI * 2)
+                            ctx.fill()
+                        }
+                    }
+
+                    ColumnLayout {
+                        spacing: 4
+                        QQC2.Label {
+                            text: {
+                                var h = clock.hours
+                                var suffix = ""
+                                if (!root.answers.hour24) {
+                                    suffix = h < 12 ? " AM" : " PM"
+                                    h = h % 12
+                                    if (h === 0) h = 12
+                                }
+                                var mm = clock.minutes < 10 ? "0" + clock.minutes
+                                                            : "" + clock.minutes
+                                return (root.answers.hour24 && h < 10 ? "0" + h : h)
+                                     + ":" + mm + suffix
+                            }
+                            color: root.text
+                            font.pixelSize: 38; font.weight: Font.Light
+                        }
+                        QQC2.Label {
+                            text: root.answers.timezone
+                            color: root.dim; font.pixelSize: 13
+                        }
+                        QQC2.Label {
+                            // Says plainly what to do if it is wrong, rather
+                            // than leaving the reader to infer it.
+                            text: "If this is not the time where you are, choose a different zone."
+                            color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.75)
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                            Layout.maximumWidth: 260
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+            }
+
             QQC2.Label { text: "Clock"; color: root.dim; font.pixelSize: 13; topPadding: 10 }
+            // Side by side rather than stacked: they are two readings of the
+            // same moment, so seeing both at once is the comparison being
+            // asked for -- and stacked, the second one fell below the fold.
+            RowLayout {
+            spacing: 14
             Choice {
-                heading: "24-hour"; detail: "19:44"
+                // The real time, not an example. A made-up time next to a
+                // clock showing a different one reads as a mistake.
+                heading: "24-hour"
+                detail: (clock.hours < 10 ? "0" : "") + clock.hours + ":"
+                      + (clock.minutes < 10 ? "0" : "") + clock.minutes
                 selected: root.answers.hour24
                 onPicked: { root.answers.hour24 = true; root.answersChanged() }
             }
             Choice {
-                heading: "12-hour"; detail: "7:44 PM"
+                heading: "12-hour"
+                detail: ((clock.hours % 12) === 0 ? 12 : clock.hours % 12) + ":"
+                      + (clock.minutes < 10 ? "0" : "") + clock.minutes
+                      + (clock.hours < 12 ? " AM" : " PM")
                 selected: !root.answers.hour24
                 onPicked: { root.answers.hour24 = false; root.answersChanged() }
+            }
             }
             Item { Layout.fillHeight: true }
         }

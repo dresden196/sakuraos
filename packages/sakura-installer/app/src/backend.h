@@ -33,6 +33,10 @@ public:
     Q_INVOKABLE QVariantList keyboardPreview(const QString &layout) const;
     Q_INVOKABLE QStringList avatars() const;
     Q_INVOKABLE QString guessTimezone() const;
+    // Seconds from UTC for a zone, right now -- so the clock on the time
+    // screen shows the time in the zone being chosen rather than the time
+    // where the installer happens to be running.
+    Q_INVOKABLE int utcOffset(const QString &timezone) const;
     Q_INVOKABLE void install(const QVariantMap &answers);
 
     QString currentStep() const { return m_step; }

@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QLocale>
+#include <QDateTime>
 #include <QSet>
 #include <algorithm>
 
@@ -91,6 +92,20 @@ QStringList Backend::timezones() const
     }
     out.sort();
     return out;
+}
+
+int Backend::utcOffset(const QString &timezone) const
+{
+    // Asked of QTimeZone rather than worked out from the name, because the
+    // answer depends on the date: half these zones are on summer time today
+    // and will not be in November, and a clock that is an hour out is worse
+    // than no clock -- it is the one thing on this screen somebody can check
+    // against the watch on their wrist.
+    const QTimeZone zone(timezone.toUtf8());
+    if (!zone.isValid()) {
+        return 0;
+    }
+    return zone.offsetFromUtc(QDateTime::currentDateTimeUtc());
 }
 
 QString Backend::guessTimezone() const
