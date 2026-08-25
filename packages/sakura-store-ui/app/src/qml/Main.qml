@@ -806,6 +806,88 @@ QQC2.ApplicationWindow {
         }
     }
 
+    // ---- an AppImage opened from a file -------------------------------------
+    // Opening a file must never install it on its own. This says what the
+    // file is, where it came from, and what installing it will and will not
+    // do, and then waits.
+    Rectangle {
+        id: appImagePrompt
+        property string path: typeof openFile !== "undefined" ? openFile : ""
+        property bool dismissed: false
+        anchors.fill: parent
+        z: 150
+        visible: path !== "" && !dismissed
+        color: Qt.rgba(0, 0, 0, 0.6)
+        TapHandler { onTapped: {} }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(560, parent.width - 80)
+            implicitHeight: aiBody.implicitHeight + 46
+            radius: 16
+            color: root.card
+            border.width: 1; border.color: root.line
+
+            ColumnLayout {
+                id: aiBody
+                anchors.left: parent.left; anchors.right: parent.right
+                anchors.top: parent.top; anchors.margins: 23
+                spacing: 13
+
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Install this AppImage?"
+                    color: root.text
+                    font.pixelSize: 21; font.weight: Font.Light
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WrapAnywhere
+                    text: appImagePrompt.path
+                    color: root.accent
+                    font.pixelSize: 12; font.family: "monospace"
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "It will be copied to your Applications folder and added to "
+                        + "your menu. The file you downloaded stays where it is."
+                    color: root.dim; font.pixelSize: 13
+                }
+                // The thing that makes an AppImage different from everything
+                // else in this store, said before it is installed rather than
+                // discovered later.
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "An AppImage comes from whoever you downloaded it from. "
+                        + "Nothing here reviewed it, and no signature was checked \u2014 "
+                        + "install it only if you trust where it came from."
+                    color: root.warn; font.pixelSize: 12
+                }
+                RowLayout {
+                    Layout.topMargin: 3
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 10
+                    Action {
+                        text: "Cancel"; quiet: true
+                        onClicked: appImagePrompt.dismissed = true
+                    }
+                    Action {
+                        text: backend.busy ? "Installing…" : "Install"
+                        enabled: !backend.busy
+                        onClicked: {
+                            backend.installLocalAppImage(appImagePrompt.path)
+                            appImagePrompt.dismissed = true
+                            root.view = "installed"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ---- uninstall confirmation ------------------------------------------
     // Shown over everything, because it is the one destructive action in the
     // application and it must not be possible to trigger it by accident.

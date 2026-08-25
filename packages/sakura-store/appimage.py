@@ -164,15 +164,24 @@ def extract_metadata(path: Path, name: str) -> dict:
     return meta
 
 
-def install(path: Path, name: str) -> Path:
-    """Put an AppImage where it belongs and make it appear in the launcher."""
+def install(path: Path, name: str, keep_original: bool = False) -> Path:
+    """Put an AppImage where it belongs and make it appear in the launcher.
+
+    keep_original matters for a file the user already had. A download lives in
+    a temporary directory and moving it is right; a file somebody opened from
+    their Downloads folder is theirs, and having it disappear when they
+    installed it is not what anyone expects.
+    """
     APPS.mkdir(parents=True, exist_ok=True)
     DESKTOP.mkdir(parents=True, exist_ok=True)
     ICONS.mkdir(parents=True, exist_ok=True)
 
     dest = APPS / f"{name}.AppImage"
     if path.resolve() != dest.resolve():
-        shutil.move(str(path), dest)
+        if keep_original:
+            shutil.copy2(str(path), dest)
+        else:
+            shutil.move(str(path), dest)
     dest.chmod(0o755)
 
     meta = extract_metadata(dest, name)

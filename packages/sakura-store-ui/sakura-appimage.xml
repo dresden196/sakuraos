@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  shared-mime-info does not describe AppImages, so nothing on a stock system
+  recognises one: it is reported as a plain executable and there is nothing to
+  open it with. Registering the type is what lets the store appear in "Open
+  With" at all.
+-->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/vnd.appimage">
+    <comment>AppImage application bundle</comment>
+    <glob pattern="*.AppImage"/>
+    <glob pattern="*.appimage"/>
+    <!-- Type 2 AppImages carry this at offset 8, right after the ELF magic. -->
+    <magic priority="60">
+      <match type="string" value="AI\x02" offset="8"/>
+    </magic>
+    <sub-class-of type="application/x-executable"/>
+  </mime-type>
+</mime-info>

@@ -926,10 +926,17 @@ def cmd_install(args) -> int:
         elif args.source == "snap":
             rc = tx.install_snap(args.id)
         elif args.source == "appimage":
-            if not args.url:
-                tx.emit(tx.FAILED, error="--url is required for an AppImage.")
+            # Either a file the user already has, or a download.
+            if args.file:
+                rc, derived = tx.install_appimage_file(args.file, args.id)
+                # So the DONE event below names what was actually installed.
+                args.id = args.id or derived
+            elif args.url:
+                rc = tx.install_appimage(args.url, args.id, args.sha256 or "")
+            else:
+                tx.emit(tx.FAILED,
+                        error="An AppImage needs either a file or a link.")
                 return 2
-            rc = tx.install_appimage(args.url, args.id, args.sha256 or "")
         elif args.source == "aur":
             rc = tx.install_aur(args.id)
         else:
@@ -1093,9 +1100,11 @@ def main() -> int:
     v.set_defaults(fn=cmd_sources)
 
     i = sub.add_parser("install")
-    i.add_argument("id")
+    # Optional for a local AppImage, which is named after the file.
+    i.add_argument("id", nargs="?", default="")
     i.add_argument("--source", required=True)
-    i.add_argument("--url", help="for appimage")
+    i.add_argument("--url", help="for appimage: download it from here")
+    i.add_argument("--file", help="for appimage: install this local file")
     i.add_argument("--sha256", help="for appimage")
     i.set_defaults(fn=cmd_install)
 
