@@ -7,8 +7,13 @@ import QtQuick.Dialogs
 QQC2.ApplicationWindow {
     id: root
 
-    width: 1000
-    height: 660
+    // Full screen. Installing is the only thing anyone does on this boot, and
+    // a window is something to be minimised, moved behind a file manager, or
+    // simply not noticed on a large display. There is nothing else here to
+    // get to.
+    visibility: Window.FullScreen
+    width: Screen.width
+    height: Screen.height
     minimumWidth: 900
     minimumHeight: 600
     visible: true
@@ -60,7 +65,7 @@ QQC2.ApplicationWindow {
         crashReports: false
     })
 
-    property int step: -1
+    property int step: -2
     readonly property var steps: [
         { title: "Language",   blurb: "What this machine speaks" },
         { title: "Keyboard",   blurb: "How your keys are laid out" },
@@ -166,9 +171,149 @@ QQC2.ApplicationWindow {
 
     // ---- layout ------------------------------------------------------------
     // ---- welcome -----------------------------------------------------------
+    // ---- what this distribution actually does differently -------------------
+    // Between the welcome and the questions, because somebody who has just
+    // booted an unfamiliar system has no idea what they are agreeing to set
+    // up. Every claim here is one the machine can be held to; the ones that
+    // are not yet true are not on this page.
     Item {
         anchors.fill: parent
-        visible: root.step < 0
+        visible: root.step === -1
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            width: Math.min(880, parent.width - 100)
+            spacing: 20
+
+            QQC2.Label {
+                Layout.alignment: Qt.AlignHCenter
+                text: "What SakuraOS does differently"
+                color: root.text
+                font.pixelSize: 30
+                font.weight: Font.Light
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: "A UI-first, terminal-second distribution. Everything below is already here \u2014 not planned."
+                color: root.dim
+                font.pixelSize: 14
+            }
+
+            Item { Layout.preferredHeight: 6 }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: width > 700 ? 2 : 1
+                columnSpacing: 18
+                rowSpacing: 18
+
+                Repeater {
+                    model: [
+                        {
+                            title: "It can undo itself",
+                            body: "The disk is BTRFS, and a restore point is taken automatically before "
+                                + "every change. Take one yourself before doing something risky, from the "
+                                + "Update Center. If an update goes wrong, go back \u2014 your documents and "
+                                + "photos are never part of a restore point and are left alone."
+                        },
+                        {
+                            title: "Updates just happen",
+                            body: "Checked and applied on their own, overnight and on mains power, always "
+                                + "behind a restore point. Applications from Flatpak, Snap and AppImage "
+                                + "keep themselves current too. Nothing waits for you to remember."
+                        },
+                        {
+                            title: "Terminal Assist",
+                            body: "A terminal is unforgiving, and a single mistyped command can take a "
+                                + "system with it. Terminal Assist recognises the commands that do real "
+                                + "damage \u2014 partial upgrades, removing the last kernel, force-removing "
+                                + "packages other things depend on \u2014 stops them, and says what to run "
+                                + "instead. It cannot be bypassed by accident."
+                        },
+                        {
+                            title: "A store built for this",
+                            body: "Flatpak, Snap, AppImage and SakuraOS's own packages in one place, with "
+                                + "the same app matched across them so you can choose where it comes from. "
+                                + "It tells you which you are installing and what it will cost. AppImages "
+                                + "install by opening the file."
+                        }
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: card.implicitHeight + 34
+                        radius: 14
+                        color: root.card
+                        border.width: 1
+                        border.color: root.line
+                        ColumnLayout {
+                            id: card
+                            anchors.left: parent.left; anchors.right: parent.right
+                            anchors.top: parent.top; anchors.margins: 17
+                            spacing: 7
+                            QQC2.Label {
+                                text: modelData.title
+                                color: root.accent
+                                font.pixelSize: 16; font.weight: Font.DemiBold
+                            }
+                            QQC2.Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: modelData.body
+                                color: root.dim
+                                font.pixelSize: 13
+                                lineHeight: 1.3
+                            }
+                        }
+                    }
+                }
+            }
+
+            Item { Layout.preferredHeight: 10 }
+
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 14
+                QQC2.Button {
+                    text: "Back"
+                    padding: 12; leftPadding: 26; rightPadding: 26
+                    onClicked: root.step = -2
+                    contentItem: QQC2.Label {
+                        text: parent.text; color: root.text
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 9; color: parent.down ? root.cardUp : "transparent"
+                        border.width: 1; border.color: root.line
+                    }
+                }
+                QQC2.Button {
+                    text: "Set it up"
+                    padding: 13; leftPadding: 40; rightPadding: 40
+                    onClicked: root.step = 0
+                    contentItem: QQC2.Label {
+                        text: parent.text
+                        color: root.accentText
+                        font.pixelSize: 15; font.weight: Font.DemiBold
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 9
+                        color: parent.down ? Qt.darker(root.accent, 1.15) : root.accent
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        anchors.fill: parent
+        visible: root.step === -2
 
         ColumnLayout {
             anchors.centerIn: parent
@@ -221,7 +366,7 @@ QQC2.ApplicationWindow {
 
             QQC2.Label {
                 Layout.alignment: Qt.AlignHCenter
-                text: "Linux that looks after itself."
+                text: "A Linux distribution for the modern age."
                 color: root.text
                 font.pixelSize: 19
                 font.weight: Font.Medium
@@ -233,7 +378,7 @@ QQC2.ApplicationWindow {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                text: "It keeps itself up to date, takes a restore point before every change, and can put itself back if one goes wrong. Setting it up takes about a minute."
+                text: "Welcome to SakuraOS \u2014 a privacy-first, Arch-based distribution built around ease of use, performance, and not having to open a terminal."
                 color: root.dim
                 font.pixelSize: 14
                 lineHeight: 1.35
@@ -247,7 +392,7 @@ QQC2.ApplicationWindow {
                 padding: 13
                 leftPadding: 40
                 rightPadding: 40
-                onClicked: root.step = 0
+                onClicked: root.step = -1
                 contentItem: QQC2.Label {
                     text: parent.text
                     color: root.accentText
