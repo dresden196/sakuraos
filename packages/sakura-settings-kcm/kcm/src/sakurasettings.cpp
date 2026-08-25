@@ -1,4 +1,6 @@
 #include "sakurasettings.h"
+#include <QJsonObject>
+#include <QJsonDocument>
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -210,3 +212,58 @@ void SakuraSettings::setUpdatesWindow(const QString &value)
 }
 
 #include "sakurasettings.moc"
+
+namespace {
+const char WINE_HELPER[] = "/usr/lib/sakura/wine/sakura-wine";
+}
+
+void SakuraSettings::refreshWine()
+{
+    // Asked of the machine, not of a config file. A stored "wine: true" that
+    // disagrees with what is installed is worse than no setting at all --
+    // the switch would be on and nothing would work.
+    QProcess p;
+    p.start(QString::fromLatin1(WINE_HELPER), {QStringLiteral("status")});
+    if (!p.waitForFinished(5000)) {
+        return;
+    }
+    const QJsonObject o =
+        QJsonDocument::fromJson(p.readAllStandardOutput()).object();
+    m_wineEnabled = o[QStringLiteral("enabled")].toBool();
+    const QString version = o[QStringLiteral("version")].toString();
+    m_wineStatus = m_wineEnabled && !version.isEmpty() ? version : QString();
+    Q_EMIT wineChanged();
+}
+
+void SakuraSettings::setWineEnabled(bool value)
+{
+    if (m_wineBusy || value == m_wineEnabled) {
+        return;
+    }
+    m_wineBusy = true;
+    m_wineStatus = value ? i18n("Downloading Wine and its runtimes. This is "
+                                "about a gigabyte and will take a few minutes.")
+                         : i18n("Removing Wine.");
+    Q_EMIT wineChanged();
+
+    auto *proc = new QProcess(this);
+    proc->setProcessChannelMode(QProcess::MergedChannels);
+    connect(proc, &QProcess::finished, this,
+            [this, proc, value](int code, QProcess::ExitStatus status) {
+        const QString out = QString::fromUtf8(proc->readAll()).trimmed();
+        proc->deleteLater();
+        m_wineBusy = false;
+        if (code != 0 || status != QProcess::NormalExit) {
+            m_wineStatus = (code == 126 || code == 127)
+                ? i18n("Authentication was cancelled; nothing has changed.")
+                : i18n("That did not work.");
+            Q_EMIT wineChanged();
+        }
+        // Either way, ask the machine what is actually true now rather than
+        // assuming the operation did what it was asked.
+        refreshWine();
+    });
+    proc->start(QStringLiteral("pkexec"),
+                {QString::fromLatin1(WINE_HELPER),
+                 value ? QStringLiteral("enable") : QStringLiteral("disable")});
+}

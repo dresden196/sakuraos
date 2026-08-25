@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>SakuraOS</vendor>
+  <vendor_url>https://sakuraos.org</vendor_url>
+
+  <!--
+    Installing and removing Wine. The helper takes one verb from a fixed set
+    and installs a fixed list of packages; there is nothing here that can be
+    pointed at a different package.
+
+    auth_admin_keep rather than auth_admin: this is reached from a switch in
+    System Settings, and somebody who turns it on, changes their mind and
+    turns it off again should not be asked twice in a minute.
+  -->
+  <action id="org.sakuraos.wine.manage">
+    <description>Turn Windows application support on or off</description>
+    <message>Authentication is required to change Windows application support</message>
+    <defaults>
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/sakura/wine/sakura-wine</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

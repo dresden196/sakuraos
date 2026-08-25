@@ -123,6 +123,52 @@ KCM.SimpleKCM {
             text: i18n("Not wired up yet: choosing a helper here does not install or remove one. The AUR is reachable through the store, and on the command line through whatever you install yourself.")
         }
 
+        // ---- Windows programs ---------------------------------------------
+        Kirigami.Separator {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Windows programs")
+        }
+
+        QQC2.CheckBox {
+            id: wineBox
+            Kirigami.FormData.label: i18n("Wine:")
+            text: i18n("Run Windows programs")
+            enabled: !cfg.wineBusy
+            checked: cfg.wineEnabled
+            // Not bound to a config key: this reports what is installed, and
+            // toggling it does the installing. Rebound after every change so
+            // a failed one puts the switch back where it was rather than
+            // leaving it showing something that is not true.
+            onToggled: cfg.setWineEnabled(checked)
+            Component.onCompleted: cfg.refreshWine()
+        }
+
+        QQC2.Label {
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 24
+            wrapMode: Text.WordWrap
+            font: Kirigami.Theme.smallFont
+            text: i18n("Wine is a compatibility layer that lets some Windows programs run on Linux. Turning this on downloads Wine and the runtimes most programs need, about a gigabyte, and makes .exe and .msi files openable. Turning it off removes them again.")
+        }
+
+        QQC2.Label {
+            visible: cfg.wineStatus !== ""
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 24
+            wrapMode: Text.WordWrap
+            font: Kirigami.Theme.smallFont
+            color: cfg.wineBusy ? Kirigami.Theme.textColor
+                                : Kirigami.Theme.disabledTextColor
+            text: cfg.wineStatus
+        }
+
+        QQC2.Label {
+            visible: cfg.wineEnabled
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 24
+            wrapMode: Text.WordWrap
+            font: Kirigami.Theme.smallFont
+            // The part that makes this better than installing Wine yourself.
+            text: i18n("Opening a Windows program asks first. Where a Linux version of the same application exists, SakuraOS offers that instead \u2014 running an installer through a compatibility layer is rarely what anybody actually wanted.")
+        }
+
         // ---- Updates ------------------------------------------------------
 
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("Updates") }

@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""Decide what to do when somebody opens a Windows executable.
+
+Follows the approach of Zorin Exec Guard (github.com/ZorinOS/zorin-exec-guard,
+GPL-3.0) and uses its application database
+(github.com/ZorinOS/zorin-exec-guard-app-db, GPL-2.0) unchanged. The program
+itself is reimplemented rather than shipped: it is GTK3, and its install path
+is written against apt and Zorin's own packages, neither of which exists here.
+
+The idea is theirs and it is a good one. Double-clicking "Firefox Setup.exe"
+on Linux is somebody trying to get Firefox, not somebody trying to use Wine.
+Running it under a compatibility layer is the worst of the available answers
+and the one every other distribution gives.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+DB = Path(os.environ.get("SAKURA_APP_DB",
+                         "/usr/share/sakura/wine/app_db.json"))
+
+
+def lookup(filename: str) -> dict | None:
+    """The database entry matching this executable, if there is one.
+
+    Matched on the file's name, which is what the database is written
+    against -- "firefox setup 123.exe" rather than anything inside the binary.
+    """
+    try:
+        entries = json.loads(DB.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+    name = filename.lower()
+    for entry in entries:
+        pattern = (entry.get("regex") or {}).get("windows")
+        if not pattern:
+            continue
+        try:
+            if re.search(pattern, name, re.IGNORECASE):
+                return entry
+        except re.error:
+            # A bad pattern in the database is not a reason to fail the
+            # thing the user actually asked for.
+            continue
+    return None
+
+
+def native_offer(entry: dict) -> dict | None:
+    """What we can offer instead, in the terms this system understands.
+
+    The database also carries apt package names and Zorin-specific entries.
+    Those are dropped rather than translated: guessing that a Debian package
+    name is also an Arch one is how somebody ends up installing the wrong
+    thing.
+    """
+    flatpak = entry.get("flatpak") or {}
+    if flatpak.get("id"):
+        alt = (entry.get("alternative") or {}).get("name")
+        return {"kind": "store", "id": flatpak["id"],
+                "name": alt or entry.get("name", ""),
+                "sameApp": alt is None}
+    if entry.get("steam"):
+        return {"kind": "steam", "name": entry.get("name", "")}
+    link = entry.get("webLink") or {}
+    if link.get("href"):
+        return {"kind": "web", "href": link["href"],
+                "name": entry.get("name", "")}
+    return None
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print("usage: sakura-windows-app <file.exe>", file=sys.stderr)
+        return 1
+
+    target = Path(sys.argv[1]).expanduser()
+    if not target.is_file():
+        print(f"{target} is not a file", file=sys.stderr)
+        return 1
+
+    entry = lookup(target.name)
+    offer = native_offer(entry) if entry else None
+
+    facts = {
+        "file": str(target),
+        "name": target.name,
+        "known": entry is not None,
+        "app": (entry or {}).get("name", ""),
+        "message": (entry or {}).get("mainMessage", ""),
+        "offer": offer,
+        "wineInstalled": have("wine"),
+    }
+
+    # --json for anything driving this programmatically, and for testing it
+    # without a display.
+    if os.environ.get("SAKURA_WINDOWS_APP_JSON"):
+        print(json.dumps(facts, indent=2))
+        return 0
+
+    return ask(facts)
+
+
+def have(program: str) -> bool:
+    return subprocess.run(["sh", "-c", f"command -v {program}"],
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode == 0
+
+
+def ask(facts: dict) -> int:
+    """Put the question to the user, and act on the answer.
+
+    kdialog rather than a window of our own: it is Plasma's, so it looks like
+    every other dialog on the system and inherits the theme, and this is a
+    question with three answers rather than an application.
+    """
+    offer = facts["offer"]
+    name = facts["name"]
+
+    if not have("kdialog"):
+        # No dialog available. Running it silently would be the one outcome
+        # this whole feature exists to prevent.
+        print(f"{name} is a Windows program. Install Windows app support in "
+              f"SakuraOS Settings to run it.", file=sys.stderr)
+        return 1
+
+    if offer and offer["kind"] == "store":
+        same = offer.get("sameApp")
+        body = (f"<b>{name}</b> is a Windows program.<br><br>"
+                + (f"{offer['name']} is available for Linux and will run "
+                   f"properly here, rather than through a compatibility layer."
+                   if same else
+                   f"{offer['name']} does the same thing and runs properly "
+                   f"here, rather than through a compatibility layer."))
+        rc = subprocess.run(["kdialog", "--title", "Windows program",
+                             "--yesnocancel", body,
+                             "--yes-label", f"Get {offer['name']}",
+                             "--no-label", "Run it anyway",
+                             "--cancel-label", "Cancel"]).returncode
+        if rc == 0:
+            # Straight to the app's page in the store, which is where the
+            # decision about installing it belongs.
+            subprocess.Popen(["sakura-store-ui", "--app", offer["id"]])
+            return 0
+        if rc == 1:
+            return run_with_wine(facts)
+        return 0
+
+    if offer and offer["kind"] == "web":
+        rc = subprocess.run(["kdialog", "--title", "Windows program",
+                             "--yesnocancel",
+                             f"<b>{name}</b> is a Windows program.<br><br>"
+                             f"{offer['name']} publishes a Linux version.",
+                             "--yes-label", "Open the download page",
+                             "--no-label", "Run it anyway",
+                             "--cancel-label", "Cancel"]).returncode
+        if rc == 0:
+            subprocess.Popen(["xdg-open", offer["href"]])
+            return 0
+        if rc == 1:
+            return run_with_wine(facts)
+        return 0
+
+    # Nothing known about it. Say so plainly: an unrecognised Windows
+    # executable is exactly the thing worth pausing over.
+    rc = subprocess.run(["kdialog", "--title", "Windows program",
+                         "--warningyesno",
+                         f"<b>{name}</b> is a Windows program, and SakuraOS "
+                         f"does not recognise it.<br><br>It will run through a "
+                         f"compatibility layer, with access to your files. "
+                         f"Only continue if you trust where it came from.",
+                         "--yes-label", "Run it anyway",
+                         "--no-label", "Cancel"]).returncode
+    return run_with_wine(facts) if rc == 0 else 0
+
+
+def run_with_wine(facts: dict) -> int:
+    if not facts["wineInstalled"]:
+        subprocess.run(["kdialog", "--title", "Windows program", "--sorry",
+                        "Windows app support is not switched on. Turn it on in "
+                        "SakuraOS Settings, under Windows programs."])
+        return 1
+    os.execvp("wine", ["wine", facts["file"]])
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

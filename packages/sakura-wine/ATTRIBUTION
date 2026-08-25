@@ -1,0 +1,18 @@
+The application database in this package, app_db.json, is taken unchanged from
+Zorin Exec Guard App DB:
+
+    https://github.com/ZorinOS/zorin-exec-guard-app-db
+    Copyright Zorin OS Technologies Ltd.
+    GPL-2.0
+
+sakura-windows-app follows the approach of Zorin Exec Guard:
+
+    https://github.com/ZorinOS/zorin-exec-guard
+    Copyright 2018-2022 Zorin OS Technologies Ltd.
+    GPL-3.0
+
+That program is not shipped here. It is GTK3, and its installation path is
+written against apt and Zorin's own packages, neither of which exists on an
+Arch-based system. The idea -- that double-clicking "Firefox Setup.exe" on
+Linux is somebody trying to get Firefox rather than somebody trying to use
+Wine, and that the right answer is to offer them Firefox -- is theirs.

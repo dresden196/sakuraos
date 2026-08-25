@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""Turn Windows application support on and off.
+
+This is a settings toggle that installs about a gigabyte, so it behaves like
+an operation rather than a switch: it reports progress, it can fail, and the
+caller is expected to show both.
+
+Enabling installs Wine and the two runtimes almost everything needs -- Mono
+for .NET applications and Gecko for anything that embeds a browser -- and
+points Windows executables at the guard, so opening one asks a question
+rather than silently running it.
+
+Disabling removes them again. That is the half other distributions leave out,
+and the reason people end up with a gigabyte of Wine they stopped using two
+years ago.
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+
+# Wine itself, plus the runtimes. Without Mono, .NET applications fail with a
+# dialog offering to download it from the internet; without Gecko, anything
+# with an embedded browser does the same. Shipping them together is the
+# difference between "Wine is installed" and "Windows applications run".
+PACKAGES = ["wine", "wine-mono", "wine-gecko"]
+
+# What a Windows executable is, as far as the desktop is concerned. All four
+# are in the shared MIME database already; between them they cover .exe, .msi
+# and the older DOS binaries.
+MIME_TYPES = [
+    "application/x-ms-dos-executable",
+    "application/x-msdownload",
+    "application/x-msi",
+    "application/vnd.microsoft.portable-executable",
+]
+
+HANDLER = "org.sakuraos.windows-app.desktop"
+DEFAULTS = "/usr/share/applications/mimeapps.list"
+
+
+def emit(stage: str, **fields) -> None:
+    """One JSON object per line, the same protocol the store speaks."""
+    print(json.dumps({"stage": stage, **fields}), flush=True)
+
+
+def installed() -> bool:
+    return subprocess.run(["pacman", "-Q", "wine"],
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode == 0
+
+
+def stream(args: list[str], stage: str) -> int:
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, text=True, bufsize=1)
+    tail: list[str] = []
+    for line in proc.stdout:
+        line = line.rstrip()
+        if not line:
+            continue
+        tail.append(line)
+        del tail[:-12]
+        emit(stage, detail=line[:160])
+    proc.wait()
+    if proc.returncode != 0:
+        emit("failed", error="\n".join(tail[-6:]) or "the command failed")
+    return proc.returncode
+
+
+def write_defaults(enable: bool) -> None:
+    """Point Windows executables at the guard, or stop pointing them anywhere.
+
+    Written as a system default rather than into a user's own mimeapps.list,
+    so it applies to every account and so turning it off does not leave a
+    dangling association behind in each of them.
+    """
+    lines: list[str] = []
+    if os.path.exists(DEFAULTS):
+        skip = False
+        for line in open(DEFAULTS, encoding="utf-8"):
+            stripped = line.strip()
+            if stripped.startswith("["):
+                skip = stripped == "[Default Applications]"
+                lines.append(line.rstrip("\n"))
+                continue
+            # Drop any association we previously wrote; keep everyone else's.
+            if skip and any(stripped.startswith(t + "=") for t in MIME_TYPES):
+                continue
+            lines.append(line.rstrip("\n"))
+
+    if "[Default Applications]" not in "\n".join(lines):
+        lines.append("[Default Applications]")
+
+    if enable:
+        at = lines.index("[Default Applications]") + 1
+        for mime in MIME_TYPES:
+            lines.insert(at, f"{mime}={HANDLER}")
+
+    os.makedirs(os.path.dirname(DEFAULTS), exist_ok=True)
+    with open(DEFAULTS, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines).strip() + "\n")
+
+
+def main() -> int:
+    verb = sys.argv[1] if len(sys.argv) == 2 else ""
+
+    if verb == "status":
+        version = ""
+        if installed():
+            r = subprocess.run(["wine", "--version"],
+                               capture_output=True, text=True)
+            version = r.stdout.strip()
+        print(json.dumps({"enabled": installed(), "version": version}))
+        return 0
+
+    if os.geteuid() != 0:
+        print("must run as root", file=sys.stderr)
+        return 1
+
+    if verb == "enable":
+        if installed():
+            write_defaults(True)
+            emit("done", detail="already installed")
+            return 0
+        emit("downloading", detail="fetching Wine and its runtimes")
+        rc = stream(["pacman", "-S", "--noconfirm", "--needed", *PACKAGES],
+                    "installing")
+        if rc != 0:
+            return rc
+        write_defaults(True)
+        emit("done", detail="Windows applications can now be opened")
+        return 0
+
+    if verb == "disable":
+        # The association goes first. If the removal then fails, executables
+        # are at least no longer pointed at a handler that may be halfway
+        # uninstalled.
+        write_defaults(False)
+        if not installed():
+            emit("done", detail="already removed")
+            return 0
+        emit("removing", detail="removing Wine and its runtimes")
+        # -Rns, not -R: the runtimes are large and exist only for Wine, and
+        # leaving 400 MB behind is most of what people object to.
+        rc = stream(["pacman", "-Rns", "--noconfirm", *PACKAGES], "removing")
+        if rc != 0:
+            return rc
+        emit("done", detail="removed")
+        return 0
+
+    print("usage: sakura-wine status | enable | disable", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
