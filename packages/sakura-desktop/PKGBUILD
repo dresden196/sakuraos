@@ -40,6 +40,10 @@ depends=(
 
     # Filesystem and the rollback story
     'btrfs-progs'
+    # Full-disk encryption. Needed in the initramfs to unlock the disk at
+    # boot, and on the installed system to add or remove a passphrase -- and
+    # to turn encryption off again, which LUKS2 can do in place.
+    'cryptsetup'
     'snapper'
     'snap-pac'
 

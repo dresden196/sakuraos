@@ -19,6 +19,9 @@ TIMEZONE="UTC"
 LOCALE="en_US.UTF-8"
 KEYMAP="us"
 FEEDBACK="off"
+ENCRYPT="off"
+CRYPTPASS=""
+CRYPTPASS_STDIN=0
 SECUREBOOT="auto"
 THEME="dark"
 EXTRA_PACKAGES=""
@@ -39,6 +42,11 @@ while [[ $# -gt 0 ]]; do
         --locale)     LOCALE="$2"; shift 2 ;;
         --keymap)     KEYMAP="$2"; shift 2 ;;
         --feedback)   FEEDBACK="$2"; shift 2 ;;   # on | off
+        --encrypt)    ENCRYPT="$2"; shift 2 ;;    # on | off
+        # Read from standard input, never taken as an argument: anything on a
+        # command line is in /proc for every process on the machine to read,
+        # and this is the one secret here that outlives the install.
+        --encryption-password-stdin) CRYPTPASS_STDIN=1; shift ;;
         --secureboot) SECUREBOOT="$2"; shift 2 ;;   # auto | on | off
         --extra-packages) EXTRA_PACKAGES="$2"; shift 2 ;;
         --graphics) GRAPHICS="$2"; shift 2 ;;
@@ -52,6 +60,16 @@ done
 [[ -n "$DISK" ]] || die "--disk is required"
 [[ -b "$DISK" ]] || die "$DISK is not a block device"
 [[ -n "$USERNAME" ]] || die "--user is required"
+if [[ "$ENCRYPT" == "on" && "$CRYPTPASS_STDIN" == "1" ]]; then
+    IFS= read -r CRYPTPASS || true
+fi
+if [[ "$ENCRYPT" == "on" ]]; then
+    # Checked here rather than at the point of use: discovering an empty
+    # passphrase after the disk has been wiped leaves a machine with neither
+    # its old system nor a new one.
+    [[ -n "$CRYPTPASS" ]] || die "a passphrase must be supplied on stdin with --encrypt on"
+    command -v cryptsetup >/dev/null || die "cryptsetup is not available"
+fi
 
 # Refuse to install onto the disk the live system is running from. Getting this
 # wrong destroys the machine you are installing from, and the check is cheap.
@@ -89,13 +107,40 @@ partprobe "$DISK"; udevadm settle
 
 step "Creating filesystems"
 mkfs.fat -F32 -n SAKURA_ESP "$ESP" >/dev/null
-mkfs.btrfs -f -L SAKURA "$ROOT" >/dev/null
 
-ROOT_UUID=$(blkid -s UUID -o value "$ROOT")
+# Encryption, if asked for.
+#
+# LUKS2 on the partition, with the filesystem on the mapper above it. Rollback
+# is unaffected by this: sakura-rollback renames subvolumes on a mounted
+# btrfs and never touches the block device, so whether that device is an
+# encrypted mapping is not something it can tell. The one part that cares is
+# the recovery environment finding the disk at all, which is why the encrypt
+# hook has to be in both images -- see the mkinitcpio section below.
+#
+# The ESP stays unencrypted because firmware has to read it. That is true of
+# every encrypted Linux system and is why the kernel and initramfs are signed:
+# tampering with them is the attack that unencrypted boot partition allows.
+CRYPT_UUID=""
+FSROOT="$ROOT"
+if [[ "$ENCRYPT" == "on" ]]; then
+    step "Encrypting $ROOT"
+    # --key-file - so the passphrase never appears in a command line, where
+    # every other process on the machine could read it from /proc.
+    printf '%s' "$CRYPTPASS" | cryptsetup luksFormat --type luks2 \
+        --batch-mode --key-file - "$ROOT"
+    printf '%s' "$CRYPTPASS" | cryptsetup open --key-file - "$ROOT" cryptroot
+    CRYPT_UUID=$(blkid -s UUID -o value "$ROOT")
+    FSROOT="/dev/mapper/cryptroot"
+    info "encrypted; LUKS UUID: $CRYPT_UUID"
+fi
+
+mkfs.btrfs -f -L SAKURA "$FSROOT" >/dev/null
+
+ROOT_UUID=$(blkid -s UUID -o value "$FSROOT")
 info "root UUID: $ROOT_UUID"
 
 step "Creating subvolumes"
-mount "$ROOT" /mnt
+mount "$FSROOT" /mnt
 # @log and @pkg are separate subvolumes so a rollback of @ does not also roll
 # back the logs that explain what went wrong, or throw away the package cache
 # that a recovery might need.
@@ -105,12 +150,12 @@ done
 umount /mnt
 
 BTRFS_OPTS="noatime,compress=zstd:3,space_cache=v2"
-mount -o "$BTRFS_OPTS,subvol=@" "$ROOT" /mnt
+mount -o "$BTRFS_OPTS,subvol=@" "$FSROOT" /mnt
 mkdir -p /mnt/{home,var/log,var/cache/pacman/pkg,.snapshots,boot}
-mount -o "$BTRFS_OPTS,subvol=@home"      "$ROOT" /mnt/home
-mount -o "$BTRFS_OPTS,subvol=@log"       "$ROOT" /mnt/var/log
-mount -o "$BTRFS_OPTS,subvol=@pkg"       "$ROOT" /mnt/var/cache/pacman/pkg
-mount -o "$BTRFS_OPTS,subvol=@snapshots" "$ROOT" /mnt/.snapshots
+mount -o "$BTRFS_OPTS,subvol=@home"      "$FSROOT" /mnt/home
+mount -o "$BTRFS_OPTS,subvol=@log"       "$FSROOT" /mnt/var/log
+mount -o "$BTRFS_OPTS,subvol=@pkg"       "$FSROOT" /mnt/var/cache/pacman/pkg
+mount -o "$BTRFS_OPTS,subvol=@snapshots" "$FSROOT" /mnt/.snapshots
 mount "$ESP" /mnt/boot
 
 # Pick the graphics driver from the card that is actually present.
@@ -234,10 +279,27 @@ info "keyboard: $KEYMAP (console: $CONSOLE_KEYMAP)"
 # than pointing the kernel at a different subvolume. That is what lets this
 # stay embedded in a signed UKI. See packages/sakura-snapshot-boot/README.md.
 mkdir -p /mnt/etc/kernel
-echo "root=UUID=$ROOT_UUID rootflags=subvol=@ rw quiet splash" > /mnt/etc/kernel/cmdline
+# On an encrypted install the kernel is pointed at the mapping, and the hook
+# is told which partition to unlock to produce it. Both images need this:
+# recovery has to unlock the disk before it can find anything to roll back,
+# and a recovery environment that cannot open the disk is no recovery at all.
+if [[ "$ENCRYPT" == "on" ]]; then
+    CRYPT_ARG="cryptdevice=UUID=$CRYPT_UUID:cryptroot"
+    ROOT_ARG="root=/dev/mapper/cryptroot"
+    RECOVERY_ROOT="sakura.root=/dev/mapper/cryptroot"
+else
+    CRYPT_ARG=""
+    ROOT_ARG="root=UUID=$ROOT_UUID"
+    RECOVERY_ROOT="sakura.root=UUID=$ROOT_UUID"
+fi
+
+echo "$CRYPT_ARG $ROOT_ARG rootflags=subvol=@ rw quiet splash" \
+    | tr -s ' ' > /mnt/etc/kernel/cmdline
 # Recovery never mounts a root filesystem: it mounts the btrfs top level,
-# swaps @, and reboots. So it gets no root= at all.
-echo "sakura.recovery sakura.root=UUID=$ROOT_UUID rw" > /mnt/etc/kernel/recovery-cmdline
+# swaps @, and reboots. So it gets no root= at all -- but it still needs the
+# cryptdevice, or there is no top level to mount.
+echo "sakura.recovery $CRYPT_ARG $RECOVERY_ROOT rw" \
+    | tr -s ' ' > /mnt/etc/kernel/recovery-cmdline
 
 cat > /mnt/etc/mkinitcpio.d/linux.preset <<PRESET
 # Two images from one kernel: the system, and the recovery environment that
@@ -262,7 +324,17 @@ recovery_options="-A sakura-recovery"
 PRESET
 
 # btrfs needs to be in the initramfs to find root at all.
-sed -i 's/^HOOKS=.*/HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block btrfs filesystems fsck)/' \
+# encrypt goes between block and btrfs: it needs the block devices to exist
+# and has to produce the mapping before anything tries to read a filesystem
+# from it. keyboard and keymap are already ahead of it, which matters more
+# than it looks -- the passphrase prompt is the first thing typed on this
+# machine, and on the layout the user chose rather than us.
+if [[ "$ENCRYPT" == "on" ]]; then
+    HOOKS_LINE="HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block encrypt btrfs filesystems fsck)"
+else
+    HOOKS_LINE="HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block btrfs filesystems fsck)"
+fi
+sed -i "s/^HOOKS=.*/$HOOKS_LINE/" \
     /mnt/etc/mkinitcpio.conf
 sed -i 's/^MODULES=.*/MODULES=(btrfs)/' /mnt/etc/mkinitcpio.conf
 

@@ -19,7 +19,14 @@ USER_PASS=tester
 HOSTNAME_=sakura-clean
 
 verify_only=0
-[[ "${1:-}" == "--verify" ]] && verify_only=1
+encrypt=0
+for arg in "$@"; do
+    case "$arg" in
+        --verify)  verify_only=1 ;;
+        --encrypt) encrypt=1 ;;
+    esac
+done
+CRYPTPASS=diskpass
 
 run() { "$REPO_ROOT/build/guest-run.sh" "$@"; }
 
@@ -67,10 +74,20 @@ if (( ! verify_only )); then
     # ships no agent, so without it the machine is unreachable and none of the
     # checks below can run. --extra-packages is the installer's own mechanism
     # for this, so nothing test-specific leaks into the installer itself.
+    CRYPT_ARGS=""
+    CRYPT_IN="< /dev/null"
+    if (( encrypt )); then
+        # The passphrase goes down stdin, the same path the graphical
+        # installer uses -- testing a different one would prove nothing about
+        # the code that ships.
+        CRYPT_ARGS="--encrypt on --encryption-password-stdin"
+        CRYPT_IN="<<< $CRYPTPASS"
+    fi
     run "setsid bash -c 'sakura-install --disk /dev/vda --user $USER_NAME \
          --password $USER_PASS --hostname $HOSTNAME_ --timezone UTC \
-         --theme dark --keymap gb --extra-packages qemu-guest-agent --yes \
-         > /tmp/install.log 2>&1; echo \$? > /tmp/install.rc' &" \
+         --theme dark --keymap gb $CRYPT_ARGS \
+         --extra-packages qemu-guest-agent --yes \
+         > /tmp/install.log 2>&1 $CRYPT_IN; echo \$? > /tmp/install.rc' &" \
         >/dev/null 2>&1 || true
 
     echo -n ">> installing"
@@ -98,8 +115,20 @@ if (( ! verify_only )); then
     # types a password, and every check below is a shell command anyway.
     echo -n ">> waiting for the installed system"
     deadline=$(( SECONDS + 420 ))
+    typed=0
     until run "true" >/dev/null 2>&1; do
         (( SECONDS < deadline )) || { echo; echo "installed system never came up" >&2; exit 1; }
+        # An encrypted disk stops at a passphrase prompt before anything else
+        # runs, so there is nothing to poll until somebody types it. Sent once
+        # after the prompt has had time to appear, and again a minute later in
+        # case the first went to a console that was not listening yet.
+        if (( encrypt )) && [[ $typed -lt 2 ]] && (( SECONDS > 25 + typed * 60 )); then
+            "$REPO_ROOT/build/sendkeys.sh" $(echo "$CRYPTPASS" | sed 's/./& /g') \
+                >/dev/null 2>&1 || true
+            "$REPO_ROOT/build/sendkeys.sh" ret >/dev/null 2>&1 || true
+            typed=$(( typed + 1 ))
+            echo -n "[passphrase]"
+        fi
         echo -n .
         sleep 5
     done
@@ -134,6 +163,15 @@ check "hostname was applied"               "test \"\$(cat /etc/hostname)\" = $HO
 check "root is on btrfs"                   "findmnt -no FSTYPE / | grep -q btrfs"
 check "the @ subvolume is the root"        "findmnt -no OPTIONS / | tr ',' '\\n' | grep -qx 'subvol=/@'"
 check "the ESP is mounted"                 "findmnt -no TARGET /boot"
+if (( encrypt )); then
+    # The point of the whole exercise: the disk is encrypted, the system still
+    # boots, and rollback still has something it can reach.
+    check "the partition is LUKS"          "cryptsetup isLuks /dev/vda2"
+    check "root runs on the mapping"       "findmnt -no SOURCE / | grep -q /dev/mapper/"
+    check "the encrypt hook is in place"   "grep -q 'encrypt' /etc/mkinitcpio.conf"
+    check "the kernel is told to unlock"   "grep -q cryptdevice /etc/kernel/cmdline"
+    check "recovery is told to unlock"     "grep -q cryptdevice /etc/kernel/recovery-cmdline"
+fi
 check "snapper has a root config"          "snapper -c root list"
 check "snapshots exist"                    "test \"\$(snapper -c root list | wc -l)\" -gt 2"
 # The duplicate [sakura-core] left by pacstrap made every pacman run warn.

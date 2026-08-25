@@ -74,6 +74,34 @@ QVariantList Backend::disks() const
     return out;
 }
 
+QVariantList Backend::timezoneChoices() const
+{
+    // The raw identifiers are what the system wants and the wrong thing to
+    // search: "America/New_York" does not contain "new york", so typing the
+    // name of the city found nothing. Each entry carries a searchable form
+    // with the region stripped and the underscores gone, and the city is
+    // shown first because that is what people know their zone by.
+    QVariantList out;
+    for (const QString &id : timezones()) {
+        const int slash = id.lastIndexOf(QLatin1Char('/'));
+        QString city = (slash < 0 ? id : id.mid(slash + 1));
+        city.replace(QLatin1Char('_'), QLatin1Char(' '));
+        QString region = slash < 0 ? QString() : id.left(id.indexOf(QLatin1Char('/')));
+        region.replace(QLatin1Char('_'), QLatin1Char(' '));
+
+        out.append(QVariantMap{
+            {QStringLiteral("id"), id},
+            {QStringLiteral("city"), city},
+            {QStringLiteral("region"), region},
+            // Everything a person might type, lowercased once here rather
+            // than on every keystroke for four hundred entries.
+            {QStringLiteral("search"),
+             QStringLiteral("%1 %2 %3").arg(city, region, id).toLower()},
+        });
+    }
+    return out;
+}
+
 QStringList Backend::timezones() const
 {
     // UTC is a legitimate answer and is what a machine with no configured
@@ -321,6 +349,9 @@ void Backend::install(const QVariantMap &answers)
         // to mean anything.
         QStringLiteral("--keymap"), answers[QStringLiteral("keyboard")].toString(),
         QStringLiteral("--locale"), answers[QStringLiteral("locale")].toString(),
+        QStringLiteral("--encrypt"),
+        answers[QStringLiteral("encrypt")].toBool() ? QStringLiteral("on")
+                                                    : QStringLiteral("off"),
         QStringLiteral("--feedback"),
         answers[QStringLiteral("crashReports")].toBool() ? QStringLiteral("on")
                                                          : QStringLiteral("off"),
@@ -329,6 +360,11 @@ void Backend::install(const QVariantMap &answers)
                                                  : QStringLiteral("light"),
         QStringLiteral("--yes"),
     };
+
+    const bool encrypting = answers[QStringLiteral("encrypt")].toBool();
+    if (encrypting) {
+        args << QStringLiteral("--encryption-password-stdin");
+    }
 
     const QString browser = answers[QStringLiteral("browser")].toString();
     if (!browser.isEmpty() && browser != QLatin1String("none")) {
@@ -375,4 +411,14 @@ void Backend::install(const QVariantMap &answers)
     // window, and a window is a lot of attack surface to hand uid 0.
     m_proc->start(QStringLiteral("pkexec"),
                   QStringList{QStringLiteral("/usr/bin/sakura-install")} + args);
+
+    if (encrypting) {
+        // Written down the pipe rather than passed as an argument, and the
+        // channel closed straight after so the installer sees end of input.
+        // A passphrase in argv is readable from /proc by every process on the
+        // machine, and this is the one secret here that outlives the install.
+        m_proc->write(answers[QStringLiteral("encryptPassword")]
+                          .toString().toUtf8() + '\n');
+        m_proc->closeWriteChannel();
+    }
 }
