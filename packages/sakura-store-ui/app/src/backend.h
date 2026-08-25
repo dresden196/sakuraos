@@ -36,6 +36,9 @@ class Backend : public QObject
     Q_PROPERTY(QString progressDetail READ progressDetail NOTIFY progressChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY progressChanged)
     Q_PROPERTY(QString error READ error NOTIFY progressChanged)
+    // The tool's own words, kept so a wrong explanation can still be seen
+    // through. Shown only if the user asks for it.
+    Q_PROPERTY(QString errorDetail READ errorDetail NOTIFY progressChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -61,6 +64,7 @@ public:
     QString progressDetail() const { return m_detail; }
     bool busy() const { return m_busy; }
     QString error() const { return m_error; }
+    QString errorDetail() const { return m_errorDetail; }
 
     Q_INVOKABLE void search(const QString &query, const QString &source);
     Q_INVOKABLE void openApp(const QString &id);
@@ -73,6 +77,8 @@ public:
     Q_INVOKABLE void remove(const QString &id, const QString &source,
                             bool deleteData = false);
     Q_INVOKABLE void openPermissions(const QString &id);
+    // Dismiss a failure the user has read.
+    Q_INVOKABLE void clearError();
 
 Q_SIGNALS:
     void stateChanged();
@@ -98,6 +104,7 @@ private:
     QVariantList m_categories, m_categoryApps, m_sources;
     QString m_categoryName;
     QVariantMap m_app, m_unavailable;
+    QString m_errorDetail;
     QString m_stage, m_detail, m_error;
     int m_percent = 0;
     bool m_searching = false, m_loadingApp = false, m_busy = false;

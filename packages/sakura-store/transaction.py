@@ -79,6 +79,55 @@ def transaction_lock():
         os.close(fd)
 
 
+# What went wrong, in a sentence somebody can act on.
+#
+# The tools underneath report failures to other programmers: flatpak explains
+# that it could not get a revokefs-fuse socket from the system helper, pacman
+# that it is unable to lock the database. Passing that through unchanged makes
+# the store look broken and tells the reader nothing about what to do. The raw
+# text is still carried, under Details, because when a message here is wrong
+# the original is the only way to find out.
+#
+# Ordered: the first pattern that matches wins, so the specific ones come
+# before the general.
+_EXPLANATIONS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"free space, but only|[Nn]ot enough (disk )?space|"
+                r"No space left on device"),
+     "There is not enough free space on this device."),
+    (re.compile(r"not allowed for user|[Nn]ot authorized|"
+                r"Authentication (is )?(required|failed)|polkit"),
+     "Permission was not given, so nothing was changed."),
+    (re.compile(r"unable to lock database|could not lock database"),
+     "Another install or update is running. Try again when it has finished."),
+    (re.compile(r"Could not resolve host|Temporary failure in name resolution|"
+                r"[Nn]etwork is unreachable|Failed to connect|Connection refused|"
+                r"Could not connect"),
+     "Could not reach the server. Check your internet connection."),
+    (re.compile(r"signature|PGP|corrupted|invalid or corrupted package|"
+                r"key .* is unknown"),
+     "A download could not be verified, so it was not installed."),
+    (re.compile(r"target not found|[Nn]o such ref|[Nn]othing matches|"
+                r"[Nn]ot found in remote|404"),
+     "This application is no longer available from that source."),
+    (re.compile(r"conflicting files|exists in filesystem"),
+     "Another package already owns files this one needs."),
+]
+
+
+def explain(text: str) -> str:
+    for pattern, message in _EXPLANATIONS:
+        if pattern.search(text):
+            return message
+    # Nothing recognised. The last non-empty line is usually the actual error
+    # rather than the trace leading to it, and is better than six lines of
+    # context.
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if line:
+            return line[:200]
+    return "The operation did not finish."
+
+
 def stream(args: list[str], stage: str, parse=None) -> int:
     """Run a command, turning its output into progress rather than swallowing it."""
     proc = subprocess.Popen(args, stdout=subprocess.PIPE,
@@ -98,8 +147,8 @@ def stream(args: list[str], stage: str, parse=None) -> int:
             emit(stage, detail=line[:160])
     proc.wait()
     if proc.returncode != 0:
-        emit(FAILED, error="\n".join(tail[-6:]) or "the command failed",
-             code=proc.returncode)
+        raw = "\n".join(tail[-12:])
+        emit(FAILED, error=explain(raw), detail=raw, code=proc.returncode)
     return proc.returncode
 
 

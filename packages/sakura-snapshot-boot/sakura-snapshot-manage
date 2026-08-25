@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Create and delete restore points.
+
+Taking one is harmless; deleting one throws away the ability to go back to
+that moment, so both go through polkit and both refuse anything they do not
+recognise. The whole argument surface is a fixed verb and, for delete, a
+snapshot number that must already exist.
+"""
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+
+CONFIG = os.environ.get("SAKURA_SNAPPER_CONFIG", "root")
+# Long enough to be recognisable in a list a year from now, short enough to
+# read in a row. Newlines would break snapper's own table output.
+DESCRIPTION = re.compile(r"\A[^\n\r\t]{1,80}\Z")
+NUMBER = re.compile(r"\A[0-9]{1,9}\Z")
+
+
+def snapper(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["snapper", "-c", CONFIG, *args],
+                          capture_output=True, text=True)
+
+
+def fail(message: str) -> int:
+    print(message, file=sys.stderr)
+    return 1
+
+
+def exists(number: str) -> bool:
+    r = snapper("list", "--columns", "number")
+    return any(line.strip() == number for line in r.stdout.splitlines())
+
+
+def main() -> int:
+    if os.geteuid() != 0:
+        return fail("must run as root")
+
+    args = sys.argv[1:]
+
+    if len(args) == 2 and args[0] == "create":
+        if not DESCRIPTION.match(args[1]):
+            return fail("that description cannot be used")
+        r = snapper("create", "--description", args[1],
+                    # Counted against the same limit as the automatic ones, so
+                    # a machine cannot fill its disk with restore points that
+                    # nothing ever cleans up.
+                    "--cleanup-algorithm", "number",
+                    "--userdata", "created-by=user")
+        if r.returncode != 0:
+            return fail(r.stderr.strip() or "the restore point could not be created")
+        print("restore point created")
+        return 0
+
+    if len(args) == 2 and args[0] == "delete":
+        if not NUMBER.match(args[1]):
+            return fail("that is not a restore point")
+        if not exists(args[1]):
+            return fail(f"restore point {args[1]} does not exist")
+        r = snapper("delete", args[1])
+        if r.returncode != 0:
+            return fail(r.stderr.strip() or "the restore point could not be deleted")
+        print("restore point deleted")
+        return 0
+
+    return fail("usage: sakura-snapshot-manage create <description> | delete <number>")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

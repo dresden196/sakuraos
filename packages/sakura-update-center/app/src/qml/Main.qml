@@ -17,6 +17,8 @@ QQC2.ApplicationWindow {
     // the whole system with an earlier copy of itself, so it is never one
     // click away.
     property var confirmRollback: null
+    // The restore point awaiting a delete confirmation, or null.
+    property var confirmDelete: null
 
     readonly property color accent: "#ffb7c5"
     readonly property color accentText: "#3a2731"
@@ -515,8 +517,41 @@ QQC2.ApplicationWindow {
                 title: "Restore points"
                 subtitle: "One is taken before every change. Going back restarts the machine and undoes everything after that point \u2014 the files in your home folder are not touched."
             }
+            // Taking one before doing something risky is the reason people
+            // want restore points at all, and until now the only way to get
+            // one was to install a package.
+            RowLayout {
+                spacing: 10
+                QQC2.TextField {
+                    id: newPointName
+                    Layout.preferredWidth: 300
+                    placeholderText: "What are you about to change?"
+                    color: root.text
+                    font.pixelSize: 13
+                    background: Rectangle {
+                        radius: 8; color: root.card
+                        border.width: 1
+                        border.color: newPointName.activeFocus ? root.accent : root.line
+                    }
+                }
+                Btn {
+                    text: "Save a restore point"
+                    enabled: !backend.busy
+                    onClicked: {
+                        backend.createRestorePoint(newPointName.text)
+                        newPointName.text = ""
+                    }
+                }
+            }
             QQC2.Label {
-                visible: backend.history.length === 0
+                visible: backend.error !== ""
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: backend.error
+                color: "#ff9db0"; font.pixelSize: 12
+            }
+            QQC2.Label {
+                visible: backend.history.length === 0 && !backend.busy
                 text: "No restore points yet."
                 color: root.dim; font.pixelSize: 16
             }
@@ -552,6 +587,23 @@ QQC2.ApplicationWindow {
                         // was a list of restore points and a sentence telling
                         // people to find the boot menu themselves -- which the
                         // documentation itself calls not a safety net.
+                        QQC2.Button {
+                            text: "Delete"
+                            enabled: !backend.busy
+                            onClicked: root.confirmDelete = modelData
+                            contentItem: QQC2.Label {
+                                text: parent.text
+                                color: root.dim; font.pixelSize: 12
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                radius: 7
+                                color: parent.down ? root.cardUp : "transparent"
+                                border.width: 1; border.color: root.line
+                            }
+                            padding: 8; leftPadding: 12; rightPadding: 12
+                        }
                         QQC2.Button {
                             text: "Go back to this"
                             enabled: !backend.busy
@@ -667,6 +719,84 @@ QQC2.ApplicationWindow {
             Item { Layout.fillHeight: true }
         }
     }
+    // ---- confirm deleting a restore point -----------------------------------
+    Rectangle {
+        anchors.fill: parent
+        z: 200
+        visible: root.confirmDelete !== null
+        color: Qt.rgba(0, 0, 0, 0.6)
+        TapHandler { onTapped: {} }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(500, parent.width - 70)
+            implicitHeight: delBody.implicitHeight + 46
+            radius: 16
+            color: root.card
+            border.width: 1; border.color: root.line
+
+            ColumnLayout {
+                id: delBody
+                anchors.left: parent.left; anchors.right: parent.right
+                anchors.top: parent.top; anchors.margins: 23
+                spacing: 13
+
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Delete the restore point from "
+                        + (root.confirmDelete ? (root.confirmDelete.date || "this point") : "") + "?"
+                    color: root.text
+                    font.pixelSize: 20; font.weight: Font.Light
+                }
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    // Says what is lost, which is the ability to return -- not
+                    // any of the files the machine is holding right now.
+                    text: "Nothing on this system changes. What is lost is the "
+                        + "option of coming back to how things were at that moment."
+                    color: root.dim; font.pixelSize: 13
+                }
+                RowLayout {
+                    Layout.topMargin: 3
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 10
+                    QQC2.Button {
+                        text: "Cancel"
+                        onClicked: root.confirmDelete = null
+                        contentItem: QQC2.Label {
+                            text: parent.text; color: root.text; font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            radius: 8; color: parent.down ? root.cardUp : "transparent"
+                            border.width: 1; border.color: root.line
+                        }
+                        padding: 10; leftPadding: 20; rightPadding: 20
+                    }
+                    QQC2.Button {
+                        text: "Delete"
+                        enabled: !backend.busy
+                        onClicked: {
+                            backend.deleteRestorePoint(String(root.confirmDelete.number))
+                            root.confirmDelete = null
+                        }
+                        contentItem: QQC2.Label {
+                            text: parent.text; color: "#ffffff"
+                            font.pixelSize: 13; font.weight: Font.DemiBold
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle { radius: 8; color: "#c8524f" }
+                        padding: 10; leftPadding: 20; rightPadding: 20
+                    }
+                }
+            }
+        }
+    }
+
     // ---- confirm a rollback -------------------------------------------------
     Rectangle {
         anchors.fill: parent
