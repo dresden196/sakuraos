@@ -142,10 +142,14 @@ if (( ! verify_only )); then
     # NetworkManager had not finished getting a lease -- a test that reports
     # "the repo resolves: FAIL" for that reason is worse than no test, because
     # it sends you looking at the server.
+    # Waits for what the checks actually need, which is name resolution and a
+    # working fetch -- not a ping. A reply from an IP address proves a route
+    # exists and nothing about DNS, and the repository checks resolve mirror
+    # hostnames: they were failing here while "the network" was reported up.
     echo -n ">> waiting for the network"
-    deadline=$(( SECONDS + 120 ))
-    until run "ping -c1 -W2 173.233.87.167" >/dev/null 2>&1; do
-        (( SECONDS < deadline )) || { echo " (no route; repo checks will fail)"; break; }
+    deadline=$(( SECONDS + 180 ))
+    until run "getent hosts archlinux.org >/dev/null && curl -sS -o /dev/null --max-time 10 http://173.233.87.167/" >/dev/null 2>&1; do
+        (( SECONDS < deadline )) || { echo " (still not resolving; repo checks may fail)"; break; }
         echo -n .
         sleep 5
     done
