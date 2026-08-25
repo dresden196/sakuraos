@@ -42,7 +42,12 @@ QQC2.ApplicationWindow {
 
     // One content width, centred, rather than every page picking its own
     // max-width and hugging the left edge of a much wider pane.
-    readonly property int contentWidth: 620
+    // How wide the questions are. Fixed at 620 it left most of a 1920 display
+    // empty either side of a narrow strip -- fine in a window, odd once the
+    // installer went full screen. Grows with the display and then stops:
+    // running text past about 900 pixels is harder to read, not easier.
+    readonly property int contentWidth:
+        Math.max(560, Math.min(900, width - 520))
 
     // The summary shows what was chosen, not the codes those choices are
     // stored as. "en_US.UTF-8" and "us" are what the system wants; nobody
@@ -122,23 +127,33 @@ QQC2.ApplicationWindow {
 
     // ---- shared building blocks -------------------------------------------
     component Heading : ColumnLayout {
+        id: headingRoot
         property string title
         property string subtitle
+        // Centred only where a screen has something above it to centre under.
+        // Everything else is left-aligned, and mixing the two on one screen
+        // reads as a mistake rather than as emphasis.
+        property bool centred: false
         Layout.fillWidth: true
         spacing: 6
         QQC2.Label {
-            text: parent.title
+            Layout.fillWidth: true
+            text: headingRoot.title
             color: root.text
             font.pixelSize: 26
             font.weight: Font.Medium
+            horizontalAlignment: headingRoot.centred ? Text.AlignHCenter
+                                                     : Text.AlignLeft
         }
         QQC2.Label {
-            text: parent.subtitle
+            text: headingRoot.subtitle
             color: root.dim
             font.pixelSize: 14
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
             visible: text !== ""
+            horizontalAlignment: headingRoot.centred ? Text.AlignHCenter
+                                                     : Text.AlignLeft
         }
     }
 
@@ -367,8 +382,8 @@ QQC2.ApplicationWindow {
 
             Image {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 132
-                Layout.preferredHeight: 132
+                Layout.preferredWidth: 150
+                Layout.preferredHeight: 150
                 source: "qrc:/assets/sakura-mark.svg"
                 sourceSize: Qt.size(264, 264)
                 fillMode: Image.PreserveAspectFit
@@ -648,78 +663,156 @@ QQC2.ApplicationWindow {
         ColumnLayout {
             spacing: 18
             Item { Layout.preferredHeight: 34 }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 22
-                Heading {
-                    Layout.fillWidth: true
-                    title: "Language"
-                    subtitle: "This sets the language of the desktop and how dates, numbers and currency are written."
+            // A turning earth with blossom drifting past it, centred above
+            // the heading. It sat off to the right of the title before, where
+            // it read as an ornament somebody had left there; this is the
+            // first screen anyone sees, and it can carry a hero.
+            Canvas {
+                id: globe
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 132
+                Layout.preferredHeight: 132
+
+                property real spin: 0
+                // Slow. A globe that whips round is a loading spinner, and
+                // this is not telling anyone to wait for anything.
+                NumberAnimation on spin {
+                    from: 0; to: 360
+                    duration: 42000
+                    loops: Animation.Infinite
+                    running: globe.visible
                 }
-                // A turning globe. It says "this is the question about where
-                // in the world you are" faster than the heading does, and it
-                // is the first screen anybody sees -- worth a few lines.
-                Canvas {
-                    id: globe
-                    Layout.preferredWidth: 96
-                    Layout.preferredHeight: 96
-                    Layout.alignment: Qt.AlignVCenter
-                    // Degrees turned. Animated rather than redrawn on a timer
-                    // so it stays smooth while the language list is being
-                    // filtered on the GUI thread.
-                    property real spin: 0
-                    NumberAnimation on spin {
-                        from: 0; to: 360
-                        duration: 24000
-                        loops: Animation.Infinite
-                        running: globe.visible
-                    }
-                    onSpinChanged: requestPaint()
+                onSpinChanged: requestPaint()
 
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.reset()
-                        var cx = width / 2, cy = height / 2
-                        var r = Math.min(cx, cy) - 4
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.reset()
+                    var cx = width / 2, cy = height / 2
+                    var r = Math.min(cx, cy) - 16
 
-                        ctx.strokeStyle = root.line
-                        ctx.lineWidth = 1.5
+                    // A globe, not a rendering of the Earth. Procedural
+                    // continents at this size read as blemishes rather than
+                    // as coastlines -- tried, and no amount of tuning fixed
+                    // it. A clean sphere with a few turning meridians says
+                    // "somewhere in the world" immediately, which is all this
+                    // has to say. The blossom carries the character.
+                    var sphere = ctx.createRadialGradient(
+                        cx - r * 0.4, cy - r * 0.4, r * 0.05, cx, cy, r)
+                    sphere.addColorStop(0, "#6b3c50")
+                    sphere.addColorStop(1, "#2a1721")
+                    ctx.fillStyle = sphere
+                    ctx.beginPath()
+                    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                    ctx.fill()
+
+                    ctx.save()
+                    ctx.beginPath()
+                    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                    ctx.clip()
+
+                    ctx.strokeStyle = Qt.rgba(root.accent.r, root.accent.g,
+                                              root.accent.b, 0.22)
+                    ctx.lineWidth = 1
+
+                    // Two parallels. They do not move: a line of latitude is
+                    // the same circle however far the globe has turned.
+                    for (var lat = -35; lat <= 35; lat += 35) {
+                        if (lat === 0) {
+                            continue
+                        }
+                        var rad = lat * Math.PI / 180
+                        var y = cy - r * Math.sin(rad)
+                        var rx = r * Math.cos(rad)
                         ctx.beginPath()
-                        ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                        ctx.ellipse(cx - rx, y - rx * 0.18, rx * 2, rx * 0.36)
                         ctx.stroke()
-
-                        // Lines of latitude: circles on the sphere, so
-                        // ellipses once flattened, and none of them turn.
-                        ctx.strokeStyle = Qt.rgba(root.accent.r, root.accent.g,
-                                                  root.accent.b, 0.55)
-                        ctx.lineWidth = 1
-                        for (var lat = -60; lat <= 60; lat += 30) {
-                            var rad = lat * Math.PI / 180
-                            var y = cy - r * Math.sin(rad)
-                            var rx = r * Math.cos(rad)
-                            ctx.beginPath()
-                            ctx.ellipse(cx - rx, y - rx * 0.16, rx * 2, rx * 0.32)
-                            ctx.stroke()
-                        }
-
-                        // Lines of longitude. Each is a circle seen edge-on at
-                        // some angle, which flattens to an ellipse whose width
-                        // is the cosine of how far round it has turned. Drawn
-                        // only while facing us, so the globe reads as solid
-                        // rather than as a wireframe cage.
-                        for (var lon = 0; lon < 180; lon += 30) {
-                            var a = (lon + globe.spin) * Math.PI / 180
-                            var w = Math.cos(a)
-                            ctx.globalAlpha = 0.25 + 0.45 * Math.abs(w)
-                            ctx.beginPath()
-                            ctx.ellipse(cx - Math.abs(w) * r, cy - r,
-                                        Math.abs(w) * r * 2, r * 2)
-                            ctx.stroke()
-                        }
-                        ctx.globalAlpha = 1
                     }
+                    // The equator, heavier, so the sphere has an axis.
+                    ctx.strokeStyle = Qt.rgba(root.accent.r, root.accent.g,
+                                              root.accent.b, 0.34)
+                    ctx.beginPath()
+                    ctx.ellipse(cx - r, cy - r * 0.2, r * 2, r * 0.4)
+                    ctx.stroke()
+
+                    // Three meridians, turning. Each is a circle seen at an
+                    // angle, so its width is the cosine of how far round it
+                    // has gone, and it fades as it approaches edge-on --
+                    // which is the whole reason the sphere looks like it is
+                    // rotating rather than sitting still.
+                    for (var m = 0; m < 3; ++m) {
+                        var a = (m * 60 + globe.spin) * Math.PI / 180
+                        var w = Math.cos(a)
+                        ctx.globalAlpha = 0.10 + 0.30 * Math.abs(w)
+                        ctx.strokeStyle = root.accent
+                        ctx.beginPath()
+                        ctx.ellipse(cx - Math.abs(w) * r, cy - r,
+                                    Math.abs(w) * r * 2, r * 2)
+                        ctx.stroke()
+                    }
+                    ctx.globalAlpha = 1
+                    ctx.restore()
+
+                    // The rim.
+                    ctx.strokeStyle = Qt.rgba(root.accent.r, root.accent.g,
+                                              root.accent.b, 0.45)
+                    ctx.lineWidth = 1.5
+                    ctx.beginPath()
+                    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+                    ctx.stroke()
+
+                    // One blossom over the lower right, still. Petals
+                    // orbiting looked like dust on the screen.
+                    globe.blossom(ctx, cx + r * 0.74, cy + r * 0.72, 16)
+                }
+
+                // Five petals and a centre, drawn from the flower's middle
+                // outwards so the petals overlap the way real ones do.
+                function blossom(ctx, x, y, size) {
+                    ctx.save()
+                    ctx.translate(x, y)
+                    ctx.rotate(0.35)
+                    for (var i = 0; i < 5; ++i) {
+                        ctx.save()
+                        ctx.rotate(i * 2 * Math.PI / 5)
+                        var g = ctx.createLinearGradient(0, 0, 0, -size)
+                        g.addColorStop(0, "#ffd9e2")
+                        g.addColorStop(1, root.accent)
+                        ctx.fillStyle = g
+                        ctx.beginPath()
+                        ctx.moveTo(0, 0)
+                        ctx.bezierCurveTo(-size * 0.58, -size * 0.42,
+                                          -size * 0.44, -size * 0.98,
+                                          0, -size)
+                        ctx.bezierCurveTo(size * 0.44, -size * 0.98,
+                                          size * 0.58, -size * 0.42,
+                                          0, 0)
+                        ctx.fill()
+                        // The notch at the tip, which is what distinguishes a
+                        // sakura petal from a plum one.
+                        ctx.fillStyle = "#5d3446"
+                        ctx.beginPath()
+                        ctx.moveTo(0, -size)
+                        ctx.lineTo(-size * 0.16, -size * 0.74)
+                        ctx.lineTo(size * 0.16, -size * 0.74)
+                        ctx.closePath()
+                        ctx.fill()
+                        ctx.restore()
+                    }
+                    ctx.fillStyle = "#fff1b8"
+                    ctx.beginPath()
+                    ctx.arc(0, 0, size * 0.19, 0, Math.PI * 2)
+                    ctx.fill()
+                    ctx.restore()
                 }
             }
+
+            Heading {
+                Layout.fillWidth: true
+                centred: true
+                title: "Language"
+                subtitle: "This sets the language of the desktop and how dates, numbers and currency are written."
+            }
+
             Field {
                 id: langFilter
                 placeholderText: "Search languages…"
