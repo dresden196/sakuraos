@@ -762,46 +762,85 @@ QQC2.ApplicationWindow {
 
                     // One blossom over the lower right, still. Petals
                     // orbiting looked like dust on the screen.
-                    globe.blossom(ctx, cx + r * 0.74, cy + r * 0.72, 16)
+                    globe.blossom(ctx, cx + r * 0.74, cy + r * 0.72, 19)
                 }
 
-                // Five petals and a centre, drawn from the flower's middle
-                // outwards so the petals overlap the way real ones do.
+                // A cherry blossom, which is a specific shape rather than a
+                // five-petalled flower.
+                //
+                // What makes it read as sakura: each petal is narrow where it
+                // joins the centre and widest near the tip, and the tip is
+                // split by a deep cleft into two rounded lobes. Without that
+                // cleft it is a plum blossom; with a rounded tip it is
+                // nothing in particular. The cleft is cut into the outline
+                // rather than painted over afterwards, so it works over the
+                // sphere, over the background, and over anything else this
+                // ends up sitting on.
+                function petalPath(ctx, h) {
+                    var w = h * 0.46
+                    ctx.beginPath()
+                    ctx.moveTo(0, 0)
+                    // Left edge: narrow at the base, swelling towards the tip.
+                    ctx.bezierCurveTo(-w * 0.55, -h * 0.22,
+                                      -w * 1.05, -h * 0.58,
+                                      -w * 0.80, -h * 0.90)
+                    // Left lobe, rounded over the top.
+                    ctx.quadraticCurveTo(-w * 0.62, -h * 1.04,
+                                         -w * 0.30, -h * 0.94)
+                    // Into the cleft, and back out the other side.
+                    ctx.lineTo(0, -h * 0.70)
+                    ctx.lineTo(w * 0.30, -h * 0.94)
+                    ctx.quadraticCurveTo(w * 0.62, -h * 1.04,
+                                         w * 0.80, -h * 0.90)
+                    ctx.bezierCurveTo(w * 1.05, -h * 0.58,
+                                      w * 0.55, -h * 0.22,
+                                      0, 0)
+                    ctx.closePath()
+                }
+
                 function blossom(ctx, x, y, size) {
                     ctx.save()
                     ctx.translate(x, y)
-                    ctx.rotate(0.35)
+                    ctx.rotate(-0.25)
+
                     for (var i = 0; i < 5; ++i) {
                         ctx.save()
+                        // A little under a fifth of a turn each, so the
+                        // petals sit apart rather than merging into a disc.
                         ctx.rotate(i * 2 * Math.PI / 5)
                         var g = ctx.createLinearGradient(0, 0, 0, -size)
-                        g.addColorStop(0, "#ffd9e2")
-                        g.addColorStop(1, root.accent)
+                        g.addColorStop(0, "#f8c2d2")
+                        g.addColorStop(0.55, "#ffd9e4")
+                        g.addColorStop(1, "#fff2f6")
                         ctx.fillStyle = g
-                        ctx.beginPath()
-                        ctx.moveTo(0, 0)
-                        ctx.bezierCurveTo(-size * 0.58, -size * 0.42,
-                                          -size * 0.44, -size * 0.98,
-                                          0, -size)
-                        ctx.bezierCurveTo(size * 0.44, -size * 0.98,
-                                          size * 0.58, -size * 0.42,
-                                          0, 0)
+                        globe.petalPath(ctx, size)
                         ctx.fill()
-                        // The notch at the tip, which is what distinguishes a
-                        // sakura petal from a plum one.
-                        ctx.fillStyle = "#5d3446"
-                        ctx.beginPath()
-                        ctx.moveTo(0, -size)
-                        ctx.lineTo(-size * 0.16, -size * 0.74)
-                        ctx.lineTo(size * 0.16, -size * 0.74)
-                        ctx.closePath()
-                        ctx.fill()
+                        // A hairline edge, which is what separates one petal
+                        // from the one behind it at this size.
+                        ctx.strokeStyle = Qt.rgba(0.86, 0.55, 0.65, 0.55)
+                        ctx.lineWidth = 0.7
+                        ctx.stroke()
                         ctx.restore()
                     }
-                    ctx.fillStyle = "#fff1b8"
-                    ctx.beginPath()
-                    ctx.arc(0, 0, size * 0.19, 0, Math.PI * 2)
-                    ctx.fill()
+
+                    // Stamens. A cherry blossom has a lot of them and they
+                    // are long; a plain dot in the middle is what makes a
+                    // drawn flower look like a clip-art daisy.
+                    ctx.strokeStyle = Qt.rgba(0.85, 0.45, 0.55, 0.75)
+                    ctx.lineWidth = 0.8
+                    for (var t = 0; t < 9; ++t) {
+                        var a = t * 2 * Math.PI / 9 + 0.2
+                        var len = size * (0.34 + (t % 3) * 0.07)
+                        ctx.beginPath()
+                        ctx.moveTo(0, 0)
+                        ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len)
+                        ctx.stroke()
+                        ctx.fillStyle = "#ffe9a8"
+                        ctx.beginPath()
+                        ctx.arc(Math.cos(a) * len, Math.sin(a) * len,
+                                size * 0.055, 0, Math.PI * 2)
+                        ctx.fill()
+                    }
                     ctx.restore()
                 }
             }
