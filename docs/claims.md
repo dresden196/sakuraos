@@ -24,6 +24,7 @@ the site.
 | Store: the AUR | Installer tour | **Partly.** Searchable. Installing is refused until the review step exists, on purpose. |
 | Store: AppImages install by opening the file | Installer tour | **Done.** MIME type registered, confirmation before installing. |
 | Store: bring your software to another machine | Installer tour | **Not built.** Needs an export/import format at minimum; an account and a server if it is to be automatic. |
+| Encryption can be turned off without reinstalling | Installer, encryption screen | **Not true as built.** Measured: LUKS2 in-place decryption needs a detached header and data offset 0, decided at install time. Today's installer uses an attached header. Either change that -- and accept the header living on the unencrypted ESP -- or change the sentence. See docs/encryption.md. |
 | Private by default | Installer tour, site | **Done** as stated. Nothing here phones home. The only telemetry is KDE's, off unless switched on. |
 | UI first, terminal second | Installer tour, site | **Done** in the sense claimed: install, update, roll back and manage software without a terminal. |
 
