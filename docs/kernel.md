@@ -185,6 +185,56 @@ And the honest reason to want their tree is not speed. It is hardware: 19 HID
 commits, 10 for T2 Macs, the ASUS/Lenovo/HP WMI work. Configuration cannot
 give us those. Performance, we can mostly reach without them.
 
+## The build was measured, and it settles the question
+
+Run on 2026-08-26 on the development laptop: 14 cores, 10 given to the build,
+`nice -n 10`, in the same container the rest of our packages build in.
+Deliberately the *cheap* configuration -- GCC rather than Clang, ThinLTO off,
+AutoFDO off, Propeller off, no ZFS, no NVIDIA, `GENERIC` x86-64.
+
+After **eight hours**:
+
+    objects compiled     11,949
+    modules linked            0   of 6,314 configured
+    still in              drivers/usb/storage
+    build tree              8.4 GB
+    -O3                    yes (CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3, from _cc_harder)
+
+Not stuck -- `cc1` was pinned at 98% throughout and objects were appearing
+every few seconds. It is simply a distro kernel: 6,314 modules, compiled at
+-O3, and after eight hours it had not finished compiling, let alone started
+linking a single module. Twenty hours is a conservative estimate for the whole
+job, and this was the configuration chosen to be fast. AutoFDO, which is what
+the headline `linux-cachyos` package actually ships, builds the kernel *twice*.
+
+The build was stopped at that point rather than run to completion. The number
+needed was an order of magnitude, and eight hours of load 12 on somebody's
+daily driver is enough to establish one.
+
+**So: not on this hardware.** Carrying this kernel is not a code problem, it is
+an infrastructure problem, and it needs answering before the kernel is
+promised to anyone:
+
+- A dedicated builder -- 32 to 64 cores -- rented per kernel release. A few
+  hours of a large cloud instance is a few dollars, weekly. That is a real
+  answer and a small budget, but it is a standing bill and a second machine to
+  keep working.
+- `-O2` instead of `-O3` (`_cc_harder=no`) would cut this materially and
+  costs almost nothing measurable in return. Worth doing whatever else we
+  decide.
+- Nothing else scales. The module count is what it is; a distro kernel cannot
+  drop modules for hardware the user might have, and `_localmodcfg` -- build
+  only what this machine loads -- produces a kernel that boots on the build
+  box and nowhere else.
+
+One further friction found on the way: the AUR PKGBUILD cannot be reconfigured
+with its checksums intact. Changing `_use_llvm_lto` changes the length of the
+`source=()` array while `b2sums` stays fixed, and makepkg refuses with
+"Integrity checks (b2) differ in size from the source array". `--skipinteg`
+was used for the measurement and must never be used for a shipped build;
+a real pipeline has to regenerate the sums after configuring, which is what
+CachyOS's own scripts do inside their build image.
+
 ## Credit
 
 CachyOS is GPL-2.0 and does this in the open. If we take their sysctl values,
