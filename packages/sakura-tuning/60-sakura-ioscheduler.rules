@@ -1,0 +1,20 @@
+# I/O scheduler by device type, which is the same policy the CachyOS kernel
+# compiles in ("Use BFQ for SQ devices and mq-deadline for MQ devices").
+#
+# The reasoning is that the right scheduler depends on the hardware, and one
+# default cannot be right for both: BFQ's fairness work is worth its overhead
+# on a single-queue rotational disk, and is pure overhead in front of an NVMe
+# that can service many queues at once.
+
+# Rotating disks: BFQ, whose whole purpose is keeping one greedy reader from
+# starving everything else on a device that seeks.
+ACTION=="add|change", KERNEL=="sd[a-z]|mmcblk[0-9]*", ATTR{queue/rotational}=="1", \
+    ATTR{queue/scheduler}="bfq"
+
+# SSDs on a single queue: still worth scheduling, but deadline is enough.
+ACTION=="add|change", KERNEL=="sd[a-z]|mmcblk[0-9]*", ATTR{queue/rotational}=="0", \
+    ATTR{queue/scheduler}="mq-deadline"
+
+# NVMe: none. The device has more queues than the scheduler has opinions, and
+# anything we add here is latency we introduced ourselves.
+ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ATTR{queue/scheduler}="none"

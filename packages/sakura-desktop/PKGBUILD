@@ -17,6 +17,11 @@ depends=(
     'sakura-branding'
     'sakura-keyring'
 
+    # Desktop tuning defaults -- memory management and I/O scheduling, the
+    # part of the CachyOS kernel's tuning that is reachable at runtime and
+    # therefore does not need a kernel of our own. See docs/kernel.md.
+    'sakura-tuning'
+
     # Base system
     'base'
     'linux'

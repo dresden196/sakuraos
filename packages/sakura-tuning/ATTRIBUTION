@@ -1,0 +1,20 @@
+The values in this package are CachyOS's.
+=========================================
+
+github.com/CachyOS/linux, GPL-2.0. Every setting here corresponds to a commit
+in their tree tagged "CACHY:", where it exists as a change to a compiled-in
+kernel default:
+
+  vm.watermark_boost_factor = 0    "Disable watermark boosting by default"
+  vm.compaction_proactiveness = 0  "Disable proactive compaction by default"
+  BFQ / mq-deadline by device      "Use BFQ for SQ devices and mq-deadline
+                                    for MQ devices"
+
+We are not the ones who worked out that these are worth changing. What this
+package contributes is only the observation that all three are writable at
+runtime, so a machine can have them without carrying a patched kernel -- and
+can drop them again by removing one file, which a compiled-in default does not
+allow.
+
+Their kernel does more than this, and the rest is not reachable this way. See
+docs/kernel.md for what is and is not, measured rather than assumed.
