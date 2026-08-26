@@ -1,7 +1,7 @@
 # Maintainer: SakuraOS <dev@sakuraos.invalid>
 pkgname=sakura-branding
 pkgver=0.1.0
-pkgrel=1
+pkgrel=2
 pkgdesc="SakuraOS system identity and repository configuration"
 arch=('any')
 url="https://sakuraos.org"

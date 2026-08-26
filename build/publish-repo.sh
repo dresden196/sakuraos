@@ -8,7 +8,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HOST="${SAKURA_REPO_HOST:-173.233.87.167}"
+HOST="${SAKURA_REPO_HOST:-repo.sakuraos.org}"
 PORT="${SAKURA_REPO_PORT:-37156}"
 USER="${SAKURA_REPO_USER:-sakura}"
 DEST="${SAKURA_REPO_PATH:-/srv/sakura/repo}"
@@ -32,4 +32,4 @@ for r in sakura-core sakura-extra; do
 done
 
 echo
-echo ">> published to http://$HOST/"
+echo ">> published to https://$HOST/"
