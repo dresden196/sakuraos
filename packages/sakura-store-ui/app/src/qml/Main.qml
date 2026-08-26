@@ -25,7 +25,44 @@ QQC2.ApplicationWindow {
     property string sourceFilter: "all"
     property string lastQuery: ""
 
-    Component.onCompleted: backend.loadFeatured()
+    Component.onCompleted: {
+        // Opened with an application id -- the handoff from the Windows-program
+        // guard. Go straight to that app rather than the front page, and still
+        // load the featured list behind it so Back has somewhere to land.
+        backend.loadFeatured();
+        const wanted = typeof openAppId !== "undefined" ? openAppId : "";
+        if (wanted !== "") {
+            backend.openApp(wanted);
+            root.view = "app";
+        }
+    }
+
+    // Which source to offer first when an app exists in several. Official
+    // packages before Flatpak because they are what SakuraOS actually
+    // maintains and what system updates already cover; AUR last because it is
+    // unreviewed and off by default.
+    readonly property var sourceRank: ({
+        "repo": 0, "flatpak": 1, "snap": 2, "appimage": 3, "aur": 4
+    })
+
+    function preferredIndex(opts) {
+        if (!opts || opts.length === 0)
+            return 0;
+        // Installed from somewhere already: show that one. The page should
+        // describe the machine it is running on before it offers anything --
+        // arriving from a link and being shown "Install" for a copy you
+        // already have is how somebody ends up with two.
+        for (let i = 0; i < opts.length; ++i)
+            if (opts[i].installed)
+                return i;
+        let best = 0, bestRank = 999;
+        for (let i = 0; i < opts.length; ++i) {
+            const known = root.sourceRank[opts[i].source];
+            const rank = known === undefined ? 500 : known;
+            if (rank < bestRank) { bestRank = rank; best = i; }
+        }
+        return best;
+    }
 
     function stars(v) {
         if (!v) return ""
@@ -1227,8 +1264,18 @@ QQC2.ApplicationWindow {
                     version: a.version || "",
                     installed: a.installed || false
                 }].concat(a.also_from || [])
+            // Not simply the first: the primary is whichever id we were asked
+            // about, and that is an accident of how the user arrived. Opening
+            // "org.mozilla.firefox" from the Windows-program guard must not
+            // default to Flatpak when SakuraOS ships Firefox itself.
+            // Driven by optionsChanged rather than aChanged. Reading `options`
+            // inside the handler for the property it derives from gives the
+            // value from before the change -- the list was still empty there,
+            // so this always picked index 0, which is the primary, which is
+            // whichever id we happened to be asked about. Its own signal fires
+            // after it has been recomputed.
             property int chosen: 0
-            onAChanged: chosen = 0
+            onOptionsChanged: chosen = root.preferredIndex(options)
 
             Loading {
                 visible: backend.loadingApp
