@@ -46,6 +46,37 @@ Not yet verified: actually booting the alongside install, or booting the other
 system from that menu. The configuration is right and every file it references
 is present, but that is not the same as having watched it start.
 
+## The boot watchdog, observed in the wild
+
+Not a test this time. On 2026-08-25 the development VM was killed three times
+in a row -- once by the host's OOM killer, twice by me stopping it mid-boot --
+and on the next start it came up on its own:
+
+    SakuraOS Recovery
+    Started because this machine has not started properly 3 times.
+    Something wrong with your system?
+    Pick a point to go back to:
+      1) 2026-08-25 23:25:33  sakura-settings-kcm
+      ...
+      c) Cancel and restart normally
+
+Twenty-nine restore points, newest first, each named after the transaction
+that created it. Nobody asked for it and nothing was configured to make it
+happen; the counter reached its threshold and the recovery entry took over.
+
+Two things this confirms that the tests did not:
+
+- the threshold counts *interrupted* boots, not just failed unit starts. A
+  machine switched off mid-boot three times is a machine somebody is fighting
+  with, and that is exactly when this should appear.
+- choosing "cancel and restart normally" clears the request. The next boot
+  went straight to the desktop rather than back into recovery -- which is the
+  bug we already fixed once, and it has stayed fixed.
+
+Still not verified: an actual rollback chosen from this menu on an encrypted
+disk. The menu appeared after the passphrase, which is the right order, but
+nothing was restored from it.
+
 ## Before any public build
 
 1. Everything above reads **Done**.
