@@ -134,6 +134,57 @@ of them is worth a permanent rebase treadmill until somebody has measured what
 they are worth **on the machines SakuraOS is for**. AutoFDO alone means
 building the kernel twice, per release, forever.
 
+## If we take their kernel anyway
+
+The proposal was: default to the CachyOS kernel, fall back to stock for
+anything below x86-64-v3, or non-Ryzen. Checked, and the fallback is not
+needed -- the premise is wrong in a useful direction.
+
+`script.sh`, which is what builds their main repo, sets
+`_processor_opt:=GENERIC`. The default `linux-cachyos` is a plain x86-64
+build, `arch=('x86_64')`, and runs on anything from a Core 2 upward. The
+v3/v4/znver4 variants are *separate repositories* of whole-system rebuilds
+(`script-v3-v4.sh` sets `GENERIC_V3`, `script-znver4.sh` sets `zen4`), not a
+requirement of the kernel. There is no CPU baseline to fall back from and
+nothing Ryzen-specific: the amd-pstate work helps AMD, it does not exclude
+Intel.
+
+**Do not add their repositories.** `cachyos` alone carries 840 packages --
+whole-system rebuilds that would shadow Arch's, and pacman has no per-package
+repo pinning to stop that. Adding it to a non-CachyOS system is unsupported by
+them and would quietly change packages far outside the kernel.
+
+**Take it through the AUR instead.** `linux-cachyos` is in the AUR at 7.2.0-1,
+so it goes through the rebuild pipeline `sakura-core` already runs for
+`limine-snapper-sync` and the rest: build from the PKGBUILD, sign with our
+key, publish to our repo. No dependency on anyone else's mirror, and the
+result is a package we control.
+
+What that commits us to, and it is not small:
+
+- **Their cadence, weekly.** 0 commits behind upstream is a promise to rebuild
+  whenever upstream moves.
+- **Modules in lockstep.** Proprietary NVIDIA and ZFS must be rebuilt against
+  each kernel or they break on boot, for exactly the users least able to
+  recover.
+- **Twice the boot surface.** Two kernels means two UKIs, two mkinitcpio
+  presets, two things to sign for Secure Boot, and a longer boot menu that the
+  recovery watchdog has to reason about.
+- **Build cost that is unmeasured.** ThinLTO is expensive and AutoFDO builds
+  the kernel twice. Neither has been timed on the hardware we actually have,
+  which is a laptop running a container. That number should exist before the
+  decision, not after.
+
+The fallback worth having is a different one. Not "older CPUs get stock" but
+**stock stays installed as the second boot entry** -- a known-good kernel to
+choose when a fast-moving one regresses. That is the same shape as the
+snapshot rollback we already ship, applied to the kernel, and it is useful
+precisely because their tree moves quickly.
+
+And the honest reason to want their tree is not speed. It is hardware: 19 HID
+commits, 10 for T2 Macs, the ASUS/Lenovo/HP WMI work. Configuration cannot
+give us those. Performance, we can mostly reach without them.
+
 ## Credit
 
 CachyOS is GPL-2.0 and does this in the open. If we take their sysctl values,
