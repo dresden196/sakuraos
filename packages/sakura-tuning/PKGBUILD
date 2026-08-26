@@ -1,0 +1,21 @@
+# Maintainer: SakuraOS
+pkgname=sakura-tuning
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Desktop tuning defaults: memory management and I/O scheduling"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL2')
+backup=('etc/sysctl.d/99-sakura.conf'
+        'etc/udev/rules.d/60-sakura-ioscheduler.rules')
+source=('99-sakura.conf' '60-sakura-ioscheduler.rules' 'ATTRIBUTION')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+    install -Dm644 "$srcdir/99-sakura.conf" \
+        "$pkgdir/etc/sysctl.d/99-sakura.conf"
+    install -Dm644 "$srcdir/60-sakura-ioscheduler.rules" \
+        "$pkgdir/etc/udev/rules.d/60-sakura-ioscheduler.rules"
+    install -Dm644 "$srcdir/ATTRIBUTION" \
+        "$pkgdir/usr/share/doc/$pkgname/ATTRIBUTION"
+}
