@@ -14,7 +14,7 @@ the site.
 
 | Claim | Where it is made | Status |
 |---|---|---|
-| Kernel tuned for scheduling and modern CPUs | Installer tour, site | **Not built.** `sakura-desktop` depends on stock `linux`. Needs a `linux-sakura` package: scheduler patches, a modern `-march` baseline, and benchmarks that justify the sentence. |
+| Kernel tuned for scheduling and modern CPUs | Installer tour, site | **Not built.** `sakura-desktop` depends on stock `linux`. Needs a `linux-sakura` package: scheduler patches, a modern `-march` baseline, and benchmarks that justify the sentence. See `docs/kernel.md` -- CachyOS to be reviewed first, and dropping the claim is a live option. |
 | BTRFS with automatic snapshots | Installer tour, site | **Done.** `@ @home @log @pkg @snapshots`, snap-pac before every transaction. |
 | Restore points, automatic and manual | Installer tour | **Done.** Manual ones from the Update Center; rollback verified end to end. |
 | Updates applied in the background | Installer tour, site | **Done.** `sakura-updates.timer` for the system, `sakura-store-updates.timer` for applications. |
