@@ -205,34 +205,49 @@ KCM.SimpleKCM {
         // Each Windows program runs in its own prefix, so this list is also
         // the uninstall: removing one is deleting its directory, with nothing
         // of it left behind in a shared one.
-        QQC2.Label {
-            visible: cfg.wineEnabled && cfg.windowsApps.length > 0
+        // The Repeater lives inside its own ColumnLayout rather than directly
+        // in the FormLayout. A Repeater's delegates are siblings wherever it
+        // sits, and when the model changes the re-created ones are appended
+        // at the end of the parent's children -- which in a FormLayout means
+        // a remaining app jumping to the bottom of the page, below the next
+        // section. One container, and they re-flow inside it.
+        ColumnLayout {
             Kirigami.FormData.label: i18n("Installed:")
-            font: Kirigami.Theme.smallFont
-            color: Kirigami.Theme.disabledTextColor
-            text: i18np("%1 Windows program", "%1 Windows programs",
-                        cfg.windowsApps.length)
-        }
+            // Against a multi-row column the label would otherwise centre
+            // itself, landing beside whichever app happens to be in the
+            // middle rather than at the top of the list it names.
+            Kirigami.FormData.labelAlignment: Qt.AlignTop
+            visible: cfg.wineEnabled && cfg.windowsApps.length > 0
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 24
+            spacing: Kirigami.Units.smallSpacing
 
-        Repeater {
-            model: cfg.wineEnabled ? cfg.windowsApps : []
-            delegate: RowLayout {
-                required property var modelData
-                Layout.maximumWidth: Kirigami.Units.gridUnit * 24
-                spacing: Kirigami.Units.smallSpacing
+            QQC2.Label {
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+                text: i18np("%1 Windows program", "%1 Windows programs",
+                            cfg.windowsApps.length)
+            }
 
-                QQC2.Label {
+            Repeater {
+                model: cfg.wineEnabled ? cfg.windowsApps : []
+                delegate: RowLayout {
+                    required property var modelData
                     Layout.fillWidth: true
-                    elide: Text.ElideRight
-                    text: modelData.name !== "" ? modelData.name : modelData.slug
-                }
-                QQC2.ToolButton {
-                    icon.name: "edit-delete"
-                    text: i18n("Remove")
-                    display: QQC2.AbstractButton.IconOnly
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: i18n("Remove this program and everything it installed")
-                    onClicked: confirmRemove.ask(modelData)
+                    spacing: Kirigami.Units.smallSpacing
+
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        elide: Text.ElideRight
+                        text: modelData.name !== "" ? modelData.name : modelData.slug
+                    }
+                    QQC2.ToolButton {
+                        icon.name: "edit-delete"
+                        text: i18n("Remove")
+                        display: QQC2.AbstractButton.IconOnly
+                        QQC2.ToolTip.visible: hovered
+                        QQC2.ToolTip.text: i18n("Remove this program and everything it installed")
+                        onClicked: confirmRemove.ask(modelData)
+                    }
                 }
             }
         }
