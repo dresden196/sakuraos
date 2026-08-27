@@ -208,10 +208,21 @@ release keys (Eric Naim, Peter Jung), and the checksums were **regenerated**
 with `updpkgsums` after configuring rather than bypassed with `--skipinteg`.
 Both steps are inside the fifteen minutes.
 
-Fifteen minutes changes the decision completely. A weekly rebuild is not a
-treadmill, it is a cron job. It also puts things back on the table that were
-dismissed as unaffordable -- ThinLTO, and even AutoFDO, which builds the
-kernel twice and would still be well under an hour.
+Then the shipping configuration, Clang with ThinLTO -- what somebody who
+installs `linux-cachyos` actually gets:
+
+    linux-cachyos 7.2.1-1         19 min 11 s
+    package                       148 MB   (+ 42 MB headers)
+    modules                       6,489, built with clang
+
+Four minutes more than GCC for the real thing. ThinLTO was written off earlier
+in this document as expensive; on this hardware it is a rounding error.
+
+That changes the decision completely. A weekly rebuild is not a treadmill, it
+is a cron job, and there is no reason to ship the cheaper GCC build when the
+one upstream actually tests costs four more minutes. AutoFDO builds the kernel
+twice plus a profiling run, so call it under an hour -- also affordable, though
+it needs a profile gathered from real workloads before it means anything.
 
 ## What the laptop measurement was actually worth
 
