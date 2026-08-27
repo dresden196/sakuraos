@@ -185,7 +185,35 @@ And the honest reason to want their tree is not speed. It is hardware: 19 HID
 commits, 10 for T2 Macs, the ASUS/Lenovo/HP WMI work. Configuration cannot
 give us those. Performance, we can mostly reach without them.
 
-## The build was measured, and it settles the question
+## Measured again, on the right hardware: fifteen minutes
+
+The laptop number below was not just pessimistic, it was invalid, and the
+reason matters. That machine was swapping -- 10 to 11 GB of swap in use
+throughout -- so an eight-hour "build" was mostly waiting on swap, not
+compiling. Extrapolating core-hours from a thrashing machine produced an
+estimate roughly twenty times too high. The lesson is not "servers are fast";
+it is that a saturated machine cannot be used to predict an unsaturated one.
+
+On Saelith -- 2x Xeon Gold 6262V, 48c/96t, 502 GB -- in an Arch LXC with 88
+threads and the whole build in a 64 GB tmpfs:
+
+    linux-cachyos-gcc 7.2.1-1     14 min 59 s
+    package                       149 MB   (+ 85 MB headers)
+    modules                       6,490
+    tmpfs high-water              30 GB
+
+Real kernel, real module set, exit 0. And this run did the two things the
+laptop run skipped: the upstream signature was **verified** against CachyOS's
+release keys (Eric Naim, Peter Jung), and the checksums were **regenerated**
+with `updpkgsums` after configuring rather than bypassed with `--skipinteg`.
+Both steps are inside the fifteen minutes.
+
+Fifteen minutes changes the decision completely. A weekly rebuild is not a
+treadmill, it is a cron job. It also puts things back on the table that were
+dismissed as unaffordable -- ThinLTO, and even AutoFDO, which builds the
+kernel twice and would still be well under an hour.
+
+## What the laptop measurement was actually worth
 
 Run on 2026-08-26 on the development laptop: 14 cores, 10 given to the build,
 `nice -n 10`, in the same container the rest of our packages build in.
