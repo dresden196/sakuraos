@@ -857,6 +857,53 @@ def find_elsewhere(app_id: str, name: str) -> list[dict]:
     return found
 
 
+def detail_from_sources(app_id: str) -> dict:
+    """Assemble what an app page needs from the sources themselves.
+
+    Only the fields a source can actually answer for. No screenshots and no
+    description, because inventing either would be worse than their absence --
+    the page says what is known and stops.
+    """
+    for src in SOURCES:
+        if not src.available():
+            continue
+        try:
+            hits = src.search(app_id)
+        except Exception:
+            continue
+        for h in hits or []:
+            # search() yields App records, not dicts.
+            if h.id != app_id and h.source_id != app_id:
+                continue
+            rating, count = rating_for(app_id)
+            return {
+                "id": app_id,
+                "installed": h.installed,
+                "installed_version": "",
+                "version": h.version,
+                "released": 0,
+                "source": h.source or src.name,
+                # find_elsewhere reports every source carrying this app,
+                # including the one it was just found in. Left in, the page
+                # offers the same source twice.
+                "also_from": [a for a in find_elsewhere(app_id, h.name or "")
+                              if a.get("source") != (h.source or src.name)],
+                "name": h.name or app_id,
+                "summary": h.summary,
+                "description": "",
+                "developer": h.developer,
+                "license": "",
+                "icon": h.icon,
+                "brand": "",
+                "screenshots": [],
+                "urls": {},
+                "rating": rating if rating is not None else h.rating,
+                "rating_count": count or h.rating_count,
+                "reviews": [],
+            }
+    return {}
+
+
 def app_detail(app_id: str) -> dict:
     """Everything the app page needs, in one call.
 
@@ -866,7 +913,13 @@ def app_detail(app_id: str) -> dict:
     """
     d = fetch(f"{FLATHUB_API}/appstream/{app_id}", {}, tag="Flathub") or {}
     if not d:
-        return {}
+        # Flathub is where the rich metadata lives -- screenshots, description,
+        # branding -- but it is not where every application lives. An AUR
+        # package, a repo-only package, a Snap nobody publishes to Flathub: all
+        # of them used to return {} here, and the app page rendered nothing at
+        # all. A sparse page is worth having; a blank one is a dead end that
+        # makes the search result look like a lie.
+        return detail_from_sources(app_id)
 
     shots = []
     for sc in (d.get("screenshots") or []):
