@@ -66,6 +66,18 @@ QQC2.ApplicationWindow {
         return best;
     }
 
+    // Two gates stand between an AUR result and an install, and they need
+    // different sentences. The switch in Settings is the user's and they can
+    // change it; the review step is ours and they cannot. Saying "turn it on
+    // in Settings" when that would change nothing is a small lie that costs
+    // somebody a trip to Settings.
+    readonly property bool aurEnabled: {
+        const list = backend.sources || [];
+        for (let i = 0; i < list.length; ++i)
+            if (list[i].id === "aur") return !!list[i].available;
+        return false;
+    }
+
     function stars(v) {
         if (!v) return ""
         var full = Math.round(v)
@@ -1565,7 +1577,8 @@ QQC2.ApplicationWindow {
                             readonly property bool blocked:
                                 !!(pick && pick.source === "aur")
                             text: backend.busy ? "Installing…"
-                                 : blocked ? "Not available yet"
+                                 : blocked ? (root.aurEnabled ? "Not available yet"
+                                                           : "AUR is switched off")
                                  : (pick && pick.installed ? "Reinstall" : "Install")
                             enabled: !backend.busy && !!pick && !blocked
                             onClicked: backend.install(pick.id, pick.source)
@@ -1575,10 +1588,21 @@ QQC2.ApplicationWindow {
                             visible: !!(pick && pick.source === "aur")
                             Layout.maximumWidth: 420
                             wrapMode: Text.WordWrap
-                            text: "An AUR package is a build script nobody has reviewed. "
-                                + "SakuraOS will not run one without showing you what it "
-                                + "does first, and that step is not built yet."
+                            text: root.aurEnabled
+                                ? "An AUR package is a build script nobody has reviewed. "
+                                  + "SakuraOS will not run one without showing you what it "
+                                  + "does first, and that step is not built yet."
+                                : "The AUR is switched off. Turn it on in SakuraOS Settings "
+                                  + "to install this \u2014 it is off by default because AUR "
+                                  + "packages are build scripts written by other people, and "
+                                  + "nobody reviews them."
                             color: root.dim; font.pixelSize: 12
+                        }
+                        Action {
+                            readonly property var pick: appRoot.options[appRoot.chosen] || null
+                            visible: !!(pick && pick.source === "aur") && !root.aurEnabled
+                            text: "Open Settings"
+                            onClicked: Qt.openUrlExternally("systemsettings://kcm_sakura")
                         }
                         Action {
                             readonly property var pick: appRoot.options[appRoot.chosen] || null
