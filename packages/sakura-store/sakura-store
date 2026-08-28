@@ -1164,6 +1164,98 @@ def cmd_update(args) -> int:
     return 0
 
 
+# An app list is the names of things, not the things themselves. No settings,
+# no data, no home directory -- so it is small, readable, and carries nothing
+# private. What it restores is "the same software", which is the part that is
+# tedious to redo by hand; what it deliberately does not restore is anything
+# that would make it a backup, because a backup that silently misses your data
+# is worse than no backup at all.
+APP_LIST_VERSION = 1
+
+
+def cmd_export_list(args) -> int:
+    import appimage
+    apps = []
+    index = appstream_index()
+    for s in SOURCES:
+        if not s.available():
+            continue
+        names = s.display_names()
+        for sid, _ver in s.installed_apps().items():
+            meta = index.get(sid, {})
+            apps.append({"id": sid, "source": s.name,
+                         "name": meta.get("name") or names.get(sid) or sid})
+    for a in appimage.installed():
+        # AppImages come from a file or a URL rather than a catalogue, so the
+        # id alone cannot find them again. Recorded so the other machine can
+        # say what is missing rather than pretend it restored everything.
+        apps.append({"id": a["name"], "source": "appimage", "name": a["name"]})
+
+    apps.sort(key=lambda a: (a["source"], a["id"].lower()))
+    from datetime import datetime, timezone
+    import socket
+    doc = {"version": APP_LIST_VERSION,
+           "exported": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+           "from": socket.gethostname(),
+           "apps": apps}
+    text = json.dumps(doc, indent=2) + "\n"
+    if args.output and args.output != "-":
+        Path(args.output).write_text(text, encoding="utf-8")
+        print(json.dumps({"written": args.output, "count": len(apps)}))
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
+def cmd_read_list(args) -> int:
+    """Say what a list would do here, without doing any of it.
+
+    Reading a file must never install anything on its own, so this reports and
+    stops. The caller decides, the same way opening an AppImage does.
+    """
+    try:
+        doc = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(json.dumps({"error": f"that file could not be read as an app list: {e}"}))
+        return 1
+    if not isinstance(doc, dict) or "apps" not in doc:
+        print(json.dumps({"error": "that file is not a SakuraOS app list"}))
+        return 1
+    if doc.get("version", 0) > APP_LIST_VERSION:
+        print(json.dumps({"error": "that list was written by a newer version of "
+                                   "SakuraOS than this one understands"}))
+        return 1
+
+    have = {}
+    for s in SOURCES:
+        if s.available():
+            have[s.name] = set(s.installed_apps().keys())
+
+    rows = []
+    for a in doc.get("apps", []):
+        sid, src = a.get("id", ""), a.get("source", "")
+        if not sid:
+            continue
+        if src == "appimage":
+            state = "manual"          # cannot be fetched from a catalogue
+        elif src not in have:
+            state = "unavailable"     # that source is switched off here
+        elif sid in have[src]:
+            state = "present"
+        else:
+            state = "install"
+        rows.append({"id": sid, "source": src,
+                     "name": a.get("name") or sid, "state": state})
+
+    print(json.dumps({"from": doc.get("from", ""),
+                      "exported": doc.get("exported", ""),
+                      "apps": rows,
+                      "counts": {k: sum(1 for r in rows if r["state"] == k)
+                                 for k in ("install", "present", "unavailable", "manual")}},
+                     indent=2))
+    return 0
+
+
 def cmd_installed(args) -> int:
     import appimage
     rows = []
@@ -1330,6 +1422,14 @@ def main() -> int:
     ap.add_argument("--scope", choices=["system", "user"],
                     help="which half of an unattended run this is")
     ap.set_defaults(fn=cmd_update)
+
+    ex = sub.add_parser("export-list", help="write the installed app list")
+    ex.add_argument("--output", default="-")
+    ex.set_defaults(fn=cmd_export_list)
+
+    rd = sub.add_parser("read-list", help="say what an app list would install")
+    rd.add_argument("file")
+    rd.set_defaults(fn=cmd_read_list)
 
     l = sub.add_parser("installed")
     l.add_argument("--json", action="store_true")

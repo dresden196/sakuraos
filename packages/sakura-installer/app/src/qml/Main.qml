@@ -1757,8 +1757,8 @@ QQC2.ApplicationWindow {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: "Restore points and going back to one work exactly the same on an "
-                        + "encrypted disk. You can also turn encryption off later without "
-                        + "reinstalling."
+                        + "encrypted disk. Decide now, though \u2014 changing your mind later "
+                        + "means reinstalling."
                     color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.8)
                     font.pixelSize: 12
                 }

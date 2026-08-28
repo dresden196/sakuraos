@@ -1,6 +1,8 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
+import QtQuick.Effects
+import QtQuick.Dialogs
 
 QQC2.ApplicationWindow {
     id: root
@@ -349,10 +351,21 @@ QQC2.ApplicationWindow {
             Layout.fillHeight: true
             color: panel
 
-            ColumnLayout {
+            // The rail can be taller than the window -- eight categories and
+            // six sources with descriptions do not fit at 800px. Scrolled
+            // rather than clipped, because the alternative is a sources list
+            // whose last entry is permanently half-hidden behind the account
+            // row.
+            QQC2.ScrollView {
                 anchors.fill: parent
                 anchors.margins: 18
-                spacing: 22
+                anchors.bottomMargin: 18 + 52 + 12   // room for the account row
+                contentWidth: availableWidth
+                clip: true
+
+                ColumnLayout {
+                    width: 208 - 36
+                    spacing: 22
 
                 RowLayout {
                     spacing: 10
@@ -509,8 +522,152 @@ QQC2.ApplicationWindow {
                     }
                 }
                 Item { Layout.fillHeight: true }
+
+                }
             }
-        }
+
+            // ---- who is signed in, and the things that belong to them ------
+            // Anchored to the bottom of the rail rather than pushed there by a
+            // spacer: the lists above can be taller than the window, and a
+            // spacer in an overflowing column pushes this off the screen
+            // entirely. Anchoring means it is always where it says it is.
+                // Bottom of the sidebar because it is about you rather than
+                // about software: the same place every desktop application
+                // that has an identity puts it.
+                Rectangle {
+                    id: accountRow
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 12
+                    height: 52
+                    radius: 12
+                    color: accountHover.hovered || accountMenu.visible
+                           ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+
+                    HoverHandler { id: accountHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler {
+                        onTapped: accountMenu.visible ? accountMenu.close()
+                                                      : accountMenu.open()
+                    }
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 10
+                        spacing: 10
+
+                        // Avatar, or the initial if this account has never set
+                        // one -- which is most of them.
+                        Rectangle {
+                            Layout.preferredWidth: 32; Layout.preferredHeight: 32
+                            radius: 16
+                            color: root.accent
+                            Image {
+                                id: avatarImage
+                                anchors.fill: parent
+                                source: backend.userAvatar
+                                visible: false          // shown through the mask
+                                fillMode: Image.PreserveAspectCrop
+                                smooth: true
+                            }
+                            MultiEffect {
+                                anchors.fill: parent
+                                source: avatarImage
+                                visible: backend.userAvatar !== ""
+                                         && avatarImage.status === Image.Ready
+                                maskEnabled: true
+                                maskSource: avatarMask
+                            }
+                            // The circle the photo is cut to. Kept out of the
+                            // layout so it is only ever a mask.
+                            Item {
+                                id: avatarMask
+                                width: 32; height: 32
+                                layer.enabled: true
+                                visible: false
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: width / 2
+                                    color: "black"
+                                }
+                            }
+                            QQC2.Label {
+                                anchors.centerIn: parent
+                                visible: backend.userAvatar === ""
+                                         || avatarImage.status !== Image.Ready
+                                text: (backend.userDisplayName || "?").charAt(0).toUpperCase()
+                                color: root.accentText
+                                font.pixelSize: 15; font.weight: Font.DemiBold
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            QQC2.Label {
+                                Layout.fillWidth: true
+                                text: backend.userDisplayName
+                                color: root.text
+                                font.pixelSize: 13; font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                            }
+                            QQC2.Label {
+                                Layout.fillWidth: true
+                                visible: backend.userName !== backend.userDisplayName
+                                text: backend.userName
+                                color: root.dim; font.pixelSize: 11
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        // The affordance. Points up because the menu comes up.
+                        Canvas {
+                            Layout.preferredWidth: 12; Layout.preferredHeight: 12
+                            rotation: accountMenu.visible ? 180 : 0
+                            Behavior on rotation { NumberAnimation { duration: 140 } }
+                            onPaint: {
+                                const c = getContext("2d");
+                                c.reset();
+                                c.strokeStyle = root.dim;
+                                c.lineWidth = 1.6;
+                                c.lineCap = "round";
+                                c.lineJoin = "round";
+                                c.beginPath();
+                                c.moveTo(2.5, 7.5); c.lineTo(6, 4); c.lineTo(9.5, 7.5);
+                                c.stroke();
+                            }
+                        }
+                    }
+
+                    QQC2.Menu {
+                        id: accountMenu
+                        y: -height - 6
+                        width: Math.max(accountRow.width, 210)
+                        modal: true
+
+                        background: Rectangle {
+                            radius: 12
+                            color: root.card
+                            border.width: 1
+                            border.color: root.line
+                        }
+
+                        QQC2.MenuItem {
+                            text: "App Sync"
+                            icon.name: "folder-sync"
+                            onTriggered: appSync.open()
+                        }
+                        QQC2.MenuItem {
+                            text: "Sakura Store settings"
+                            icon.name: "configure"
+                            onTriggered: storeSettings.open()
+                        }
+                    }
+                }
+            }
+
 
         // main
         ColumnLayout {
@@ -1674,4 +1831,228 @@ QQC2.ApplicationWindow {
             Item { Layout.preferredHeight: 34 }
         }
     }
+
+        // ---- App Sync ------------------------------------------------------
+        // A list of what is installed, so a second machine can end up with the
+        // same software. It carries names, not data: no settings, no home
+        // directory, nothing private. That is a deliberate limit rather than a
+        // missing feature -- a file that looks like a backup but silently
+        // omits your documents is worse than no backup.
+        QQC2.Dialog {
+            id: appSync
+            anchors.centerIn: parent
+            width: Math.min(620, root.width - 120)
+            modal: true
+            padding: 0
+            background: Rectangle { radius: 16; color: root.card
+                                    border.width: 1; border.color: root.line }
+
+            onOpened: backend.clearImportPlan()
+            onClosed: backend.clearImportPlan()
+
+            contentItem: ColumnLayout {
+                spacing: 0
+
+                ColumnLayout {
+                    Layout.margins: 24
+                    Layout.fillWidth: true
+                    spacing: 6
+                    QQC2.Label {
+                        text: "App Sync"
+                        color: root.text; font.pixelSize: 19; font.weight: Font.DemiBold
+                    }
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: "Save the list of applications on this machine, and install "
+                            + "the same set on another one. The list holds names only \u2014 "
+                            + "no settings and no files, so nothing private travels with it."
+                        color: root.dim; font.pixelSize: 12
+                    }
+                }
+
+                // Nothing loaded: offer the two directions.
+                RowLayout {
+                    visible: !appSync.hasPlan
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.bottomMargin: 24
+                    spacing: 10
+                    QQC2.Button {
+                        text: "Save this machine\u2019s list\u2026"
+                        onClicked: exportDialog.open()
+                    }
+                    QQC2.Button {
+                        text: "Open a list\u2026"
+                        onClicked: importDialog.open()
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+
+                // A list has been read. Say exactly what it would do, first.
+                ColumnLayout {
+                    visible: appSync.hasPlan
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.bottomMargin: 20
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        color: root.text; font.pixelSize: 13
+                        text: {
+                            const c = backend.importPlan.counts || {};
+                            const from = backend.importPlan.from || "another machine";
+                            return (c.install || 0) + " to install from " + from
+                                 + ", " + (c.present || 0) + " already here"
+                                 + ((c.unavailable || 0) ? ", " + c.unavailable
+                                    + " from a source switched off here" : "")
+                                 + ((c.manual || 0) ? ", " + c.manual
+                                    + " AppImages you will need to fetch yourself" : "")
+                                 + ".";
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 230
+                        radius: 10
+                        color: Qt.rgba(0, 0, 0, 0.18)
+                        border.width: 1; border.color: root.line
+                        clip: true
+                        ListView {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            spacing: 1
+                            model: backend.importPlan.apps || []
+                            delegate: RowLayout {
+                                required property var modelData
+                                width: ListView.view.width
+                                height: 30
+                                spacing: 8
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.name
+                                    color: modelData.state === "install" ? root.text : root.dim
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                QQC2.Label {
+                                    text: root.sourceLabel(modelData.source)
+                                    color: root.dim; font.pixelSize: 11
+                                }
+                                QQC2.Label {
+                                    text: modelData.state === "install"    ? "will install"
+                                        : modelData.state === "present"    ? "already here"
+                                        : modelData.state === "unavailable"? "source off"
+                                        :                                    "fetch yourself"
+                                    color: modelData.state === "install" ? root.accent : root.dim
+                                    font.pixelSize: 11
+                                }
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        QQC2.Button {
+                            text: "Install " + ((backend.importPlan.counts || {}).install || 0)
+                                  + " applications"
+                            enabled: ((backend.importPlan.counts || {}).install || 0) > 0
+                                     && !backend.busy
+                            highlighted: true
+                            onClicked: appSync.installAll()
+                        }
+                        QQC2.Button {
+                            text: "Cancel"
+                            onClicked: { backend.clearImportPlan(); appSync.close(); }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+                }
+            }
+
+            readonly property bool hasPlan:
+                !!backend.importPlan.apps && backend.importPlan.apps.length > 0
+
+            // Installed one at a time through the ordinary install path, so
+            // each one shows the progress and the failures it normally would.
+            function installAll() {
+                const apps = backend.importPlan.apps || [];
+                for (let i = 0; i < apps.length; ++i) {
+                    if (apps[i].state === "install") {
+                        backend.install(apps[i].id, apps[i].source);
+                    }
+                }
+                appSync.close();
+                root.view = "installed";
+                backend.loadInstalled();
+            }
+        }
+
+        FileDialog {
+            id: exportDialog
+            title: "Save the application list"
+            fileMode: FileDialog.SaveFile
+            nameFilters: ["SakuraOS app list (*.json)"]
+            defaultSuffix: "json"
+            onAccepted: backend.exportAppList(selectedFile)
+        }
+
+        FileDialog {
+            id: importDialog
+            title: "Open an application list"
+            fileMode: FileDialog.OpenFile
+            nameFilters: ["SakuraOS app list (*.json)", "All files (*)"]
+            onAccepted: backend.readAppList(selectedFile)
+        }
+
+        // ---- Store settings ------------------------------------------------
+        // The store has few settings of its own; the ones that matter live in
+        // System Settings because they change what the machine does, not what
+        // this window does. Rather than duplicate them, point at them.
+        QQC2.Dialog {
+            id: storeSettings
+            anchors.centerIn: parent
+            width: Math.min(560, root.width - 120)
+            modal: true
+            padding: 0
+            background: Rectangle { radius: 16; color: root.card
+                                    border.width: 1; border.color: root.line }
+            contentItem: ColumnLayout {
+                Layout.margins: 24
+                spacing: 14
+                QQC2.Label {
+                    Layout.leftMargin: 24; Layout.topMargin: 24
+                    text: "Sakura Store settings"
+                    color: root.text; font.pixelSize: 19; font.weight: Font.DemiBold
+                }
+                QQC2.Label {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "Which sources the store may install from, whether the AUR is "
+                        + "allowed, and when updates are applied are all system settings "
+                        + "rather than window settings, so they live in System Settings "
+                        + "where the rest of the machine is configured."
+                    color: root.dim; font.pixelSize: 12
+                }
+                RowLayout {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.bottomMargin: 24
+                    spacing: 10
+                    QQC2.Button {
+                        text: "Open System Settings"
+                        icon.name: "configure"
+                        onClicked: {
+                            Qt.openUrlExternally("systemsettings://kcm_sakura");
+                            storeSettings.close();
+                        }
+                    }
+                    QQC2.Button { text: "Close"; onClicked: storeSettings.close() }
+                    Item { Layout.fillWidth: true }
+                }
+        }
+        }
 }

@@ -42,6 +42,17 @@ class Backend : public QObject
     // through. Shown only if the user asks for it.
     Q_PROPERTY(QString errorDetail READ errorDetail NOTIFY progressChanged)
 
+    // Who is signed in. Read once from the password database and the usual
+    // avatar locations; the store has no account of its own and does not want
+    // one, so this is the system user or nothing.
+    Q_PROPERTY(QString userName READ userName CONSTANT)
+    Q_PROPERTY(QString userDisplayName READ userDisplayName CONSTANT)
+    Q_PROPERTY(QString userAvatar READ userAvatar CONSTANT)
+
+    // What an app list would do here. Populated by readAppList(); reading a
+    // file never installs anything on its own.
+    Q_PROPERTY(QVariantMap importPlan READ importPlan NOTIFY importPlanChanged)
+
 public:
     explicit Backend(QObject *parent = nullptr);
 
@@ -90,6 +101,14 @@ public:
     // catalogue. There is nothing to look it up in.
     Q_INVOKABLE void installLocalAppImage(const QString &path);
 
+    QString userName() const;
+    QString userDisplayName() const;
+    QString userAvatar() const;
+    QVariantMap importPlan() const { return m_importPlan; }
+    Q_INVOKABLE void exportAppList(const QString &path);
+    Q_INVOKABLE void readAppList(const QString &path);
+    Q_INVOKABLE void clearImportPlan();
+
 Q_SIGNALS:
     void stateChanged();
     void resultsChanged();
@@ -97,6 +116,7 @@ Q_SIGNALS:
     void installedChanged();
     void updatesChanged();
     void removalPlanChanged();
+    void importPlanChanged();
     void removed(const QString &id, const QString &source);
     void categoryChanged();
     void appChanged();
@@ -111,6 +131,7 @@ private:
     bool m_loadingInstalled = false;
     bool m_planningRemoval = false;
     QVariantMap m_removalPlan;
+    QVariantMap m_importPlan;
     bool m_loadingCategory = false;
     QVariantList m_categories, m_categoryApps, m_sources, m_updates;
     bool m_checkingUpdates = false;

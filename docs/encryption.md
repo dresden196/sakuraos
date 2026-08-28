@@ -55,6 +55,29 @@ are real: the header sits on an unencrypted partition, losing it destroys the
 data as surely as forgetting the passphrase, and it is an unusual
 configuration that other recovery tools will not expect.
 
-Undecided. The installer currently produces the first, and says encryption can
-be turned off later — **that sentence is not true yet and is tracked in
-docs/claims.md.**
+## Decided: attached header, and the sentence changed
+
+The attached header stays, and the installer no longer claims otherwise. It now
+says encryption is decided at install time and changing your mind means
+reinstalling, which is true.
+
+The detached header was rejected on durability, not on security. Its own risk
+statement is the argument against it: *losing the header destroys the data as
+surely as forgetting the passphrase* — and the only place to put it is the ESP,
+which is FAT32, the one partition a firmware update, a Windows installer or a
+tidy-minded user is most likely to reformat. Trading "you can reinstall to
+change this" for "an ESP wipe is unrecoverable data loss" is a bad trade for
+anybody, and a much worse one for the person this system is meant for, who will
+not have a header backup.
+
+It also would not have been free elsewhere: `cryptdevice=` grows a `header=`
+argument on both command lines, and every external recovery tool that expects a
+normal LUKS2 device stops understanding the disk.
+
+Nothing was given up that a mainstream distribution offers. Fedora and Ubuntu
+do not decrypt in place either; the promise was ours alone to make and ours to
+withdraw.
+
+The cost that remains is the reinstall, and that is what App Sync is for: the
+software list survives, so the part of a reinstall that is genuinely tedious no
+longer is.
