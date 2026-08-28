@@ -23,8 +23,8 @@ the site.
 | Store: Flatpak, Snap, AppImage, SakuraOS packages | Installer tour, site | **Done.** Searchable, installable, removable, matched across sources. |
 | Store: the AUR | Installer tour | **Partly.** Searchable. Installing is refused until the review step exists, on purpose. |
 | Store: AppImages install by opening the file | Installer tour | **Done.** MIME type registered, confirmation before installing. |
-| Store: bring your software to another machine | Installer tour | **Not built.** Needs an export/import format at minimum; an account and a server if it is to be automatic. |
-| Encryption can be turned off without reinstalling | Installer, encryption screen | **Not true as built.** Measured: LUKS2 in-place decryption needs a detached header and data offset 0, decided at install time. Today's installer uses an attached header. Either change that -- and accept the header living on the unencrypted ESP -- or change the sentence. See docs/encryption.md. |
+| Store: bring your software to another machine | Installer tour | **Done.** App Sync, under the account menu at the foot of the store: writes the installed list to a file, and installs it on another machine after showing what it will do. Names only, no settings or data. No account and no server -- it is a file you carry. |
+| Encryption is decided at install time | Installer, encryption screen | **Done.** The sentence now says what is true: attached header, decided on install day, changing it means reinstalling. Detached header rejected on durability -- see `docs/encryption.md`. |
 | Private by default | Installer tour, site | **Done** as stated. Nothing here phones home. The only telemetry is KDE's, off unless switched on. |
 | UI first, terminal second | Installer tour, site | **Done** in the sense claimed: install, update, roll back and manage software without a terminal. |
 

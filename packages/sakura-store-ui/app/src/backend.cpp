@@ -5,6 +5,13 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QVariant>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QUrl>
+#include <pwd.h>
+#include <unistd.h>
 
 namespace {
 constexpr auto ENGINE = "/usr/bin/sakura-store";
@@ -522,4 +529,103 @@ void Backend::openPermissions(const QString &id)
     QProcess::startDetached(QStringLiteral("systemsettings"),
                             {QStringLiteral("--args"), id,
                              QStringLiteral("kcm_app-permissions")});
+}
+
+
+// ---- who is signed in ------------------------------------------------------
+//
+// From the password database, not from a SakuraOS account, because there is no
+// SakuraOS account. The store shows who you are on this machine so that "your
+// apps" means something concrete; it does not sign you in to anything.
+
+QString Backend::userName() const
+{
+    const struct passwd *pw = getpwuid(getuid());
+    return pw && pw->pw_name ? QString::fromLocal8Bit(pw->pw_name) : QString();
+}
+
+QString Backend::userDisplayName() const
+{
+    const struct passwd *pw = getpwuid(getuid());
+    if (pw && pw->pw_gecos) {
+        // GECOS is comma-separated and only the first field is the name; the
+        // rest is office and phone numbers nobody has filled in since 1978.
+        const QString full = QString::fromLocal8Bit(pw->pw_gecos).section(QLatin1Char(','), 0, 0).trimmed();
+        if (!full.isEmpty()) {
+            return full;
+        }
+    }
+    return userName();
+}
+
+QString Backend::userAvatar() const
+{
+    const QString home = QDir::homePath();
+    const QString user = userName();
+    // The places a Plasma desktop actually keeps one, most personal first.
+    const QStringList candidates{
+        home + QStringLiteral("/.face.icon"),
+        home + QStringLiteral("/.face"),
+        QStringLiteral("/var/lib/AccountsService/icons/") + user,
+    };
+    for (const QString &c : candidates) {
+        if (QFileInfo::exists(c)) {
+            return QStringLiteral("file://") + c;
+        }
+    }
+    return QString();   // the UI draws an initial instead
+}
+
+// ---- app lists -------------------------------------------------------------
+
+void Backend::exportAppList(const QString &path)
+{
+    QString file = path;
+    if (file.startsWith(QStringLiteral("file://"))) {
+        file = QUrl(file).toLocalFile();
+    }
+    m_stage = QStringLiteral("Writing the list");
+    m_busy = true;
+    Q_EMIT progressChanged();
+
+    auto *p = run({QStringLiteral("export-list"), QStringLiteral("--output"), file});
+    connect(p, &QProcess::finished, this, [this, p, file] {
+        const QJsonObject o = QJsonDocument::fromJson(p->readAllStandardOutput()).object();
+        p->deleteLater();
+        m_busy = false;
+        m_stage.clear();
+        if (o.contains(QStringLiteral("written"))) {
+            m_stage = tr("Saved %1 applications to %2")
+                          .arg(o.value(QStringLiteral("count")).toInt())
+                          .arg(QFileInfo(file).fileName());
+        } else {
+            m_error = tr("That list could not be written.");
+        }
+        Q_EMIT progressChanged();
+    });
+}
+
+void Backend::readAppList(const QString &path)
+{
+    QString file = path;
+    if (file.startsWith(QStringLiteral("file://"))) {
+        file = QUrl(file).toLocalFile();
+    }
+    auto *p = run({QStringLiteral("read-list"), file});
+    connect(p, &QProcess::finished, this, [this, p] {
+        const QJsonObject o = QJsonDocument::fromJson(p->readAllStandardOutput()).object();
+        p->deleteLater();
+        m_importPlan = toMap(o);
+        Q_EMIT importPlanChanged();
+        if (o.contains(QStringLiteral("error"))) {
+            m_error = o.value(QStringLiteral("error")).toString();
+            Q_EMIT progressChanged();
+        }
+    });
+}
+
+void Backend::clearImportPlan()
+{
+    m_importPlan.clear();
+    Q_EMIT importPlanChanged();
 }
