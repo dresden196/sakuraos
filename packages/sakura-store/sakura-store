@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import json
 import os
 import re
@@ -904,6 +905,115 @@ def detail_from_sources(app_id: str) -> dict:
     return {}
 
 
+# ---- the AUR review step ----------------------------------------------------
+#
+# An AUR package is a shell script that runs on the user's machine with their
+# privileges, fetched from a place where anyone can upload. The store's whole
+# argument is that it will not run one without showing it first.
+#
+# The diff matters more than the script. Nobody reads a 200-line PKGBUILD
+# carefully every time, but almost anyone will notice four new lines appearing
+# in a package they already accepted -- and package takeover, where a
+# maintained package changes hands and the next version is hostile, is the
+# attack that actually happens.
+
+AUR_BASE = "https://aur.archlinux.org"
+
+
+def fetch_text(url: str, tag: str = "") -> str:
+    """Like fetch(), but the body is not JSON."""
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "sakura-store/0.1"})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        FAILURES[tag or url] = f"HTTP {e.code}"
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        FAILURES[tag or url] = str(e)
+    return ""
+
+
+def aur_accept_path() -> Path:
+    """Per-user, because accepting a build script is a personal decision.
+
+    One person on a shared machine reading and accepting a PKGBUILD says
+    nothing about whether the next person would.
+    """
+    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return Path(base) / "sakura/store/aur-accepted.json"
+
+
+def aur_accepted() -> dict:
+    try:
+        return json.loads(aur_accept_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def aur_review(name: str) -> dict:
+    """The PKGBUILD, and what changed since this user last accepted one."""
+    text = fetch_text(f"{AUR_BASE}/cgit/aur.git/plain/PKGBUILD?h={name}",
+                      tag="AUR")
+    if not text:
+        return {"error": f"The build script for {name} could not be fetched."}
+
+    digest = hashlib.sha256(text.encode()).hexdigest()
+    prev = aur_accepted().get(name) or {}
+    diff = []
+    if prev.get("pkgbuild"):
+        import difflib
+        diff = list(difflib.unified_diff(
+            prev["pkgbuild"].splitlines(),
+            text.splitlines(),
+            fromfile=f"{name} (accepted {prev.get('accepted', 'previously')})",
+            tofile=f"{name} (now)", lineterm="", n=3))
+
+    return {
+        "name": name,
+        "pkgbuild": text,
+        "sha256": digest,
+        "seen_before": bool(prev),
+        "unchanged": prev.get("sha256") == digest,
+        "previously_accepted": prev.get("accepted", ""),
+        "diff": diff,
+        # A first look at a script nobody has vouched for is a different act
+        # from re-reading four changed lines, and the interface should say so.
+        "kind": ("unchanged" if prev.get("sha256") == digest
+                 else "changed" if prev else "first"),
+    }
+
+
+def cmd_aur_review(args) -> int:
+    print(json.dumps(aur_review(args.name), indent=2))
+    return 0
+
+
+def cmd_aur_accept(args) -> int:
+    """Record that this user has read this exact script.
+
+    The hash is what is recorded, not the version. A maintainer can publish a
+    changed script under the same version number, and that is precisely the
+    case worth catching.
+    """
+    r = aur_review(args.name)
+    if r.get("error"):
+        print(json.dumps(r))
+        return 1
+    from datetime import datetime, timezone
+    acc = aur_accepted()
+    acc[args.name] = {
+        "sha256": r["sha256"],
+        "pkgbuild": r["pkgbuild"],
+        "accepted": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    path = aur_accept_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(acc, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"accepted": args.name, "sha256": r["sha256"]}))
+    return 0
+
+
 def app_detail(app_id: str) -> dict:
     """Everything the app page needs, in one call.
 
@@ -1475,6 +1585,14 @@ def main() -> int:
     ap.add_argument("--scope", choices=["system", "user"],
                     help="which half of an unattended run this is")
     ap.set_defaults(fn=cmd_update)
+
+    ar = sub.add_parser("aur-review", help="show an AUR build script")
+    ar.add_argument("name")
+    ar.set_defaults(fn=cmd_aur_review)
+
+    aa = sub.add_parser("aur-accept", help="record that a build script was read")
+    aa.add_argument("name")
+    aa.set_defaults(fn=cmd_aur_accept)
 
     ex = sub.add_parser("export-list", help="write the installed app list")
     ex.add_argument("--output", default="-")
