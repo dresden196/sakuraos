@@ -52,6 +52,13 @@ class Backend : public QObject
     Q_PROPERTY(QString userDisplayName READ userDisplayName CONSTANT)
     Q_PROPERTY(QString userAvatar READ userAvatar CONSTANT)
 
+    // Publishing a review. Kept apart from the transaction properties: an
+    // install and a review can be in flight at once, and a failed review must
+    // not read as a failed install.
+    Q_PROPERTY(bool reviewBusy READ reviewBusy NOTIFY reviewChanged)
+    Q_PROPERTY(bool reviewDone READ reviewDone NOTIFY reviewChanged)
+    Q_PROPERTY(QString reviewError READ reviewError NOTIFY reviewChanged)
+
     // What an app list would do here. Populated by readAppList(); reading a
     // file never installs anything on its own.
     Q_PROPERTY(QVariantMap importPlan READ importPlan NOTIFY importPlanChanged)
@@ -82,12 +89,25 @@ public:
     QString progressDetail() const { return m_detail; }
     bool busy() const { return m_busy; }
     QString busyId() const { return m_busyId; }
+    bool reviewBusy() const { return m_reviewBusy; }
+    bool reviewDone() const { return m_reviewDone; }
+    QString reviewError() const { return m_reviewError; }
     void notify(const QString &text) const;
     QString error() const { return m_error; }
     QString errorDetail() const { return m_errorDetail; }
 
     Q_INVOKABLE void search(const QString &query, const QString &source);
     Q_INVOKABLE void openApp(const QString &id);
+    // Publishes to ODRS, which is public and shared with GNOME Software and
+    // Discover. The dialog says so before this is reachable.
+    Q_INVOKABLE void submitReview(const QString &id, int rating,
+                                  const QString &summary,
+                                  const QString &description,
+                                  const QString &name,
+                                  const QString &version);
+    // Clears the outcome so the dialog opens blank rather than showing what
+    // happened the last time it was used.
+    Q_INVOKABLE void resetReview();
     // Re-reads the page that is already open, in place.
     void refreshApp(const QString &id);
     Q_INVOKABLE void loadFeatured();
@@ -129,6 +149,7 @@ Q_SIGNALS:
     void appChanged();
     void progressChanged();
 
+    void reviewChanged();
 private:
     QProcess *run(const QStringList &args);
 
@@ -149,5 +170,8 @@ private:
     int m_percent = 0;
     bool m_searching = false, m_loadingApp = false, m_busy = false;
     QString m_busyId;
+    bool m_reviewBusy = false;
+    bool m_reviewDone = false;
+    QString m_reviewError;
     QString m_busyName;
 };

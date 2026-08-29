@@ -45,7 +45,12 @@ CACHE = Path(os.environ.get("SAKURA_STORE_CACHE")
              or os.path.expanduser("~/.cache/sakura/store"))
 
 FLATHUB_API = "https://flathub.org/api/v2"
-ODRS_API = "https://odrs.gnome.org/1.0/reviews/api"
+# Overridable so the submit path can be exercised against a local stand-in.
+# Reviews are public and permanent on the real service, and it is the same
+# one GNOME Software and Discover write to: test traffic does not go there.
+ODRS_API = os.environ.get("SAKURA_ODRS_API",
+                          "https://odrs.gnome.org/1.0/reviews/api")
+ODRS_DISTRO = "SakuraOS"
 AUR_RPC = "https://aur.archlinux.org/rpc/v5"
 TIMEOUT = 20
 
@@ -1106,6 +1111,150 @@ def odrs_reviews(app_id: str, limit: int = 8) -> list:
     return out
 
 
+# ODRS's own limits, so a person is told while the text is still in front of
+# them rather than after a round trip that ends in a rejection.
+REVIEW_SUMMARY_MAX = 70
+REVIEW_TEXT_MAX = 3000
+
+
+def odrs_app_id(app_id: str) -> str:
+    """ODRS files everything under a desktop-file id."""
+    return app_id if app_id.endswith(".desktop") else f"{app_id}.desktop"
+
+
+def odrs_locale() -> str:
+    """The locale ODRS is told, which decides who sees the review."""
+    for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        val = os.environ.get(var, "")
+        if val and val not in ("C", "POSIX"):
+            return val.split(".")[0]
+    return "en_US"
+
+
+def user_hash() -> str:
+    """A stable pseudonym for this person on this machine.
+
+    ODRS has to recognise the same reviewer twice -- one review per app, and
+    votes that cannot be repeated -- without being told who they are. The
+    hash is of the machine id and the login name: stable for them, and of no
+    use to anyone else.
+
+    Salted with our own name rather than gnome-software's. Reusing another
+    client's salt would file our submissions under its identity, and the
+    cost of not doing so is that somebody who reviews an app here and again
+    in Discover counts as two people to ODRS.
+    """
+    try:
+        machine = Path("/etc/machine-id").read_text().strip()
+    except OSError:
+        machine = ""
+    import getpass
+    try:
+        who = getpass.getuser()
+    except (KeyError, OSError):
+        who = str(os.getuid())
+    return hashlib.sha1(f"sakura-store[{who}:{machine}]".encode()).hexdigest()
+
+
+def review_problem(summary: str, description: str, rating: int) -> str:
+    """Why ODRS would refuse this, decided before the network is involved."""
+    if not 1 <= rating <= 5:
+        return "Choose a rating from one to five stars."
+    for name, value, cap in (("Summary", summary, REVIEW_SUMMARY_MAX),
+                             ("Review", description, REVIEW_TEXT_MAX)):
+        if len(value.strip()) < 2:
+            return f"{name} is too short."
+        if len(value) > cap:
+            return f"{name} is too long. {cap} characters at most."
+        # The server rejects the character outright rather than escaping it.
+        if "<" in value:
+            return f"{name} cannot contain a < character."
+    return ""
+
+
+def post_json(url: str, body: dict) -> tuple[bool, dict]:
+    """POST and keep the server's own words, including on a refusal.
+
+    fetch() folds every failure into "unreachable" and returns a default,
+    which is right for a search and wrong here: ODRS puts "already reviewed
+    this app" in the body of a 400, and that sentence is the whole answer.
+    """
+    try:
+        req = urllib.request.Request(
+            url, data=json.dumps(body).encode(),
+            headers={"User-Agent": "sakura-store/0.1",
+                     "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return True, json.loads(r.read().decode("utf-8", "replace") or "{}")
+    except urllib.error.HTTPError as e:
+        try:
+            return False, json.loads(e.read().decode("utf-8", "replace"))
+        except (ValueError, OSError):
+            return False, {"msg": f"the review service refused it (HTTP {e.code})"}
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        return False, {"msg": f"could not reach the review service ({type(e).__name__})"}
+    except ValueError:
+        return False, {"msg": "the review service sent something unreadable"}
+
+
+def as_sentence(msg: str) -> str:
+    """The service's own words, punctuated to sit in a dialog.
+
+    ODRS answers in fragments -- "already reviewed this app" -- which is the
+    right sentence and the wrong shape for a line of interface text. Only the
+    capital and the full stop are added; the wording is left alone, because
+    the reason a submission was refused is not ours to paraphrase.
+    """
+    msg = msg.strip()
+    if not msg:
+        return msg
+    if msg[-1] not in ".!?":
+        msg += "."
+    return msg[0].upper() + msg[1:]
+
+
+def submit_review(app_id: str, rating: int, summary: str, description: str,
+                  display: str, version: str = "") -> dict:
+    """Publish a review to ODRS.
+
+    Public and effectively permanent: the same reviews are read by GNOME
+    Software and Discover, and there is no delete for the author -- only
+    moderation. The caller is expected to have said so before calling this.
+    """
+    problem = review_problem(summary, description, rating)
+    if problem:
+        return {"ok": False, "error": problem}
+
+    ok, data = post_json(f"{ODRS_API}/submit", {
+        "app_id": odrs_app_id(app_id),
+        "locale": odrs_locale(),
+        "distro": ODRS_DISTRO,
+        "version": version or "unknown",
+        "user_hash": user_hash(),
+        "user_display": display.strip() or "Anonymous",
+        "summary": summary.strip(),
+        "description": description.strip(),
+        # ODRS keeps a 1-100 scale; five stars is the same thing in twenties.
+        "rating": rating * 20,
+    })
+    if ok and data.get("success", True):
+        return {"ok": True, "error": ""}
+    return {"ok": False,
+            "error": as_sentence(data.get("msg") or "the review was not accepted")}
+
+
+def cmd_review(args) -> int:
+    res = submit_review(args.app_id, args.rating, args.summary,
+                        args.description, args.name, args.version)
+    if args.json:
+        print(json.dumps(res, indent=2))
+    elif res["ok"]:
+        print("  Published.")
+    else:
+        print(f"  Not published: {res['error']}")
+    return 0 if res["ok"] else 1
+
+
 def cmd_categories(args) -> int:
     if args.json:
         print(json.dumps([{"id": k, "name": n} for k, n in CATEGORIES], indent=2))
@@ -1530,6 +1679,16 @@ def main() -> int:
     v = sub.add_parser("sources")
     v.add_argument("--json", action="store_true")
     v.set_defaults(fn=cmd_sources)
+
+    rv = sub.add_parser("review", help="publish a review to ODRS")
+    rv.add_argument("app_id")
+    rv.add_argument("--rating", type=int, required=True, help="1 to 5")
+    rv.add_argument("--summary", required=True)
+    rv.add_argument("--description", required=True)
+    rv.add_argument("--name", default="", help="shown publicly beside the review")
+    rv.add_argument("--version", default="", help="version reviewed")
+    rv.add_argument("--json", action="store_true")
+    rv.set_defaults(fn=cmd_review)
 
     i = sub.add_parser("install")
     # Optional for a local AppImage, which is named after the file.
