@@ -24,6 +24,9 @@ QQC2.ApplicationWindow {
     readonly property color warn: "#f6c76b"
 
     property string view: "discover"      // discover | results | app
+    // The AUR package whose build script is open for reading.
+    property string aurName: ""
+
     // The app the review dialog is about. Held here rather than read off the
     // page, so closing the page mid-submission cannot leave the dialog
     // pointing at nothing.
@@ -1593,20 +1596,30 @@ QQC2.ApplicationWindow {
                             // must not light up every other Install on screen.
                             readonly property bool mine:
                                 backend.busy && !!pick && backend.busyId === pick.id
-                            // The AUR install path refuses until the review
-                            // step exists, so offering the button was walking
-                            // the user several steps down a path with no end.
-                            readonly property bool blocked:
+                            // An AUR package is not installed by this button.
+                            // It opens the build script first, and the install
+                            // happens on the far side of somebody having read
+                            // it. Blocked now means only that the AUR is off.
+                            readonly property bool isAur:
                                 !!(pick && pick.source === "aur")
+                            readonly property bool blocked: isAur && !root.aurEnabled
                             Layout.minimumWidth: 196
                             showsProgress: mine
                             progress: backend.percent
                             text: mine ? root.stageLabel(backend.stage)
-                                 : blocked ? (root.aurEnabled ? "Not available yet"
-                                                           : "AUR is switched off")
+                                 : blocked ? "AUR is switched off"
+                                 : isAur ? "Review and install"
                                  : (pick && pick.installed ? "Reinstall" : "Install")
                             enabled: !backend.busy && !!pick && !blocked
-                            onClicked: backend.install(pick.id, pick.source)
+                            onClicked: {
+                                if (isAur) {
+                                    root.aurName = pick.id
+                                    backend.reviewAur(pick.id)
+                                    aurReviewDialog.open()
+                                } else {
+                                    backend.install(pick.id, pick.source)
+                                }
+                            }
                         }
                         QQC2.Label {
                             readonly property var pick: appRoot.options[appRoot.chosen] || null
@@ -1615,8 +1628,8 @@ QQC2.ApplicationWindow {
                             wrapMode: Text.WordWrap
                             text: root.aurEnabled
                                 ? "An AUR package is a build script nobody has reviewed. "
-                                  + "SakuraOS will not run one without showing you what it "
-                                  + "does first, and that step is not built yet."
+                                  + "SakuraOS shows you what it does before it runs, and "
+                                  + "will not build one you have not read."
                                 : "The AUR is switched off. Turn it on in SakuraOS Settings "
                                   + "to install this. It is off by default because AUR packages "
                                   + "are build scripts written by other people, and nobody "
@@ -2418,6 +2431,230 @@ QQC2.ApplicationWindow {
                         }
                     }
                     Item { Layout.fillWidth: true }
+                }
+            }
+        }
+
+
+        // ---- reading an AUR build script ----------------------------------
+        // The whole reason the AUR is reachable at all. A PKGBUILD is somebody
+        // else's shell script, about to run on this machine, and the only
+        // honest safeguard is to put it in front of the person first. Large
+        // because it has to hold two hundred lines of shell without turning
+        // into a keyhole.
+        QQC2.Dialog {
+            id: aurReviewDialog
+            anchors.centerIn: parent
+            width: Math.min(940, root.width - 80)
+            height: Math.min(720, root.height - 80)
+            modal: true
+            padding: 0
+            closePolicy: QQC2.Popup.CloseOnEscape
+            onClosed: backend.clearAurReview()
+            background: Rectangle { radius: 16; color: root.card
+                                    border.width: 1; border.color: root.line }
+
+            readonly property var rv: backend.aurReview || ({})
+            readonly property string kind: rv.kind || ""
+            readonly property var meta: rv.meta || ({})
+            readonly property bool ready: !backend.aurReviewLoading && !!rv.pkgbuild
+            // The diff is the point when there is one. Package takeover shows
+            // up as four changed lines, and four lines are readable where two
+            // hundred are not -- so the changed case opens on the diff and
+            // offers the whole script, rather than the other way round.
+            property bool showWhole: false
+
+            contentItem: ColumnLayout {
+                spacing: 0
+
+                ColumnLayout {
+                    Layout.margins: 24
+                    Layout.bottomMargin: 12
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        text: root.aurName === "" ? "Build script"
+                                                  : "The build script for " + root.aurName
+                        elide: Text.ElideRight
+                        color: root.text; font.pixelSize: 19; font.weight: Font.DemiBold
+                    }
+
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        visible: aurReviewDialog.ready
+                        wrapMode: Text.WordWrap
+                        text: aurReviewDialog.kind === "changed"
+                              ? "You accepted a different version of this script. "
+                                + "What changed is below; the whole script is a click away."
+                              : aurReviewDialog.kind === "unchanged"
+                              ? "This is the same script you read before"
+                                + (aurReviewDialog.rv.previously_accepted
+                                   ? " on " + aurReviewDialog.rv.previously_accepted.slice(0, 10) + "."
+                                   : ".")
+                              : "Nobody has reviewed this. It is shell written by "
+                                + "another user and it will run on this machine."
+                        color: aurReviewDialog.kind === "unchanged" ? root.dim : root.warn
+                        font.pixelSize: 12
+                    }
+
+                    // ---- what the AUR itself says ---------------------------
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: aurReviewDialog.ready && !!aurReviewDialog.meta.version
+                        spacing: 16
+                        QQC2.Label {
+                            text: aurReviewDialog.meta.orphaned
+                                  ? "Orphaned"
+                                  : "Maintained by " + (aurReviewDialog.meta.maintainer || "?")
+                            color: root.dim; font.pixelSize: 12
+                        }
+                        QQC2.Label {
+                            text: (aurReviewDialog.meta.votes || 0) + " votes"
+                            color: root.dim; font.pixelSize: 12
+                        }
+                        QQC2.Label {
+                            visible: aurReviewDialog.meta.age_days !== undefined
+                                     && aurReviewDialog.meta.age_days !== null
+                            text: "Published " + aurReviewDialog.meta.age_days + " days ago"
+                            color: root.dim; font.pixelSize: 12
+                        }
+                        QQC2.Label {
+                            text: aurReviewDialog.meta.version || ""
+                            color: root.dim; font.pixelSize: 12
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    // ---- the flags, as sentences ----------------------------
+                    Repeater {
+                        model: aurReviewDialog.ready
+                               ? (aurReviewDialog.meta.flags || []) : []
+                        delegate: RowLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: 8
+                            Rectangle {
+                                Layout.alignment: Qt.AlignTop
+                                Layout.topMargin: 5
+                                width: 6; height: 6; radius: 3
+                                color: modelData.level === "warn" ? root.warn : root.dim
+                            }
+                            QQC2.Label {
+                                Layout.fillWidth: true
+                                text: modelData.text
+                                wrapMode: Text.WordWrap
+                                color: modelData.level === "warn" ? root.warn : root.dim
+                                font.pixelSize: 12
+                            }
+                        }
+                    }
+                }
+
+                Loading {
+                    visible: backend.aurReviewLoading
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 240
+                    label: "Fetching the build script"
+                }
+
+                QQC2.Label {
+                    visible: !backend.aurReviewLoading && !!aurReviewDialog.rv.error
+                    Layout.margins: 24
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: aurReviewDialog.rv.error || ""
+                    color: "#ff9db0"; font.pixelSize: 13
+                }
+
+                // ---- the script, or what changed in it ---------------------
+                Rectangle {
+                    visible: aurReviewDialog.ready
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    color: root.cardUp
+                    radius: 10
+                    clip: true
+
+                    readonly property bool diffMode:
+                        aurReviewDialog.kind === "changed" && !aurReviewDialog.showWhole
+
+                    QQC2.ScrollView {
+                        id: codeView
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        // Sized to the longest line, not to the pane, so the
+                        // view scrolls sideways. Clamped to the pane width it
+                        // silently cut every long line off at the right edge --
+                        // and a source= line that runs off the edge is exactly
+                        // where something would be put to not be read.
+                        contentWidth: codeCol.implicitWidth
+                        clip: true
+
+                        // A diff is coloured because the sign at the start of
+                        // the line is the entire meaning, and a wall of
+                        // monospace hides it.
+                        ColumnLayout {
+                            id: codeCol
+                            spacing: 0
+                            Repeater {
+                                model: codeView.parent.diffMode
+                                       ? (aurReviewDialog.rv.diff || [])
+                                       : (aurReviewDialog.rv.pkgbuild || "").split("\n")
+                                delegate: QQC2.Label {
+                                    required property string modelData
+                                    text: modelData
+                                    font.family: "monospace"
+                                    font.pixelSize: 12
+                                    wrapMode: Text.NoWrap
+                                    elide: Text.ElideNone
+                                    color: modelData.startsWith("+")
+                                             && !modelData.startsWith("+++")
+                                           ? "#8fd694"
+                                         : modelData.startsWith("-")
+                                             && !modelData.startsWith("---")
+                                           ? "#ff9db0"
+                                         : modelData.startsWith("@@") ? root.accent
+                                         : root.text
+                                }
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.margins: 24
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    QQC2.Button {
+                        visible: aurReviewDialog.kind === "changed"
+                        text: aurReviewDialog.showWhole ? "Show what changed"
+                                                        : "Show the whole script"
+                        onClicked: aurReviewDialog.showWhole = !aurReviewDialog.showWhole
+                    }
+                    Item { Layout.fillWidth: true }
+                    QQC2.Label {
+                        visible: aurReviewDialog.ready
+                        text: aurReviewDialog.kind === "unchanged"
+                              ? "Already read" : "Read this before accepting"
+                        color: root.dim; font.pixelSize: 12
+                    }
+                    Action {
+                        enabled: aurReviewDialog.ready && !backend.busy
+                        text: aurReviewDialog.kind === "unchanged"
+                              ? "Install" : "I have read it \u2014 install"
+                        onClicked: {
+                            backend.acceptAurAndInstall(root.aurName)
+                            aurReviewDialog.close()
+                        }
+                    }
+                    QQC2.Button {
+                        text: "Cancel"
+                        onClicked: aurReviewDialog.close()
+                    }
                 }
             }
         }

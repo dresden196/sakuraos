@@ -52,6 +52,13 @@ class Backend : public QObject
     Q_PROPERTY(QString userDisplayName READ userDisplayName CONSTANT)
     Q_PROPERTY(QString userAvatar READ userAvatar CONSTANT)
 
+    // The AUR build script, its metadata, and what changed since this user
+    // last accepted one. Its own state rather than the app page's, because a
+    // person can be halfway through reading a script while something else
+    // installs.
+    Q_PROPERTY(QVariantMap aurReview READ aurReview NOTIFY aurReviewChanged)
+    Q_PROPERTY(bool aurReviewLoading READ aurReviewLoading NOTIFY aurReviewChanged)
+
     // Publishing a review. Kept apart from the transaction properties: an
     // install and a review can be in flight at once, and a failed review must
     // not read as a failed install.
@@ -92,6 +99,8 @@ public:
     bool reviewBusy() const { return m_reviewBusy; }
     bool reviewDone() const { return m_reviewDone; }
     QString reviewError() const { return m_reviewError; }
+    QVariantMap aurReview() const { return m_aurReview; }
+    bool aurReviewLoading() const { return m_aurReviewLoading; }
     void notify(const QString &text) const;
     QString error() const { return m_error; }
     QString errorDetail() const { return m_errorDetail; }
@@ -108,6 +117,15 @@ public:
     // Clears the outcome so the dialog opens blank rather than showing what
     // happened the last time it was used.
     Q_INVOKABLE void resetReview();
+
+    // Fetches the build script and the diff. Reading is not accepting: this
+    // records nothing.
+    Q_INVOKABLE void reviewAur(const QString &name);
+    // Records that this exact script was read, then installs. One step,
+    // because accepting a script and then not installing it is not a thing
+    // anybody wants, and two buttons would only invite clicking through.
+    Q_INVOKABLE void acceptAurAndInstall(const QString &name);
+    Q_INVOKABLE void clearAurReview();
     // Re-reads the page that is already open, in place.
     void refreshApp(const QString &id);
     Q_INVOKABLE void loadFeatured();
@@ -150,6 +168,7 @@ Q_SIGNALS:
     void progressChanged();
 
     void reviewChanged();
+    void aurReviewChanged();
 private:
     QProcess *run(const QStringList &args);
 
@@ -173,5 +192,7 @@ private:
     bool m_reviewBusy = false;
     bool m_reviewDone = false;
     QString m_reviewError;
+    QVariantMap m_aurReview;
+    bool m_aurReviewLoading = false;
     QString m_busyName;
 };

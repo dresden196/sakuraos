@@ -324,6 +324,65 @@ void Backend::refreshApp(const QString &id)
     });
 }
 
+void Backend::clearAurReview()
+{
+    m_aurReview.clear();
+    m_aurReviewLoading = false;
+    Q_EMIT aurReviewChanged();
+}
+
+void Backend::reviewAur(const QString &name)
+{
+    if (m_aurReviewLoading) {
+        return;
+    }
+    m_aurReviewLoading = true;
+    m_aurReview.clear();
+    Q_EMIT aurReviewChanged();
+
+    auto *p = run({QStringLiteral("aur-review"), name});
+    connect(p, &QProcess::finished, this, [this, p, name] {
+        m_aurReview = QJsonDocument::fromJson(p->readAllStandardOutput())
+                          .object().toVariantMap();
+        p->deleteLater();
+        m_aurReviewLoading = false;
+        // An empty object means the engine died rather than the AUR saying
+        // no; the pane has to say something either way or it sits blank.
+        if (m_aurReview.isEmpty()) {
+            m_aurReview.insert(QStringLiteral("error"),
+                               tr("The build script for %1 could not be read.")
+                                   .arg(name));
+        }
+        Q_EMIT aurReviewChanged();
+    });
+}
+
+void Backend::acceptAurAndInstall(const QString &name)
+{
+    if (m_busy) {
+        return;
+    }
+    // Recorded first and separately: the acceptance is what a later install
+    // is checked against, and it has to survive a build that fails.
+    auto *p = run({QStringLiteral("aur-accept"), name});
+    connect(p, &QProcess::finished, this, [this, p, name] {
+        const QVariantMap m = QJsonDocument::fromJson(p->readAllStandardOutput())
+                                  .object().toVariantMap();
+        p->deleteLater();
+        if (!m.contains(QStringLiteral("accepted"))) {
+            m_error = m.value(QStringLiteral("error"))
+                          .toString().isEmpty()
+                      ? tr("The build script could not be recorded as read.")
+                      : m.value(QStringLiteral("error")).toString();
+            m_stage = QStringLiteral("failed");
+            Q_EMIT progressChanged();
+            return;
+        }
+        clearAurReview();
+        install(name, QStringLiteral("aur"));
+    });
+}
+
 void Backend::resetReview()
 {
     m_reviewBusy = false;

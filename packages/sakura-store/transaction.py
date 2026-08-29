@@ -596,12 +596,12 @@ def _aur_srcinfo_deps(name: str) -> list:
 
 
 def install_aur(name: str) -> int:
-    """Not reachable until the review step exists.
+    """Build and install an AUR package the user has read the script for.
 
-    An AUR package is an unreviewed build script that compiles on the user's
-    machine. Installing one without showing what it does first would
-    contradict the thing the store is for, so this refuses rather than
-    silently doing it.
+    An AUR package is an unreviewed build script that compiles on this
+    machine. The store shows it first and records the acceptance by hash;
+    this refuses anything that does not match what was accepted, so the
+    check cannot be walked past by calling the engine directly either.
     """
     import hashlib
     import shutil
