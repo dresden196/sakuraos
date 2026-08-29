@@ -43,6 +43,36 @@ picker lives in an initramfs: it is the one place the root subvolume is not in
 use. A rollback requested from the running system reboots into recovery to do
 the actual work.
 
+## The ESP is not in the snapshot
+
+`/boot` is the EFI system partition. It is FAT, so it is not part of any BTRFS
+snapshot, and `sakura-rollback` cannot touch it: the UKI and `vmlinuz` live
+there while the modules live in the root subvolume.
+
+Across a kernel update those two disagree after a rollback. The ESP still
+boots the newer kernel; the restored root has modules only for the older one.
+Nothing fails outright -- the initramfs is embedded in the UKI, so it reaches
+userspace -- the machine simply comes up with no module it did not already
+have built in. No network, no graphics. To somebody who has just rolled back
+to fix a problem, that reads as a larger and stranger problem than the one
+they started with.
+
+Ordinary rollbacks are unaffected: a bad desktop update leaves the kernel
+alone and the UKI still matches.
+
+`sakura-kernel-sync.service` closes it. On every boot it asks whether the
+running kernel has a modules directory; if not, the boot image does not match
+this root, so it runs `mkinitcpio -P` and reboots once. The condition is the
+fault itself rather than "did a rollback happen", so it also catches any other
+route to the same state. A stamp in `/var/lib/sakura` stops it rebooting more
+than once for the same fault -- after that the boot counter offers recovery,
+which is the right place for a problem this does not understand.
+
+Doing it inside the recovery initramfs would be tidier and is deliberately not
+done: that image carries `btrfs`, `findfs`, `mount` and little else, because
+it is what has to work when nothing else does. Adding `mkinitcpio`, `kmod`,
+`bash` and `systemd-stub` to it would make the recovery path the fragile part.
+
 ## Tested
 
 `tests/run.sh` builds a real btrfs filesystem with snapshots and exercises

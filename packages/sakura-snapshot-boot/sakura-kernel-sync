@@ -1,0 +1,62 @@
+#!/bin/sh
+# Make the boot image match the kernel that is actually installed.
+#
+# /boot is the EFI system partition -- FAT, and therefore not part of any
+# BTRFS snapshot. The UKI and vmlinuz live there; the modules live in the root
+# subvolume. Rollback swaps what the root subvolume is and cannot touch the
+# ESP, so going back across a kernel update leaves the two disagreeing: the
+# ESP boots the newer kernel, and the restored root has modules only for the
+# older one. Nothing fails outright -- the initramfs is embedded in the UKI,
+# so it reaches userspace -- it simply comes up with no module it did not
+# already have built in. No network, no graphics. Which reads to the user as a
+# different and much more frightening problem than the one they just fixed.
+#
+# Regenerating in the recovery initramfs would be tidier, but that image
+# carries btrfs, findfs, mount and little else on purpose: it is the thing
+# that has to work when everything else has not. Putting mkinitcpio, kmod,
+# bash and systemd-stub inside it to cover this case would make the recovery
+# path itself the fragile part.
+#
+# So: notice, fix, reboot once. The condition checked is not "did a rollback
+# happen" but "does the running kernel have its modules", which is the actual
+# fault and catches any other way of arriving at it.
+set -eu
+
+STAMP=/var/lib/sakura/kernel-sync-attempted
+RUNNING=$(uname -r)
+
+log() { echo "sakura-kernel-sync: $*"; }
+
+if [ -d "/usr/lib/modules/$RUNNING" ]; then
+    # The boot image and the root agree. Clear any earlier attempt so a
+    # future mismatch is treated as new rather than as a loop.
+    rm -f "$STAMP"
+    exit 0
+fi
+
+if [ -e "$STAMP" ]; then
+    # Regenerated once already and still wrong. Stop rather than reboot for
+    # ever: the boot counter will offer recovery, which is the right place for
+    # a problem this does not understand.
+    log "modules for $RUNNING still missing after a rebuild; not trying again"
+    exit 0
+fi
+
+log "running kernel $RUNNING has no modules; the boot image does not match this root"
+
+if ! mountpoint -q /boot; then
+    log "/boot is not mounted; cannot rebuild the boot image"
+    exit 0
+fi
+
+mkdir -p "$(dirname "$STAMP")"
+: > "$STAMP"
+
+if mkinitcpio -P; then
+    log "boot image rebuilt from the installed kernel; restarting"
+    sync
+    systemctl reboot
+else
+    log "mkinitcpio failed; leaving the system as it is"
+    exit 0
+fi
