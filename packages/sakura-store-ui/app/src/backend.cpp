@@ -10,6 +10,8 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 #include <QUrl>
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <pwd.h>
 #include <unistd.h>
 
@@ -299,12 +301,42 @@ void Backend::openApp(const QString &id)
     });
 }
 
+// Re-reads the open page without tearing it down. openApp() clears the app
+// and raises the spinner, which is right when you have navigated somewhere
+// new and wrong here: it blanks the page you are looking at for as long as
+// the lookup takes, immediately after telling you the install finished.
+void Backend::refreshApp(const QString &id)
+{
+    if (id.isEmpty()) {
+        return;
+    }
+    auto *p = run({QStringLiteral("info"), id, QStringLiteral("--json")});
+    connect(p, &QProcess::finished, this, [this, p] {
+        const QVariantMap m = QJsonDocument::fromJson(p->readAllStandardOutput())
+                                  .object().toVariantMap();
+        p->deleteLater();
+        // An empty result means the lookup failed. Leaving the page a moment
+        // stale beats replacing a good one with nothing.
+        if (!m.isEmpty()) {
+            m_app = m;
+            Q_EMIT appChanged();
+        }
+    });
+}
+
 void Backend::install(const QString &id, const QString &source)
 {
     if (m_busy) {
         return;
     }
     m_busy = true;
+    m_busyId = id;
+    // The display name if the page knows one, so the notification can say
+    // "Sober has been installed" rather than an application id.
+    m_busyName = m_app.value(QStringLiteral("name")).toString();
+    if (m_busyName.isEmpty()) {
+        m_busyName = id;
+    }
     m_error.clear();
     m_errorDetail.clear();
     m_percent = 0;
@@ -362,16 +394,18 @@ void Backend::install(const QString &id, const QString &source)
         if (m_error.isEmpty()) {
             m_stage = QStringLiteral("done");
             m_percent = 100;
+            notify(tr("%1 has been installed").arg(m_busyName));
         } else {
             m_stage = QStringLiteral("failed");
         }
+        m_busyId.clear();
         Q_EMIT progressChanged();
         // Re-open the app, not the package. Installing GIMP from the
         // repositories passes "gimp", and asking the app page to load "gimp"
         // finds nothing on Flathub -- so a successful install left the page
         // blank. The canonical id is whatever the page was already showing.
         const QString shown = m_app.value(QStringLiteral("id")).toString();
-        openApp(shown.isEmpty() ? id : shown);
+        refreshApp(shown.isEmpty() ? id : shown);
     });
 
     p->start(QString::fromLatin1(ENGINE),
@@ -628,4 +662,32 @@ void Backend::clearImportPlan()
 {
     m_importPlan.clear();
     Q_EMIT importPlanChanged();
+}
+
+
+// ---- desktop notification --------------------------------------------------
+
+void Backend::notify(const QString &text) const
+{
+    // Through the desktop's own notification service rather than a banner of
+    // our own. An install can take minutes; by the time it finishes the window
+    // is usually behind something else, and a message drawn inside a hidden
+    // window is a message nobody receives.
+    QDBusMessage m = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.Notifications"),
+        QStringLiteral("/org/freedesktop/Notifications"),
+        QStringLiteral("org.freedesktop.Notifications"),
+        QStringLiteral("Notify"));
+    m << QStringLiteral("Sakura Store")
+      << uint(0)
+      << QStringLiteral("sakura-store")
+      << text
+      << QString()
+      << QStringList()
+      << QVariantMap{{QStringLiteral("desktop-entry"),
+                      QStringLiteral("org.sakuraos.store")}}
+      << 6000;
+    // send(), not asyncCall(): there is no reply worth waiting for, and the
+    // notification must never be able to block or fail an install.
+    QDBusConnection::sessionBus().send(m);
 }

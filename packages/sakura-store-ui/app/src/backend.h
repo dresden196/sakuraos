@@ -37,6 +37,9 @@ class Backend : public QObject
     Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
     Q_PROPERTY(QString progressDetail READ progressDetail NOTIFY progressChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY progressChanged)
+    // Which application the running transaction is for, so a button can tell
+    // "I started this" apart from "something is running somewhere".
+    Q_PROPERTY(QString busyId READ busyId NOTIFY progressChanged)
     Q_PROPERTY(QString error READ error NOTIFY progressChanged)
     // The tool's own words, kept so a wrong explanation can still be seen
     // through. Shown only if the user asks for it.
@@ -78,11 +81,15 @@ public:
     int percent() const { return m_percent; }
     QString progressDetail() const { return m_detail; }
     bool busy() const { return m_busy; }
+    QString busyId() const { return m_busyId; }
+    void notify(const QString &text) const;
     QString error() const { return m_error; }
     QString errorDetail() const { return m_errorDetail; }
 
     Q_INVOKABLE void search(const QString &query, const QString &source);
     Q_INVOKABLE void openApp(const QString &id);
+    // Re-reads the page that is already open, in place.
+    void refreshApp(const QString &id);
     Q_INVOKABLE void loadFeatured();
     Q_INVOKABLE void loadInstalled();
     Q_INVOKABLE void checkUpdates();
@@ -141,4 +148,6 @@ private:
     QString m_stage, m_detail, m_error;
     int m_percent = 0;
     bool m_searching = false, m_loadingApp = false, m_busy = false;
+    QString m_busyId;
+    QString m_busyName;
 };

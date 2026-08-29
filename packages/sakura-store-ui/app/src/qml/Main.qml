@@ -231,22 +231,54 @@ QQC2.ApplicationWindow {
     }
 
     component Action : QQC2.Button {
+        id: act
         property bool quiet: false
+        // A button that has started something becomes the progress indicator
+        // for it. A separate bar elsewhere on the page makes you look in two
+        // places to answer one question.
+        property bool showsProgress: false
+        property real progress: 0
         padding: 12; leftPadding: 26; rightPadding: 26
         contentItem: QQC2.Label {
             text: parent.text
-            color: !parent.enabled ? root.dim : (parent.quiet ? root.text : root.accentText)
+            color: act.showsProgress ? root.accentText
+                 : !parent.enabled ? root.dim
+                 : (parent.quiet ? root.text : root.accentText)
             font.pixelSize: 15; font.weight: Font.DemiBold
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
         background: Rectangle {
             radius: 9
-            color: !parent.enabled ? root.card
+            clip: true
+            color: act.showsProgress ? Qt.darker(root.accent, 1.8)
+                 : !parent.enabled ? root.card
                  : parent.quiet ? (parent.down ? root.cardUp : "transparent")
                  : (parent.down ? Qt.darker(root.accent, 1.15) : root.accent)
-            border.width: parent.quiet ? 1 : 0
+            border.width: parent.quiet && !act.showsProgress ? 1 : 0
             border.color: root.line
+
+            Rectangle {
+                visible: act.showsProgress && act.progress > 0
+                height: parent.height; radius: 9; color: root.accent
+                width: parent.width * Math.min(1, act.progress / 100)
+                Behavior on width { NumberAnimation { duration: 240 } }
+            }
+            // Until the first percentage arrives the fill sweeps rather than
+            // sitting at zero: a bar that has not moved in eight seconds is
+            // indistinguishable from nothing having happened.
+            Rectangle {
+                id: sweep
+                visible: act.showsProgress && act.progress <= 0
+                height: parent.height; radius: 9; color: root.accent
+                width: parent.width * 0.34
+                SequentialAnimation on x {
+                    running: sweep.visible
+                    loops: Animation.Infinite
+                    NumberAnimation { from: -sweep.width; to: act.width
+                                      duration: 1150; easing.type: Easing.InOutQuad }
+                }
+            }
         }
     }
 
@@ -359,7 +391,7 @@ QQC2.ApplicationWindow {
 
         // rail
         Rectangle {
-            Layout.preferredWidth: 208
+            Layout.preferredWidth: 236
             Layout.fillHeight: true
             color: panel
 
@@ -376,7 +408,7 @@ QQC2.ApplicationWindow {
                 clip: true
 
                 ColumnLayout {
-                    width: 208 - 36
+                    width: 236 - 36
                     spacing: 22
 
                 RowLayout {
@@ -444,6 +476,7 @@ QQC2.ApplicationWindow {
                                    && backend.categoryName === modelData.name
                                    ? root.accent : root.text
                             font.pixelSize: 13
+                            elide: Text.ElideRight
                             HoverHandler { cursorShape: Qt.PointingHandCursor }
                             TapHandler {
                                 onTapped: {
@@ -454,84 +487,6 @@ QQC2.ApplicationWindow {
                         }
                     }
 
-                    QQC2.Label {
-                        Layout.topMargin: 10
-                        text: "SOURCES"; color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, .75)
-                        font.pixelSize: 11; font.weight: Font.DemiBold
-                        font.letterSpacing: 1.4
-                    }
-                    Repeater {
-                        // Listed in the same order the engine resolves them,
-                        // so the sidebar reads as the priority it actually is.
-                        // From the engine, which knows what is actually
-                        // present -- a hardcoded list showed Snap on machines
-                        // with no snapd, where the filter could only ever
-                        // return nothing.
-                        //
-                        // Unavailable sources are shown rather than dropped.
-                        // Hiding them means nobody can discover that the AUR
-                        // exists, let alone that it is theirs to switch on.
-                        // The name comes from sourceLabel so the sidebar and
-                        // the chips on the tiles say the same word.
-                        model: [{k: "all", n: "Everything", avail: true, why: ""}].concat(
-                            (backend.sources || []).map(function (s) {
-                                return {k: s.id, n: root.sourceLabel(s.id),
-                                        avail: s.available, why: s.reason || ""}
-                            }))
-                        delegate: RowLayout {
-                            required property var modelData
-                            readonly property bool usable: modelData.avail
-                            Layout.fillWidth: true
-                            spacing: 9
-                            opacity: usable ? 1 : 0.45
-                            Rectangle {
-                                width: 15; height: 15; radius: 4
-                                color: root.sourceFilter === modelData.k ? root.accent : "transparent"
-                                border.width: 1
-                                border.color: root.sourceFilter === modelData.k ? root.accent : root.line
-                                QQC2.Label {
-                                    anchors.centerIn: parent; text: "✓"
-                                    visible: root.sourceFilter === modelData.k
-                                    color: root.accentText; font.pixelSize: 10
-                                }
-                            }
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 0
-                                QQC2.Label {
-                                    Layout.fillWidth: true
-                                    text: modelData.n
-                                    color: root.sourceFilter === modelData.k ? root.text : root.dim
-                                    font.pixelSize: 13
-                                }
-                                // Why a source cannot be used, said here
-                                // rather than by the filter quietly returning
-                                // nothing.
-                                QQC2.Label {
-                                    Layout.fillWidth: true
-                                    visible: !!modelData.why
-                                    text: modelData.why
-                                    wrapMode: Text.WordWrap
-                                    color: root.dim; font.pixelSize: 10
-                                }
-                            }
-                            TapHandler {
-                                enabled: parent.usable
-                                onTapped: {
-                                    root.sourceFilter = modelData.k
-                                    if (root.lastQuery) backend.search(root.lastQuery, modelData.k)
-                                }
-                            }
-                            HoverHandler { cursorShape: Qt.PointingHandCursor }
-                        }
-                    }
-                    QQC2.Label {
-                        visible: root.sourceFilter === "aur"
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: "AUR packages are build scripts written by other users. Nobody reviews them."
-                        color: root.warn; font.pixelSize: 11
-                    }
                 }
                 Item { Layout.fillHeight: true }
 
@@ -1571,12 +1526,20 @@ QQC2.ApplicationWindow {
                         Layout.topMargin: 6
                         Action {
                             readonly property var pick: appRoot.options[appRoot.chosen] || null
+                            // Only this app's own button turns into a bar. An
+                            // install started here and then navigated away from
+                            // must not light up every other Install on screen.
+                            readonly property bool mine:
+                                backend.busy && !!pick && backend.busyId === pick.id
                             // The AUR install path refuses until the review
                             // step exists, so offering the button was walking
                             // the user several steps down a path with no end.
                             readonly property bool blocked:
                                 !!(pick && pick.source === "aur")
-                            text: backend.busy ? "Installing…"
+                            Layout.minimumWidth: 196
+                            showsProgress: mine
+                            progress: backend.percent
+                            text: mine ? root.stageLabel(backend.stage)
                                  : blocked ? (root.aurEnabled ? "Not available yet"
                                                            : "AUR is switched off")
                                  : (pick && pick.installed ? "Reinstall" : "Install")
@@ -1628,7 +1591,9 @@ QQC2.ApplicationWindow {
 
             // progress
             ColumnLayout {
-                visible: backend.busy || backend.error !== ""
+                // Only failures now. Progress lives in the button that
+                // started the work, so there is one place to look.
+                visible: backend.error !== ""
                 Layout.fillWidth: true
                 Layout.leftMargin: 26; Layout.rightMargin: 26
                 spacing: 7
@@ -2056,11 +2021,103 @@ QQC2.ApplicationWindow {
                     Layout.leftMargin: 24; Layout.rightMargin: 24
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Which sources the store may install from, whether the AUR is "
-                        + "allowed, and when updates are applied are all system settings "
-                        + "rather than window settings, so they live in System Settings "
-                        + "where the rest of the machine is configured."
+                    text: "Where the store looks for software. Sources are tried in this "
+                        + "order, so an app that is in the official repositories is never "
+                        + "installed from anywhere else."
                     color: root.dim; font.pixelSize: 12
+                }
+                ColumnLayout {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    spacing: 11
+                    Repeater {
+                        // From the engine, which knows what is actually
+                        // present -- a hardcoded list showed Snap on machines
+                        // with no snapd, where the filter could only ever
+                        // return nothing.
+                        //
+                        // AppImage is deliberately absent: it has no catalogue
+                        // to search, so as a filter it could only ever return
+                        // nothing either. What it is is explained below.
+                        //
+                        // Unavailable sources are shown rather than dropped.
+                        // Hiding them means nobody can discover that the AUR
+                        // exists, let alone that it is theirs to switch on.
+                        model: [{k: "all", n: "Everything", avail: true, why: ""}].concat(
+                            (backend.sources || [])
+                                .filter(function (s) { return s.id !== "appimage" })
+                                .map(function (s) {
+                                    return {k: s.id, n: root.sourceLabel(s.id),
+                                            avail: s.available, why: s.reason || ""}
+                                }))
+                        delegate: RowLayout {
+                            required property var modelData
+                            readonly property bool usable: modelData.avail
+                            Layout.fillWidth: true
+                            spacing: 9
+                            opacity: usable ? 1 : 0.45
+                            Rectangle {
+                                width: 15; height: 15; radius: 4
+                                color: root.sourceFilter === modelData.k ? root.accent : "transparent"
+                                border.width: 1
+                                border.color: root.sourceFilter === modelData.k ? root.accent : root.line
+                                QQC2.Label {
+                                    anchors.centerIn: parent; text: "\u2713"
+                                    visible: root.sourceFilter === modelData.k
+                                    color: root.accentText; font.pixelSize: 10
+                                }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.n
+                                    color: root.sourceFilter === modelData.k ? root.text : root.dim
+                                    font.pixelSize: 13
+                                }
+                                // Why a source cannot be used, said here
+                                // rather than by the filter quietly returning
+                                // nothing.
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    visible: !!modelData.why
+                                    text: modelData.why
+                                    wrapMode: Text.WordWrap
+                                    color: root.dim; font.pixelSize: 10
+                                }
+                            }
+                            TapHandler {
+                                enabled: parent.usable
+                                onTapped: {
+                                    root.sourceFilter = modelData.k
+                                    if (root.lastQuery) backend.search(root.lastQuery, modelData.k)
+                                }
+                            }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        }
+                    }
+                }
+                QQC2.Label {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    visible: root.sourceFilter === "aur"
+                    wrapMode: Text.WordWrap
+                    text: "AUR packages are build scripts written by other users. Nobody reviews them."
+                    color: root.warn; font.pixelSize: 11
+                }
+                QQC2.Label {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "AppImage is not in the list. An AppImage is a single file you "
+                        + "download and run yourself, and there is no index of them "
+                        + "anywhere to search \u2014 the store can install one you already "
+                        + "have, but it has nothing to show you here. Whether the AUR is "
+                        + "allowed, and when updates are applied, are settings for the "
+                        + "whole machine rather than for this window, so they live in "
+                        + "System Settings."
+                    color: root.dim; font.pixelSize: 11
                 }
                 RowLayout {
                     Layout.leftMargin: 24; Layout.rightMargin: 24
