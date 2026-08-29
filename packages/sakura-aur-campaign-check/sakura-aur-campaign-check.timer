@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly AUR campaign check
+
+[Timer]
+OnCalendar=weekly
+# A machine that was off on the day still gets its scan.
+Persistent=true
+# Nobody's list is so urgent that every SakuraOS machine should ask Arch's
+# server for it in the same second.
+RandomizedDelaySec=6h
+
+[Install]
+WantedBy=timers.target

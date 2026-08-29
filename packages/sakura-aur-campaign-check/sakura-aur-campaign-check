@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""Check installed AUR packages against published attack campaigns.
+
+Wraps upstream's scanner with the three things a distribution has to decide
+that a standalone tool cannot:
+
+  * whether it runs at all -- AUR.KnownCampaignScanning in sakura.conf;
+  * where its data lives -- a writable copy under /var/lib, so a refresh
+    never writes into /usr and an update never collides with one;
+  * what happens when it finds something -- a report the store and the
+    update centre can read, and a notification the person actually sees,
+    rather than a non-zero exit into a journal nobody opens.
+
+What it does NOT do is decide that a package is safe. A clean result means
+"nothing here matches a campaign somebody has already published", which is a
+much smaller claim and is the only one the data supports.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+SCANNER_DIR = Path("/usr/lib/sakura/aur-campaign-check")
+PACKAGED_DATA = Path("/usr/share/sakura/aur-campaign-check/data")
+STATE = Path("/var/lib/sakura/aur-campaign-check")
+DATA = STATE / "data"
+REPORT = STATE / "last-report.json"
+CONFIG = Path(os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf"))
+
+# Upstream's exit codes are Nagios-shaped.
+OK, WARNING, CRITICAL, UNKNOWN = 0, 1, 2, 3
+
+
+def enabled() -> bool:
+    """Off means off. A security check that ignores its own switch is a bug."""
+    section = ""
+    try:
+        for raw in CONFIG.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                section = line[1:-1]
+                continue
+            key, _, value = line.partition("=")
+            if section == "AUR" and key.strip() == "KnownCampaignScanning":
+                return value.strip().lower() == "true"
+    except OSError:
+        pass
+    # Absent config means a machine that has not been configured, not one that
+    # opted out. Defaulting on matches sakura.conf's own shipped default.
+    return True
+
+
+def seed_data() -> None:
+    """A writable copy of the campaign data, seeded from the packaged one.
+
+    Upstream refreshes package lists in place. Pointed at /usr that fails on a
+    read-only tree and, worse, leaves files pacman will fight with on upgrade.
+    New campaigns arriving in the package are copied in; a list this machine
+    refreshed is left alone, because it is the newer of the two.
+    """
+    import shutil
+    DATA.mkdir(parents=True, exist_ok=True)
+    for src in PACKAGED_DATA.rglob("*"):
+        if src.is_dir():
+            continue
+        dest = DATA / src.relative_to(PACKAGED_DATA)
+        if dest.exists():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+
+
+def notify(summary: str, body: str) -> None:
+    """Reach whoever is actually sitting at the machine.
+
+    This runs as root from a timer or a pacman hook, where there is no session
+    and no bus. The graphical user is found through logind and the message is
+    sent as them; if nobody is logged in it is dropped, and the report on disk
+    is what the store reads later.
+    """
+    try:
+        out = subprocess.run(
+            ["loginctl", "list-sessions", "--no-legend", "-o", "json"],
+            capture_output=True, text=True, timeout=10).stdout
+        sessions = json.loads(out or "[]")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return
+    for s in sessions:
+        uid, user = s.get("uid"), s.get("user")
+        if not uid or not user:
+            continue
+        try:
+            subprocess.run(
+                ["systemd-run", "--quiet", "--collect", f"--uid={uid}",
+                 f"--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus",
+                 "notify-send", "--app-name=SakuraOS",
+                 "--icon=security-medium", "--urgency=critical",
+                 summary, body],
+                capture_output=True, timeout=15)
+        except (OSError, subprocess.SubprocessError):
+            continue
+
+
+def write_report(payload: dict) -> None:
+    STATE.mkdir(parents=True, exist_ok=True)
+    tmp = REPORT.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    tmp.replace(REPORT)
+
+
+def main() -> int:
+    quick = "--quick" in sys.argv
+    args = [a for a in sys.argv[1:] if a != "--quick"]
+
+    if not enabled():
+        return OK
+
+    if not (SCANNER_DIR / "aur_check").is_dir():
+        write_report({"status": "unavailable", "checked": int(time.time()),
+                      "error": "the scanner is not installed"})
+        return UNKNOWN
+
+    seed_data()
+
+    # --all-time on both paths, and this is not a detail.
+    #
+    # Every campaign carries a date window, and by default a package is only
+    # reported if it was installed inside it. That is right for the question
+    # upstream was built to answer -- "was I hit in June" -- and wrong for
+    # ours. Installing a listed package today lands outside the window and is
+    # reported clean: verified, and it is why this flag is here.
+    #
+    # The cost is honest and worth stating: a package that was compromised in
+    # June, cleaned since, and installed today still matches the list. So a
+    # hit means "this name appears on a published campaign list", not "you are
+    # infected", and the wording downstream says exactly that.
+    if quick:
+        # After a transaction. The package and log checks are a set
+        # intersection against a list already on disk -- 0.35s measured --
+        # which is cheap enough to run every time. The cache walks and the
+        # refresh are not, and belong to the timer.
+        scan = ["--all-time"]
+    else:
+        # --refresh pulls the current list. For the June 2026 campaign that
+        # URL is Arch's own HedgeDoc, not this tool's repository, and it is
+        # the whole point: it catches packages disclosed after you installed
+        # them. --refresh-campaigns is deliberately never passed -- that one
+        # rewrites where the data itself comes from, which is not a decision
+        # a weekly timer should be making unattended.
+        scan = ["--refresh", "--full", "--scan-all-homes", "--all-time"]
+
+    env = dict(os.environ)
+    env["AUR_CHECK_DATA_DIR"] = str(STATE)
+    env["PYTHONPATH"] = str(SCANNER_DIR)
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "aur_check", "--json", *scan, *args],
+            cwd=str(SCANNER_DIR), env=env, capture_output=True, text=True,
+            timeout=900)
+    except subprocess.TimeoutExpired:
+        write_report({"status": "timeout", "checked": int(time.time())})
+        return UNKNOWN
+    except OSError as exc:
+        write_report({"status": "error", "checked": int(time.time()),
+                      "error": str(exc)})
+        return UNKNOWN
+
+    try:
+        result = json.loads(proc.stdout or "{}")
+    except ValueError:
+        result = {"raw": proc.stdout[-4000:], "stderr": proc.stderr[-2000:]}
+
+    code = proc.returncode
+    status = {OK: "clean", WARNING: "warnings",
+              CRITICAL: "infected"}.get(code, "unknown")
+    write_report({"status": status, "exit": code, "quick": quick,
+                  "checked": int(time.time()), "result": result})
+
+    if code == CRITICAL:
+        notify("An installed package is on a campaign list",
+               "Something installed here appears in a published AUR attack "
+               "campaign. That is worth checking rather than panicking: the "
+               "package may have been cleaned since. Open SakuraOS Settings.")
+    # A warning is a scan that could not read something, not a finding. It is
+    # recorded and not announced, because a popup that cries wolf about a
+    # rotated log teaches people to dismiss the one that matters.
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

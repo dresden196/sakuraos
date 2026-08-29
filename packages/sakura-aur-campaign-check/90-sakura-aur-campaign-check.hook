@@ -1,0 +1,11 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = *
+
+[Action]
+Description = Checking for known AUR campaign packages...
+When = PostTransaction
+Exec = /usr/bin/sakura-aur-campaign-check --quick
+Depends = python

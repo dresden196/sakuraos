@@ -560,7 +560,7 @@ chmod 440 /etc/sudoers.d/10-wheel
 # was a version behind and three units were not in the target yet.
 for unit in sddm NetworkManager sakura-updates.timer bluetooth.service \
             cups.socket snapd.socket sakura-store-updates.timer \
-            sakura-boot-success.service; do
+            sakura-boot-success.service sakura-aur-campaign-check.timer; do
     if ! systemctl enable "\$unit" >/dev/null 2>&1; then
         echo "[sakura-install] warning: could not enable \$unit"
     fi
