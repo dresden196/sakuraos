@@ -135,30 +135,49 @@ def verify(path: Path, sha256: str) -> bool:
 def extract_metadata(path: Path, name: str) -> dict:
     """Pull the .desktop entry and icon out of the AppImage itself.
 
-    Every AppImage carries them; using them means the launcher entry says what
-    the author intended rather than a filename we guessed at.
+    Every AppImage carries them, and the copies at the top level are
+    conventionally symlinks into usr/share. Extracting only the top level
+    therefore yields a link with nothing behind it: it looks like a .desktop
+    until something opens it, and the error that follows was being swallowed
+    here -- which is how an app ended up with a generic launcher entry
+    pointing at an icon that had never been written. Both locations are asked
+    for, and only real files are accepted.
     """
     work = APPS / f".extract-{name}"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True, exist_ok=True)
     meta: dict = {}
+    patterns = ("*.desktop", "usr/share/applications/*",
+                "*.png", "*.svg", "usr/share/icons/*")
     try:
-        subprocess.run([str(path), "--appimage-extract", "*.desktop"],
-                       cwd=work, capture_output=True, timeout=60)
-        subprocess.run([str(path), "--appimage-extract", "*.png"],
-                       cwd=work, capture_output=True, timeout=60)
+        for pattern in patterns:
+            subprocess.run([str(path), "--appimage-extract", pattern],
+                           cwd=work, capture_output=True, timeout=90)
         root = work / "squashfs-root"
-        for d in root.glob("*.desktop"):
-            meta["desktop"] = d.read_text(errors="replace")
-            break
+
+        for d in sorted(root.rglob("*.desktop")):
+            if d.is_file():
+                meta["desktop"] = d.read_text(errors="replace")
+                break
+
+        # Biggest raster wins; the size is in the path, which is how icon
+        # themes are laid out. Scalable only if there is nothing else.
         best, best_px = None, 0
-        for p in root.rglob("*.png"):
-            m = re.search(r"(\d+)x\1", str(p))
+        for candidate in root.rglob("*.png"):
+            if not candidate.is_file():
+                continue
+            m = re.search(r"(\d+)x\1", str(candidate))
             px = int(m.group(1)) if m else 0
             if px >= best_px:
-                best, best_px = p, px
+                best, best_px = candidate, px
+        if best is None:
+            for candidate in root.rglob("*.svg"):
+                if candidate.is_file():
+                    best, best_px = candidate, 0
+                    break
         if best:
             meta["icon"] = best
+            meta["icon_px"] = best_px
     except (subprocess.SubprocessError, OSError):
         pass
     return meta
@@ -186,19 +205,34 @@ def install(path: Path, name: str, keep_original: bool = False) -> Path:
 
     meta = extract_metadata(dest, name)
     icon_name = f"sakura-appimage-{name}"
+    have_icon = False
 
     if "icon" in meta:
-        shutil.copy2(meta["icon"], ICONS / f"{icon_name}.png")
+        src_icon = Path(meta["icon"])
+        px = meta.get("icon_px") or 0
+        if src_icon.suffix == ".svg":
+            target = ICONS.parent.parent / "scalable" / "apps"
+        elif px:
+            target = ICONS.parent.parent / f"{px}x{px}" / "apps"
+        else:
+            target = ICONS
+        target.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_icon, target / f"{icon_name}{src_icon.suffix}")
+        have_icon = True
 
     entry = meta.get("desktop", "")
     if entry:
         # Point Exec and Icon at where the file actually is now. The entry
         # inside the AppImage refers to paths that only exist while mounted.
         entry = re.sub(r"^Exec=.*$", f"Exec={dest} %U", entry, flags=re.M)
-        entry = re.sub(r"^Icon=.*$", f"Icon={icon_name}", entry, flags=re.M)
+        # Only claim an icon that was actually written. Naming one that is
+        # not there is what produces a launcher full of blank squares.
+        if have_icon:
+            entry = re.sub(r"^Icon=.*$", f"Icon={icon_name}", entry, flags=re.M)
     else:
+        shown_icon = icon_name if have_icon else "application-x-executable"
         entry = ("[Desktop Entry]\nType=Application\n"
-                 f"Name={name}\nExec={dest} %U\nIcon={icon_name}\n"
+                 f"Name={name}\nExec={dest} %U\nIcon={shown_icon}\n"
                  "Terminal=false\nCategories=Utility;\n")
     entry = entry.rstrip("\n") + "\nX-Sakura-Source=appimage\n"
     (DESKTOP / f"sakura-appimage-{name}.desktop").write_text(entry)
