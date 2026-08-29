@@ -24,6 +24,13 @@ QQC2.ApplicationWindow {
     readonly property color warn: "#f6c76b"
 
     property string view: "discover"      // discover | results | app
+    // The app the review dialog is about. Held here rather than read off the
+    // page, so closing the page mid-submission cannot leave the dialog
+    // pointing at nothing.
+    property string reviewAppId: ""
+    property string reviewAppName: ""
+    property string reviewVersion: ""
+
     // Where the app page was opened from, so leaving it goes back there.
     // Back used to return to the last search whenever there had ever been
     // one, which dropped you into a stale result list you had left long ago
@@ -1788,7 +1795,10 @@ QQC2.ApplicationWindow {
 
             // ratings and reviews
             ColumnLayout {
-                visible: !!appRoot.a.rating || (appRoot.a.reviews || []).length > 0
+                // Also for an installed app nobody has reviewed yet, which is
+                // exactly the case where a review is worth asking for.
+                visible: !!appRoot.a.rating || !!appRoot.a.installed
+                         || (appRoot.a.reviews || []).length > 0
                 Layout.fillWidth: true
                 Layout.leftMargin: 26; Layout.rightMargin: 26
                 spacing: 13
@@ -1823,6 +1833,23 @@ QQC2.ApplicationWindow {
                             text: "Reviews come from the Open Desktop Ratings Service, so a review written here helps everyone using Linux, not just SakuraOS."
                             color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, .8)
                             font.pixelSize: 12
+                        }
+                        Action {
+                            quiet: true
+                            Layout.topMargin: 4
+                            Layout.alignment: Qt.AlignLeft
+                            // Only for an app you have. Reviewing something
+                            // you have never run is how a ratings service
+                            // fills up with opinions about screenshots.
+                            visible: !!appRoot.a.installed
+                            text: "Write a review"
+                            onClicked: {
+                                root.reviewAppId = appRoot.a.id || ""
+                                root.reviewAppName = appRoot.a.name || ""
+                                root.reviewVersion = appRoot.a.installed_version || ""
+                                backend.resetReview()
+                                reviewDialog.open()
+                            }
                         }
                     }
                 }
@@ -2194,4 +2221,205 @@ QQC2.ApplicationWindow {
                 }
         }
         }
+
+        // ---- writing a review ---------------------------------------------
+        // Publishing here is not like the rest of the store: it leaves the
+        // machine, it is public, and it cannot be taken back. The dialog says
+        // all three before the button is reachable, because a person who
+        // learns this afterwards has already been surprised by it.
+        QQC2.Dialog {
+            id: reviewDialog
+            anchors.centerIn: parent
+            width: Math.min(580, root.width - 120)
+            modal: true
+            padding: 0
+            closePolicy: backend.reviewBusy ? QQC2.Popup.NoAutoClose
+                                            : QQC2.Popup.CloseOnEscape
+            background: Rectangle { radius: 16; color: root.card
+                                    border.width: 1; border.color: root.line }
+
+            // A star the pointer can land on, which is the whole rating
+            // control -- five of them and nothing else.
+            component Star : QQC2.Label {
+                required property int value
+                text: reviewStars.rating >= value ? "\u2605" : "\u2606"
+                color: root.accent
+                font.pixelSize: 26
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: reviewStars.rating = value }
+            }
+
+            contentItem: ColumnLayout {
+                spacing: 12
+
+                QQC2.Label {
+                    Layout.leftMargin: 24; Layout.topMargin: 24
+                    Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    text: backend.reviewDone ? "Thank you"
+                                             : "Review " + (root.reviewAppName || "this app")
+                    elide: Text.ElideRight
+                    color: root.text; font.pixelSize: 19; font.weight: Font.DemiBold
+                }
+
+                // ---- what happens when you press the button ---------------
+                QQC2.Label {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    visible: !backend.reviewDone
+                    wrapMode: Text.WordWrap
+                    text: "This is published to the Open Desktop Ratings Service, "
+                        + "the same one GNOME Software and Discover read. Anyone "
+                        + "using Linux can see it, and there is no way to delete "
+                        + "it afterwards. You can review each app once."
+                    color: root.dim; font.pixelSize: 12
+                }
+
+                RowLayout {
+                    id: reviewStars
+                    property int rating: 0
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    visible: !backend.reviewDone
+                    spacing: 4
+                    Star { value: 1 }
+                    Star { value: 2 }
+                    Star { value: 3 }
+                    Star { value: 4 }
+                    Star { value: 5 }
+                    QQC2.Label {
+                        Layout.leftMargin: 8
+                        text: reviewStars.rating === 0 ? "Choose a rating"
+                                                       : reviewStars.rating + " of 5"
+                        color: root.dim; font.pixelSize: 12
+                    }
+                }
+
+                QQC2.TextField {
+                    id: reviewSummary
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    visible: !backend.reviewDone
+                    // The server's own limit. Enforced here so the sentence
+                    // cannot be finished and then refused.
+                    maximumLength: 70
+                    placeholderText: "One line: what is it like to use?"
+                    color: root.text
+                    background: Rectangle {
+                        radius: 8; color: root.cardUp
+                        border.width: reviewSummary.activeFocus ? 2 : 1
+                        border.color: reviewSummary.activeFocus ? root.accent : root.line
+                    }
+                }
+
+                QQC2.ScrollView {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 130
+                    visible: !backend.reviewDone
+                    QQC2.TextArea {
+                        id: reviewText
+                        wrapMode: TextEdit.Wrap
+                        placeholderText: "What worked, what did not, and who else would want it."
+                        color: root.text
+                        background: Rectangle {
+                            radius: 8; color: root.cardUp
+                            border.width: reviewText.activeFocus ? 2 : 1
+                            border.color: reviewText.activeFocus ? root.accent : root.line
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    visible: !backend.reviewDone
+                    spacing: 10
+                    QQC2.Label {
+                        text: "Shown as"
+                        color: root.dim; font.pixelSize: 12
+                    }
+                    QQC2.TextField {
+                        id: reviewName
+                        Layout.fillWidth: true
+                        maximumLength: 40
+                        // Prefilled, not silently taken: this name goes onto a
+                        // public page, and the first time somebody sees it
+                        // should be before they publish, not after.
+                        text: backend.userDisplayName || ""
+                        placeholderText: "Anonymous"
+                        color: root.text
+                        background: Rectangle {
+                            radius: 8; color: root.cardUp
+                            border.width: reviewName.activeFocus ? 2 : 1
+                            border.color: reviewName.activeFocus ? root.accent : root.line
+                        }
+                    }
+                }
+                QQC2.Label {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    visible: !backend.reviewDone
+                    wrapMode: Text.WordWrap
+                    text: "This name is public. Leave it as anything you like."
+                    color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, .8)
+                    font.pixelSize: 11
+                }
+
+                // ---- how it went ------------------------------------------
+                QQC2.Label {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    visible: backend.reviewError !== ""
+                    wrapMode: Text.WordWrap
+                    text: backend.reviewError
+                    color: "#ff9db0"; font.pixelSize: 12
+                }
+                QQC2.Label {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.fillWidth: true
+                    visible: backend.reviewDone
+                    wrapMode: Text.WordWrap
+                    text: "Your review is published. It may take a little while to "
+                        + "appear here, and it will show up in GNOME Software and "
+                        + "Discover too."
+                    color: root.dim; font.pixelSize: 12
+                }
+
+                RowLayout {
+                    Layout.leftMargin: 24; Layout.rightMargin: 24
+                    Layout.bottomMargin: 24
+                    Layout.fillWidth: true
+                    spacing: 10
+                    Action {
+                        visible: !backend.reviewDone
+                        showsProgress: backend.reviewBusy
+                        text: backend.reviewBusy ? "Publishing" : "Publish"
+                        // Nothing to publish until there is a rating and
+                        // something written; the server would refuse it and
+                        // the refusal would arrive as a surprise.
+                        enabled: !backend.reviewBusy
+                                 && reviewStars.rating > 0
+                                 && reviewSummary.text.trim().length > 1
+                                 && reviewText.text.trim().length > 1
+                        onClicked: backend.submitReview(
+                            root.reviewAppId, reviewStars.rating,
+                            reviewSummary.text, reviewText.text,
+                            reviewName.text, root.reviewVersion)
+                    }
+                    QQC2.Button {
+                        text: backend.reviewDone ? "Close" : "Cancel"
+                        enabled: !backend.reviewBusy
+                        onClicked: {
+                            reviewDialog.close()
+                            reviewStars.rating = 0
+                            reviewSummary.text = ""
+                            reviewText.text = ""
+                            backend.resetReview()
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+            }
+        }
+
 }

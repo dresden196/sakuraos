@@ -324,6 +324,59 @@ void Backend::refreshApp(const QString &id)
     });
 }
 
+void Backend::resetReview()
+{
+    m_reviewBusy = false;
+    m_reviewDone = false;
+    m_reviewError.clear();
+    Q_EMIT reviewChanged();
+}
+
+void Backend::submitReview(const QString &id, int rating,
+                           const QString &summary, const QString &description,
+                           const QString &name, const QString &version)
+{
+    if (m_reviewBusy) {
+        return;
+    }
+    m_reviewBusy = true;
+    m_reviewDone = false;
+    m_reviewError.clear();
+    Q_EMIT reviewChanged();
+
+    QStringList args{QStringLiteral("review"), id,
+                     QStringLiteral("--rating"), QString::number(rating),
+                     QStringLiteral("--summary"), summary,
+                     QStringLiteral("--description"), description,
+                     QStringLiteral("--name"), name,
+                     QStringLiteral("--json")};
+    if (!version.isEmpty()) {
+        args << QStringLiteral("--version") << version;
+    }
+
+    auto *p = run(args);
+    connect(p, &QProcess::finished, this, [this, p] {
+        const QVariantMap m = QJsonDocument::fromJson(p->readAllStandardOutput())
+                                  .object().toVariantMap();
+        p->deleteLater();
+        m_reviewBusy = false;
+        // No parseable answer means the engine died rather than the service
+        // refusing; saying "not accepted" would blame the wrong party.
+        if (m.isEmpty()) {
+            m_reviewError = tr("The review could not be sent.");
+        } else {
+            m_reviewDone = m.value(QStringLiteral("ok")).toBool();
+            m_reviewError = m_reviewDone
+                ? QString()
+                : m.value(QStringLiteral("error")).toString();
+        }
+        Q_EMIT reviewChanged();
+        if (m_reviewDone) {
+            notify(tr("Your review has been published"));
+        }
+    });
+}
+
 void Backend::install(const QString &id, const QString &source)
 {
     if (m_busy) {
