@@ -1,0 +1,16 @@
+[Unit]
+Description=Rank Arch mirrors by download rate
+Wants=network-online.target
+After=network-online.target
+# Ahead of the nightly update, which is the thing that benefits.
+Before=sakura-updates.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/sakura-mirrors
+# Ranking probes mirrors; it should never compete with anything interactive.
+Nice=10
+IOSchedulingClass=idle
+ProtectSystem=strict
+ReadWritePaths=/etc/pacman.d
+PrivateTmp=yes

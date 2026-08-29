@@ -198,6 +198,34 @@ check "bluetooth is enabled"               "systemctl is-enabled bluetooth.servi
 check "printing is socket-activated"       "systemctl is-enabled cups.socket"
 check "print-manager is installed"         "pacman -Q print-manager"
 check "a video player is installed"        "pacman -Q haruna"
+
+# ---- the kernel, and the choice the installer made -------------------------
+# Asserted as consistency rather than against a hardcoded name: the same
+# checks have to pass on a v3 machine that got the tuned kernel and on an
+# older one that got stock, and a test that only knows one answer would pass
+# on the wrong machine.
+check "exactly one kernel is installed" \
+      "test \"\$(pacman -Qq linux linux-cachyos 2>/dev/null | wc -l)\" -eq 1"
+check "the running kernel has its modules" \
+      "test -d /usr/lib/modules/\$(uname -r)"
+check "a preset exists for the installed kernel" \
+      "test -f /etc/mkinitcpio.d/\$(pacman -Qq linux linux-cachyos 2>/dev/null).preset"
+check "the preset points at the installed kernel" \
+      "grep -q \"vmlinuz-\$(pacman -Qq linux linux-cachyos 2>/dev/null)\" /etc/mkinitcpio.d/*.preset"
+check "the boot image exists"              "test -f /boot/EFI/sakura/sakura.efi"
+check "the recovery image exists"          "test -f /boot/EFI/sakura/sakura-recovery.efi"
+check "kernel-sync is enabled"             "systemctl is-enabled sakura-kernel-sync.service"
+# The service reboots when the boot image and the root disagree. On a healthy
+# install it must do nothing at all -- a false positive here is a boot loop.
+check "kernel-sync is a no-op on a good install" \
+      "/usr/lib/sakura/snapshot-boot/sakura-kernel-sync && test ! -e /var/lib/sakura/kernel-sync-attempted"
+# What the CPU can run, and what it was actually given.
+check "the kernel matches what the CPU supports" \
+      "if /lib/ld-linux-x86-64.so.2 --help | grep -q 'x86-64-v3 (supported'; then \
+           pacman -Q linux-cachyos; \
+       else \
+           pacman -Q linux; \
+       fi"
 check "the KWin rule for Dolphin shipped"  "grep -q dolphin /etc/xdg/kwinrulesrc"
 check "user feedback was configured"       "grep -q FeedbackLevel /home/$USER_NAME/.config/PlasmaUserFeedback"
 

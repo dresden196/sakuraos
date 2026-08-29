@@ -606,7 +606,8 @@ chmod 440 /etc/sudoers.d/10-wheel
 for unit in sddm NetworkManager sakura-updates.timer bluetooth.service \
             cups.socket snapd.socket sakura-store-updates.timer \
             sakura-boot-success.service sakura-aur-campaign-check.timer \
-            sakura-kernel-sync.service; do
+            sakura-kernel-sync.service snapper-cleanup.timer \
+            sakura-mirrors.timer; do
     if ! systemctl enable "\$unit" >/dev/null 2>&1; then
         echo "[sakura-install] warning: could not enable \$unit"
     fi
@@ -669,6 +670,10 @@ chmod 750 /.snapshots
 # a machine that has plenty, which undermines the one guarantee this whole
 # design exists to make. Reading the list is not a privileged act; making a
 # rollback still is.
+# NUMBER_LIMIT is a limit only if something enforces it. snapper prunes when
+# snapper-cleanup runs and at no other time, so without that timer -- enabled
+# above -- these numbers describe an intention and the snapshots accumulate
+# without bound. A restore point per package transaction fills a disk quietly.
 snapper --no-dbus -c root set-config TIMELINE_CREATE=no NUMBER_LIMIT=10 \
     NUMBER_LIMIT_IMPORTANT=5 ALLOW_GROUPS=wheel SYNC_ACL=yes
 snapper --no-dbus -c root create --description "installation complete" --cleanup-algorithm number
