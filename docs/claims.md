@@ -21,7 +21,7 @@ the site.
 | Applications keep themselves current | Installer tour | **Done.** Flatpak, Snap and AppImage, on their own timers. |
 | Terminal Assist | Installer tour, site | **Done.** ALPM hook plus a shell layer; the hook cannot be bypassed. |
 | Store: Flatpak, Snap, AppImage, SakuraOS packages | Installer tour, site | **Done.** Searchable, installable, removable, matched across sources. |
-| Store: the AUR | Installer tour | **Partly.** Searchable. Installing is refused until the review step exists, on purpose. |
+| Store: the AUR | Installer tour | **Done.** Searchable, and installable after the build script has been shown. Acceptance is recorded by hash, so a script that changes under an unchanged version number is caught. Refuses on: never reviewed, changed since reviewed, or failed build. |
 | Store: AppImages install by opening the file | Installer tour | **Done.** MIME type registered, confirmation before installing. |
 | Store: bring your software to another machine | Installer tour | **Done.** App Sync, under the account menu at the foot of the store: writes the installed list to a file, and installs it on another machine after showing what it will do. Names only, no settings or data. No account and no server -- it is a file you carry. |
 | Encryption is decided at install time | Installer, encryption screen | **Done.** The sentence now says what is true: attached header, decided on install day, changing it means reinstalling. Detached header rejected on durability -- see `docs/encryption.md`. |

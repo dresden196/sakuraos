@@ -558,6 +558,43 @@ def update_one(source: str, app_id: str, unattended: bool = False) -> int:
     return 2
 
 
+def _aur_accepted_sha(name: str) -> str:
+    """The hash of the build script this user last read and accepted."""
+    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    try:
+        acc = json.loads(
+            Path(base).joinpath("sakura/store/aur-accepted.json")
+                      .read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    return (acc.get(name) or {}).get("sha256", "")
+
+
+def _aur_srcinfo_deps(name: str) -> list:
+    """Dependencies declared by the package, from .SRCINFO.
+
+    makepkg -s would resolve these itself, but it does that by calling sudo,
+    and there is no terminal behind a store window to answer it. So they are
+    installed first, through the same polkit prompt as any other install, and
+    makepkg is then run with no privileges at all.
+    """
+    import urllib.request
+    url = f"https://aur.archlinux.org/cgit/aur.git/plain/.SRCINFO?h={name}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "sakura-store/0.1"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            text = r.read().decode("utf-8", "replace")
+    except Exception:
+        return []
+    deps = []
+    for line in text.splitlines():
+        k, _, v = line.partition("=")
+        if k.strip() in ("depends", "makedepends") and v.strip():
+            # Strip any version constraint: pacman resolves that itself.
+            deps.append(re.split(r"[<>=]", v.strip())[0])
+    return sorted(set(deps))
+
+
 def install_aur(name: str) -> int:
     """Not reachable until the review step exists.
 
@@ -566,8 +603,87 @@ def install_aur(name: str) -> int:
     contradict the thing the store is for, so this refuses rather than
     silently doing it.
     """
-    emit(FAILED,
-         error="AUR installs go through the review step, which is not built "
-               "yet. Enable the AUR and use the review flow when it lands.",
-         recoverable=False)
-    return 2
+    import hashlib
+    import shutil
+    import tempfile
+    import urllib.request
+
+    # 1. The script must be the exact one this user read. Not the package, not
+    #    the version -- the bytes. A maintainer can publish a changed script
+    #    under an unchanged version number, and that is the case worth
+    #    catching.
+    accepted = _aur_accepted_sha(name)
+    if not accepted:
+        emit(FAILED, error=f"{name} has not been reviewed yet. Read its build "
+                           f"script first -- SakuraOS will not run one it has "
+                           f"not shown you.", recoverable=False)
+        return 2
+    try:
+        req = urllib.request.Request(
+            f"https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h={name}",
+            headers={"User-Agent": "sakura-store/0.1"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            current = r.read().decode("utf-8", "replace")
+    except Exception as e:
+        emit(FAILED, error=f"The build script for {name} could not be "
+                           f"fetched: {e}", recoverable=True)
+        return 2
+    if hashlib.sha256(current.encode()).hexdigest() != accepted:
+        emit(FAILED, error=f"The build script for {name} has changed since you "
+                           f"read it. Review it again before installing.",
+             recoverable=False)
+        return 2
+
+    # 2. Dependencies, through polkit, before anything of the package's own
+    #    runs. Marked --asdeps so removing the package can take them with it.
+    emit(RESOLVING, source="aur", app=name)
+    # base-devel first: building from source needs a compiler and the rest of
+    # the toolchain, and a desktop install rightly does not ship one. It is
+    # pulled in on the first AUR install rather than on every machine that
+    # never touches the AUR.
+    deps = ["base-devel"] + _aur_srcinfo_deps(name)
+    if deps:
+        rc = stream(["pkexec", "pacman", "-S", "--noconfirm", "--needed",
+                     "--asdeps", "--"] + deps, DOWNLOADING, _pacman_progress)
+        if rc != 0:
+            emit(FAILED, error=f"The dependencies of {name} could not be "
+                               f"installed.", recoverable=True)
+            return rc
+
+    # 3. Build as the ordinary user. makepkg refuses to run as root and it is
+    #    right to: this is the step that executes somebody else's shell script.
+    work = tempfile.mkdtemp(prefix="sakura-aur-")
+    try:
+        rc = stream(["git", "clone", "--depth", "1",
+                     f"https://aur.archlinux.org/{name}.git",
+                     f"{work}/{name}"], DOWNLOADING)
+        if rc != 0:
+            emit(FAILED, error=f"{name} could not be fetched from the AUR.",
+                 recoverable=True)
+            return rc
+
+        built = Path(work) / name
+        rc = stream(["env", "-C", str(built), "makepkg", "--noconfirm",
+                     "--noprogressbar", "--nodeps"], INSTALLING)
+        if rc != 0:
+            emit(FAILED, error=f"{name} failed to build. The build script ran "
+                               f"but did not produce a package.",
+                 recoverable=False)
+            return rc
+
+        # makepkg also emits a -debug package when debug symbols are on, which
+        # they are by default on Arch. Installing it would silently double the
+        # download and leave symbol packages nobody asked for on the machine.
+        pkgs = sorted(str(f) for f in built.glob("*.pkg.tar.*")
+                      if not str(f).endswith(".sig")
+                      and "-debug-" not in f.name)
+        if not pkgs:
+            emit(FAILED, error=f"{name} built without producing a package "
+                               f"file.", recoverable=False)
+            return 2
+
+        # 4. Install what was just built, again through polkit.
+        return stream(["pkexec", "pacman", "-U", "--noconfirm", "--"] + pkgs,
+                      INSTALLING, _pacman_progress)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
