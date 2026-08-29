@@ -1470,7 +1470,7 @@ def cmd_sources(args) -> int:
     # AppImage has no catalogue to search, so it is not a source in the sense
     # the others are; it appears here only so the UI can say why.
     rows.append({"id": "appimage", "label": "AppImage", "available": False,
-                 "reason": "No catalogue to search — AppImages install from a file or a link",
+                 "reason": "No catalogue to search. AppImages install from a file or a link",
                  "installable": True})
     if args.json:
         print(json.dumps(rows, indent=2))
@@ -1482,8 +1482,11 @@ def cmd_sources(args) -> int:
 
 
 def cmd_search(args) -> int:
+    # --source takes one name or a comma-separated set, so the store can
+    # search the subset the user has left switched on.
+    picked = [x for x in (args.source or "").split(",") if x]
     wanted = [s for s in SOURCES
-              if (not args.source or s.name == args.source) and s.available()]
+              if (not picked or s.name in picked) and s.available()]
     groups = [s.search(args.query) for s in wanted]
     apps = merge(groups)
     attach_ratings(apps)

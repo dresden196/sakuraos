@@ -41,6 +41,115 @@ package() {
     install -d "$pkgdir/usr/share/icons"
     cp -r "$startdir/icons/"* "$pkgdir/usr/share/icons/"
 
+    # Folders in Sakura's colour rather than Breeze's blue.
+    #
+    # Breeze draws its folders against a stylesheet: every folder icon carries
+    # .ColorScheme-Accent and fills from currentColor, so this is one CSS rule
+    # substituted per file, not an icon set redrawn. Setting the Plasma accent
+    # alone does not do it -- that tints highlights, focus rings and selection,
+    # and leaves every folder blue. Verified in a VM before writing this.
+    #
+    # One rose for both schemes, as Breeze uses one blue for both. The glyph
+    # drawn on the folder is near-white in the dark scheme and near-black in
+    # the light one, so the body has to sit between them: the blossom pink of
+    # the dark accent is too pale to carry a white glyph at 60% opacity.
+    local _rose='#e87f9e'
+    local _sed="s/color: *#3daee9/color: $_rose/g; s/color: *#3593e6/color: $_rose/g"
+
+    _recolour_dir() {   # breeze theme, our theme, subdirectory
+        local src="/usr/share/icons/$1/$3" dst="$pkgdir/usr/share/icons/$2/$3"
+        [[ -d "$src" ]] || return 0
+        install -d "$dst"
+        cp -a "$src/." "$dst/"
+        # -type f deliberately: sed follows a symlink to its target, and the
+        # relative ones here would take it out of the tree and into Breeze's
+        # own files.
+        find "$dst" -name '*.svg' -type f -exec sed -i "$_sed" {} +
+    }
+
+    _recolour_one() {   # breeze theme, our theme, subdirectory, icon name
+        local d size f out
+        for d in "/usr/share/icons/$1/$3/"*/; do
+            f="$d$4.svg"
+            [[ -f "$f" ]] || continue
+            size="$(basename "$d")"
+            out="$pkgdir/usr/share/icons/$2/$3/$size/$4.svg"
+            install -Dm644 "$f" "$out"
+            sed -i "$_sed" "$out"
+        done
+    }
+
+    _recolour_dir breeze-dark SakuraDark  places
+    _recolour_dir breeze      SakuraLight places
+    # Dolphin's icon is a folder like any other, and left alone it is the one
+    # blue thing on a pink taskbar.
+    _recolour_one breeze-dark SakuraDark  apps system-file-manager
+    _recolour_one breeze      SakuraLight apps system-file-manager
+    # A plain directory in a file list is inode-directory from mimetypes, not
+    # folder from places -- recolouring places alone leaves every ordinary
+    # folder blue while the named ones (Documents, Music) turn pink. Taken by
+    # name rather than by directory: it is the only icon in mimetypes that
+    # uses this blue, and the rest are file types that should keep theirs.
+    _recolour_one breeze-dark SakuraDark  mimetypes inode-directory
+    _recolour_one breeze      SakuraLight mimetypes inode-directory
+
+    # index.theme has to list every directory or the loader never looks in it,
+    # and what is here is now decided at build time rather than written by
+    # hand. Everything above Directories= is kept; the list and the sections
+    # below it are regenerated from the tree that actually got installed.
+    _reindex() {
+        local root="$pkgdir/usr/share/icons/$1" idx rel ctx sz scale
+        idx="$root/index.theme"
+        local dirs=()
+        while IFS= read -r rel; do dirs+=("$rel"); done < <(
+            cd "$root" && find . -mindepth 2 -maxdepth 2 \( -type d -o -xtype d \) \
+                -printf '%P\n' | sort)
+        {
+            sed '/^Directories=/,$d' "$idx"
+            printf 'Directories=%s\n' "$(IFS=,; printf '%s' "${dirs[*]}")"
+            for rel in "${dirs[@]}"; do
+                ctx="${rel%%/*}"; sz="${rel##*/}"; scale=1
+                case "$sz" in
+                    *@2x) scale=2; sz="${sz%@2x}" ;;
+                    *@3x) scale=3; sz="${sz%@3x}" ;;
+                esac
+                printf '\n[%s]\n' "$rel"
+                if [[ "$sz" == scalable ]]; then
+                    printf 'Size=48\nMinSize=16\nMaxSize=512\nType=Scalable\n'
+                else
+                    printf 'Size=%s\nType=Fixed\n' "$sz"
+                fi
+                [[ $scale -gt 1 ]] && printf 'Scale=%s\n' "$scale"
+                case "$ctx" in
+                    apps)   printf 'Context=Applications\n' ;;
+                    places)    printf 'Context=Places\n' ;;
+                    mimetypes) printf 'Context=MimeTypes\n' ;;
+                esac
+            done
+        } > "$idx.new"
+        mv "$idx.new" "$idx"
+    }
+    # Dolphin ships its own icon in hicolor with the blue written into the
+    # drawing rather than read from a stylesheet, so it survives everything
+    # above and stays the one blue mark on a pink taskbar. Two shades kept as
+    # two: flattened to one, the fold in the folder disappears.
+    #
+    # This is the only application icon we repaint that is not ours. It is a
+    # folder, it sits next to fifteen other folders, and leaving it blue was
+    # the thing that got noticed.
+    _dolphin() {
+        local src=/usr/share/icons/hicolor/scalable/apps/org.kde.dolphin.svg
+        local out="$pkgdir/usr/share/icons/$1/apps/scalable/org.kde.dolphin.svg"
+        [[ -f "$src" ]] || return 0
+        install -Dm644 "$src" "$out"
+        sed -i 's/#3593e6/#e87f9e/g; s/#147cdc/#c25674/g' "$out"
+    }
+    _dolphin SakuraDark
+    _dolphin SakuraLight
+
+    _reindex SakuraDark
+    _reindex SakuraLight
+
     install -d "$pkgdir/usr/share/plasma/look-and-feel"
     cp -r "$startdir/look-and-feel/"* "$pkgdir/usr/share/plasma/look-and-feel/"
     find "$pkgdir/usr/share/plasma/look-and-feel" -type f -exec chmod 644 {} +

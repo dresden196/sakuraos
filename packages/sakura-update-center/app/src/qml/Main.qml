@@ -491,7 +491,7 @@ QQC2.ApplicationWindow {
                         // "reason" and this dropped them, so the one thing
                         // this section exists to say -- which of your updates
                         // it is about -- never reached the screen.
-                        text: (modelData.reason ? modelData.reason + " \u2014 " : "")
+                        text: (modelData.reason ? modelData.reason + ". " : "")
                             + "Arch published a manual step: " + modelData.title
                     }
                 }
@@ -515,7 +515,7 @@ QQC2.ApplicationWindow {
             Item { Layout.preferredHeight: 30 }
             Head {
                 title: "Restore points"
-                subtitle: "One is taken before every change. Going back restarts the machine and undoes everything after that point \u2014 the files in your home folder are not touched."
+                subtitle: "One is taken before every change. Going back restarts the machine and undoes everything after that point. The files in your home folder are not touched."
             }
             // Taking one before doing something risky is the reason people
             // want restore points at all, and until now the only way to get
@@ -639,7 +639,7 @@ QQC2.ApplicationWindow {
             Item { Layout.preferredHeight: 30 }
             Head {
                 title: "When updates install"
-                subtitle: "These are the same settings as the SakuraOS page in System Settings — changing them here changes them there."
+                subtitle: "These are the same settings as the SakuraOS page in System Settings. Changing them here changes them there."
             }
 
             QQC2.CheckBox {

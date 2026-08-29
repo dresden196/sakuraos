@@ -24,7 +24,63 @@ QQC2.ApplicationWindow {
     readonly property color warn: "#f6c76b"
 
     property string view: "discover"      // discover | results | app
-    property string sourceFilter: "all"
+    // Where the app page was opened from, so leaving it goes back there.
+    // Back used to return to the last search whenever there had ever been
+    // one, which dropped you into a stale result list you had left long ago
+    // -- open something from the front page, press back, land in a search.
+    property string cameFrom: "discover"
+
+    // Every route to the app page goes through here, so none of them can
+    // forget to record where it came from.
+    function showApp(id) {
+        if (root.view !== "app") {
+            root.cameFrom = root.view
+        }
+        backend.openApp(id)
+        root.view = "app"
+    }
+
+    // Which sources the store searches. A source is listed here only once
+    // the user has switched it off, so one that appears later -- snapd gets
+    // installed -- is searched without anybody having to go and tick it.
+    property var sourcesOff: []
+
+    function searchesSource(id) {
+        return root.sourcesOff.indexOf(id) < 0
+    }
+
+    function toggleSource(id) {
+        const off = root.sourcesOff.slice()
+        const i = off.indexOf(id)
+        if (i < 0) {
+            off.push(id)
+        } else {
+            off.splice(i, 1)
+        }
+        root.sourcesOff = off
+        if (root.lastQuery) {
+            backend.search(root.lastQuery, root.sourceArg())
+        }
+    }
+
+    // What the engine is asked for: the ids still switched on, or nothing at
+    // all when every one of them is, so the ordinary case does not build a
+    // list. Everything unticked asks for a source that does not exist, which
+    // finds nothing -- the honest answer to having switched them all off.
+    function sourceArg() {
+        const list = backend.sources || []
+        let on = [], anyOff = false
+        for (let i = 0; i < list.length; ++i) {
+            if (!list[i].available) continue
+            if (root.searchesSource(list[i].id)) {
+                on.push(list[i].id)
+            } else {
+                anyOff = true
+            }
+        }
+        if (!anyOff) return ""
+        return on.length ? on.join(",") : "none"
+    }
     property string lastQuery: ""
 
     Component.onCompleted: {
@@ -34,8 +90,8 @@ QQC2.ApplicationWindow {
         backend.loadFeatured();
         const wanted = typeof openAppId !== "undefined" ? openAppId : "";
         if (wanted !== "") {
-            backend.openApp(wanted);
-            root.view = "app";
+            root.cameFrom = "discover";
+            root.showApp(wanted);
         }
     }
 
@@ -655,7 +711,7 @@ QQC2.ApplicationWindow {
                     QQC2.Button {
                         visible: root.view === "app"
                         text: "‹"
-                        onClicked: root.view = root.lastQuery ? "results" : "discover"
+                        onClicked: root.view = root.cameFrom
                         contentItem: QQC2.Label { text: parent.text; color: root.text
                                                   font.pixelSize: 22
                                                   horizontalAlignment: Text.AlignHCenter }
@@ -688,7 +744,7 @@ QQC2.ApplicationWindow {
                                 onAccepted: {
                                     root.lastQuery = text
                                     root.view = "results"
-                                    backend.search(text, root.sourceFilter)
+                                    backend.search(text, root.sourceArg())
                                 }
                             }
                         }
@@ -841,7 +897,7 @@ QQC2.ApplicationWindow {
                                 spacing: 14
                                 Action {
                                     text: "View"
-                                    onClicked: { backend.openApp(modelData.id); root.view = "app" }
+                                    onClicked: root.showApp(modelData.id)
                                 }
                                 QQC2.Label {
                                     visible: !!modelData.rating
@@ -891,7 +947,7 @@ QQC2.ApplicationWindow {
                             width: root.cellWidth(popularFlow.width, 3, 13)
                             required property var modelData
                             appData: modelData
-                            onOpened: { backend.openApp(modelData.id); root.view = "app" }
+                            onOpened: root.showApp(modelData.id)
                         }
                     }
                 }
@@ -946,7 +1002,7 @@ QQC2.ApplicationWindow {
                         width: root.cellWidth(resultsFlow.width, 3, 13)
                         required property var modelData
                         appData: modelData
-                        onOpened: { backend.openApp(modelData.id); root.view = "app" }
+                        onOpened: root.showApp(modelData.id)
                     }
                 }
             }
@@ -1023,8 +1079,8 @@ QQC2.ApplicationWindow {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: "An AppImage comes from whoever you downloaded it from. "
-                        + "Nothing here reviewed it, and no signature was checked \u2014 "
-                        + "install it only if you trust where it came from."
+                        + "Nothing here reviewed it, and no signature was checked. "
+                        + "Install it only if you trust where it came from."
                     color: root.warn; font.pixelSize: 12
                 }
                 RowLayout {
@@ -1219,7 +1275,7 @@ QQC2.ApplicationWindow {
                 wrapMode: Text.WordWrap
                 text: backend.categoryApps.length + " applications. Categories come from "
                       + "Flatpak and the SakuraOS repositories, which share one set of them. "
-                      + "The AUR publishes no categories, so it is not represented here \u2014 search finds it."
+                      + "The AUR publishes no categories, so it is not represented here. Search finds it."
                 color: root.dim; font.pixelSize: 14
             }
             Loading {
@@ -1240,7 +1296,7 @@ QQC2.ApplicationWindow {
                         width: root.cellWidth(categoryFlow.width, 3, 13)
                         required property var modelData
                         appData: modelData
-                        onOpened: { backend.openApp(modelData.id); root.view = "app" }
+                        onOpened: root.showApp(modelData.id)
                     }
                 }
             }
@@ -1356,8 +1412,7 @@ QQC2.ApplicationWindow {
                         onOpened: {
                             // Repository rows carry the AppStream id, which is
                             // what the app page looks things up by.
-                            backend.openApp(modelData.id)
-                            root.view = "app"
+                            root.showApp(modelData.id)
                         }
                     }
                 }
@@ -1515,8 +1570,8 @@ QQC2.ApplicationWindow {
                             Layout.maximumWidth: 540
                             wrapMode: Text.WordWrap
                             text: "Only " + root.sourceLabel(appRoot.a.source) +
-                                  " offers this. Sources that are switched off cannot be searched \u2014 " +
-                                  "turn them on in SakuraOS Settings."
+                                  " offers this. Sources that are switched off cannot be searched. " +
+                                  "Turn them on in SakuraOS Settings."
                             color: root.dim; font.pixelSize: 12
                         }
                     }
@@ -1556,9 +1611,9 @@ QQC2.ApplicationWindow {
                                   + "SakuraOS will not run one without showing you what it "
                                   + "does first, and that step is not built yet."
                                 : "The AUR is switched off. Turn it on in SakuraOS Settings "
-                                  + "to install this \u2014 it is off by default because AUR "
-                                  + "packages are build scripts written by other people, and "
-                                  + "nobody reviews them."
+                                  + "to install this. It is off by default because AUR packages "
+                                  + "are build scripts written by other people, and nobody "
+                                  + "reviews them."
                             color: root.dim; font.pixelSize: 12
                         }
                         Action {
@@ -1765,7 +1820,7 @@ QQC2.ApplicationWindow {
                         QQC2.Label {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
-                            text: "Reviews come from the Open Desktop Ratings Service, so a review written here helps everyone using Linux — not just SakuraOS."
+                            text: "Reviews come from the Open Desktop Ratings Service, so a review written here helps everyone using Linux, not just SakuraOS."
                             color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, .8)
                             font.pixelSize: 12
                         }
@@ -1854,8 +1909,8 @@ QQC2.ApplicationWindow {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: "Save the list of applications on this machine, and install "
-                            + "the same set on another one. The list holds names only \u2014 "
-                            + "no settings and no files, so nothing private travels with it."
+                            + "the same set on another one. The list holds names only. "
+                            + "No settings and no files, so nothing private travels with it."
                         color: root.dim; font.pixelSize: 12
                     }
                 }
@@ -2021,7 +2076,7 @@ QQC2.ApplicationWindow {
                     Layout.leftMargin: 24; Layout.rightMargin: 24
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Where the store looks for software. Sources are tried in this "
+                    text: "Which sources the store searches. They are tried in this "
                         + "order, so an app that is in the official repositories is never "
                         + "installed from anywhere else."
                     color: root.dim; font.pixelSize: 12
@@ -2033,37 +2088,42 @@ QQC2.ApplicationWindow {
                     Repeater {
                         // From the engine, which knows what is actually
                         // present -- a hardcoded list showed Snap on machines
-                        // with no snapd, where the filter could only ever
-                        // return nothing.
+                        // with no snapd, where the box could only ever return
+                        // nothing.
                         //
                         // AppImage is deliberately absent: it has no catalogue
-                        // to search, so as a filter it could only ever return
+                        // to search, so a box for it could only ever return
                         // nothing either. What it is is explained below.
                         //
-                        // Unavailable sources are shown rather than dropped.
+                        // Sources that are off are shown rather than dropped.
                         // Hiding them means nobody can discover that the AUR
                         // exists, let alone that it is theirs to switch on.
-                        model: [{k: "all", n: "Everything", avail: true, why: ""}].concat(
-                            (backend.sources || [])
+                        model: (backend.sources || [])
                                 .filter(function (s) { return s.id !== "appimage" })
                                 .map(function (s) {
                                     return {k: s.id, n: root.sourceLabel(s.id),
                                             avail: s.available, why: s.reason || ""}
-                                }))
+                                })
                         delegate: RowLayout {
+                            id: srow
                             required property var modelData
                             readonly property bool usable: modelData.avail
+                            // A source that is switched off system-wide reads
+                            // as unticked here rather than as ticked and
+                            // quietly ignored.
+                            readonly property bool ticked:
+                                usable && root.searchesSource(modelData.k)
                             Layout.fillWidth: true
                             spacing: 9
                             opacity: usable ? 1 : 0.45
                             Rectangle {
                                 width: 15; height: 15; radius: 4
-                                color: root.sourceFilter === modelData.k ? root.accent : "transparent"
+                                color: srow.ticked ? root.accent : "transparent"
                                 border.width: 1
-                                border.color: root.sourceFilter === modelData.k ? root.accent : root.line
+                                border.color: srow.ticked ? root.accent : root.line
                                 QQC2.Label {
                                     anchors.centerIn: parent; text: "\u2713"
-                                    visible: root.sourceFilter === modelData.k
+                                    visible: srow.ticked
                                     color: root.accentText; font.pixelSize: 10
                                 }
                             }
@@ -2072,27 +2132,33 @@ QQC2.ApplicationWindow {
                                 spacing: 0
                                 QQC2.Label {
                                     Layout.fillWidth: true
-                                    text: modelData.n
-                                    color: root.sourceFilter === modelData.k ? root.text : root.dim
+                                    text: srow.modelData.n
+                                    color: srow.ticked ? root.text : root.dim
                                     font.pixelSize: 13
                                 }
-                                // Why a source cannot be used, said here
-                                // rather than by the filter quietly returning
-                                // nothing.
+                                // Why a source cannot be ticked, said here
+                                // rather than by the box quietly refusing.
                                 QQC2.Label {
                                     Layout.fillWidth: true
-                                    visible: !!modelData.why
-                                    text: modelData.why
+                                    visible: !!srow.modelData.why
+                                    text: srow.modelData.why
                                     wrapMode: Text.WordWrap
                                     color: root.dim; font.pixelSize: 10
                                 }
+                                // The AUR's caveat belongs on the AUR, not in
+                                // a warning somewhere else that appears only
+                                // once it happens to be selected.
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    visible: srow.modelData.k === "aur" && srow.usable
+                                    text: "Build scripts written by other users. Nobody reviews them."
+                                    wrapMode: Text.WordWrap
+                                    color: root.warn; font.pixelSize: 10
+                                }
                             }
                             TapHandler {
-                                enabled: parent.usable
-                                onTapped: {
-                                    root.sourceFilter = modelData.k
-                                    if (root.lastQuery) backend.search(root.lastQuery, modelData.k)
-                                }
+                                enabled: srow.usable
+                                onTapped: root.toggleSource(srow.modelData.k)
                             }
                             HoverHandler { cursorShape: Qt.PointingHandCursor }
                         }
@@ -2101,18 +2167,10 @@ QQC2.ApplicationWindow {
                 QQC2.Label {
                     Layout.leftMargin: 24; Layout.rightMargin: 24
                     Layout.fillWidth: true
-                    visible: root.sourceFilter === "aur"
-                    wrapMode: Text.WordWrap
-                    text: "AUR packages are build scripts written by other users. Nobody reviews them."
-                    color: root.warn; font.pixelSize: 11
-                }
-                QQC2.Label {
-                    Layout.leftMargin: 24; Layout.rightMargin: 24
-                    Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: "AppImage is not in the list. An AppImage is a single file you "
                         + "download and run yourself, and there is no index of them "
-                        + "anywhere to search \u2014 the store can install one you already "
+                        + "anywhere to search. The store can install one you already "
                         + "have, but it has nothing to show you here. Whether the AUR is "
                         + "allowed, and when updates are applied, are settings for the "
                         + "whole machine rather than for this window, so they live in "

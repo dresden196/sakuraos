@@ -476,7 +476,7 @@ QQC2.ApplicationWindow {
                             body: "The disk is BTRFS with automatic snapshots. A restore point is taken "
                                 + "before every change, and you can take one yourself from the Update "
                                 + "Center before doing something risky. If an update goes wrong, go "
-                                + "back \u2014 your documents and photos are never part of a restore point."
+                                + "back. Your documents and photos are never part of a restore point."
                         },
                         {
                             title: "Updates just happen",
@@ -488,9 +488,9 @@ QQC2.ApplicationWindow {
                             title: "Terminal Assist",
                             body: "Using a terminal for the first time is daunting, and one command can "
                                 + "take a whole system with it. Terminal Assist recognises the commands "
-                                + "that do real damage \u2014 partial upgrades, removing the last kernel, "
-                                + "force-removing packages other things depend on \u2014 stops them, and "
-                                + "tells you what to run instead."
+                                + "that do real damage: partial upgrades, removing the last kernel, "
+                                + "force-removing packages other things depend on. It stops them "
+                                + "and tells you what to run instead."
                         },
                         {
                             title: "A store built from scratch",
@@ -651,7 +651,7 @@ QQC2.ApplicationWindow {
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                text: "Welcome to SakuraOS \u2014 a privacy-first, Arch-based distribution built around ease of use, performance, and not having to open a terminal."
+                text: "Welcome to SakuraOS. A privacy-first, Arch-based distribution built around ease of use, performance, and not having to open a terminal."
                 color: root.dim
                 font.pixelSize: 14
                 lineHeight: 1.35
@@ -1669,8 +1669,8 @@ QQC2.ApplicationWindow {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: "To keep what is here, there has to be unallocated space for "
-                        + "SakuraOS to go into. Shrink an existing partition first \u2014 from "
-                        + "Windows' own Disk Management if this machine has Windows on it \u2014 "
+                        + "SakuraOS to go into. Shrink an existing partition first, from "
+                        + "Windows' own Disk Management if this machine has Windows on it, "
                         + "then come back."
                     color: root.dim; font.pixelSize: 12
                     lineHeight: 1.3
@@ -1748,7 +1748,7 @@ QQC2.ApplicationWindow {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: "There is no way to recover this passphrase. If you forget it, "
-                        + "everything on the disk is gone \u2014 not locked, gone. It is separate "
+                        + "everything on the disk is gone. Not locked, gone. It is separate "
                         + "from your login password, and you type it before the machine starts."
                     color: root.dim; font.pixelSize: 12
                     lineHeight: 1.3
@@ -1757,7 +1757,7 @@ QQC2.ApplicationWindow {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: "Restore points and going back to one work exactly the same on an "
-                        + "encrypted disk. Decide now, though \u2014 changing your mind later "
+                        + "encrypted disk. Decide now, though. Changing your mind later "
                         + "means reinstalling."
                     color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.8)
                     font.pixelSize: 12
@@ -2004,7 +2004,7 @@ QQC2.ApplicationWindow {
             Heading { title: "What SakuraOS does for you" }
             Repeater {
                 model: [
-                    { t: "Terminal Assist", d: "Commands known to break Arch systems get stopped and explained before they run. You can always override one — it tells you exactly how." },
+                    { t: "Terminal Assist", d: "Commands known to break Arch systems get stopped and explained before they run. You can always override one, and it tells you exactly how." },
                     { t: "Restore points", d: "A snapshot is taken before every update. If something breaks, pick Recovery in the boot menu and go back. No live USB, no chroot." },
                     { t: "The AUR is off", d: "The Arch User Repository is build scripts written by other users that nobody reviews. Turn it on in Settings when you want it, and Sakura will show you what a package does before it builds." }
                 ]
@@ -2076,7 +2076,7 @@ QQC2.ApplicationWindow {
                 wrapMode: Text.WordWrap
                 color: root.dim
                 font.pixelSize: 13
-                text: "This one is not ours. Plasma — the desktop SakuraOS uses — is made by KDE, and they can accept anonymous information about your hardware and which features you use, to find bugs. It goes to KDE, never to SakuraOS, and it is off unless you switch it on here."
+                text: "This one is not ours. Plasma, the desktop SakuraOS uses, is made by KDE, and they can accept anonymous information about your hardware and which features you use, to find bugs. It goes to KDE, never to SakuraOS, and it is off unless you switch it on here."
             }
             Choice {
                 heading: root.answers.crashReports ? "Sending basic information to KDE"
@@ -2134,8 +2134,8 @@ QQC2.ApplicationWindow {
                         // skip the warning that matters.
                         text: root.answers.diskMode === "alongside"
                             ? "It goes into unallocated space. Existing partitions are not "
-                            + "touched, and the systems already installed here keep working \u2014 "
-                            + "they will be offered in the boot menu alongside SakuraOS."
+                            + "touched, and the systems already installed here keep working. "
+                            + "They will be offered in the boot menu alongside SakuraOS."
                             : "Every file, every other operating system, and every partition on "
                             + "that disk. This cannot be undone, and it starts as soon as you "
                             + "press Install. Other disks in this machine are not touched."
@@ -2162,7 +2162,7 @@ QQC2.ApplicationWindow {
                                                 ? "  \u00b7  installing alongside what is there"
                                                 : "  \u00b7  erasing everything") },
                         { k: "Encryption", v: root.answers.encrypt
-                                              ? "On \u2014 you enter a passphrase at every start"
+                                              ? "On, you enter a passphrase at every start"
                                               : "Off" },
                         { k: "Computer name", v: root.answers.hostname },
                         { k: "Your account",  v: root.answers.username },
