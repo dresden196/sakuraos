@@ -1,0 +1,18 @@
+# Maintainer: SakuraOS
+pkgname=sakura-plymouth
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Boot splash: a blossom instead of a wall of service messages"
+arch=('any')
+url="https://sakuraos.org"
+license=('GPL2')
+depends=('plymouth')
+source=()
+sha256sums=()
+
+package() {
+    local d="$pkgdir/usr/share/plymouth/themes/sakura"
+    install -dm755 "$d"
+    install -Dm644 "$startdir/theme/sakura.plymouth" "$d/sakura.plymouth"
+    install -Dm644 "$startdir"/theme/*.png -t "$d"
+}

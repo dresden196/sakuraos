@@ -37,7 +37,22 @@ CRITICAL = {
 
 # Removing the last kernel is separately fatal, and which package provides it
 # varies, so it is matched by shape rather than by name.
-KERNEL_RE = re.compile(r"^linux(-(lts|zen|hardened|rt|rt-lts))?$")
+# Matched by shape rather than an enumerated list, because the list was wrong
+# the moment a kernel outside it shipped: the old pattern knew about lts, zen
+# and hardened and did not know about linux-cachyos, so on a machine running
+# that kernel the "you are removing your last kernel" guard silently stopped
+# guarding the kernel actually in use.
+#
+# The denials matter as much as the matches. linux-firmware and the various
+# -headers packages are named like kernels and are not kernels; treating them
+# as one would refuse a legitimate removal and teach people to use the
+# override, which is worse than not checking at all.
+KERNEL_RE = re.compile(r"^linux(?:-[a-z0-9.]+)*$")
+NOT_A_KERNEL = re.compile(r"-(firmware|headers|docs|tools|api)$|^linux-api")
+
+
+def is_kernel(pkg: str) -> bool:
+    return bool(KERNEL_RE.match(pkg)) and not NOT_A_KERNEL.search(pkg)
 
 
 def read_mode() -> str:
@@ -95,8 +110,8 @@ def check(targets: list[str], installed: set[str]) -> list[tuple[str, str, str]]
         if target in CRITICAL:
             problems.append(("remove-critical", target, CRITICAL[target]))
 
-    kernels = {p for p in installed if KERNEL_RE.match(p)}
-    removed_kernels = {p for p in removing if KERNEL_RE.match(p)}
+    kernels = {p for p in installed if is_kernel(p)}
+    removed_kernels = {p for p in removing if is_kernel(p)}
     if removed_kernels and not (kernels - removed_kernels):
         problems.append((
             "remove-last-kernel",

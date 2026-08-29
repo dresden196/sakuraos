@@ -12,4 +12,4 @@ widgetStyle=Breeze
 LookAndFeelPackage=org.sakura.dark.desktop
 
 [Icons]
-Theme=breeze-dark
+Theme=SakuraDark

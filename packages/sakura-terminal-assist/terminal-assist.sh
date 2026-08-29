@@ -72,6 +72,16 @@ sakura_assist_check() {
                 "This removes a package while ignoring what depends on it." \
                 "Whatever needed it will stop working, usually not immediately."
             return 1 ;;
+        sudo*yay*|sudo*paru*|sudo*pikaur*|sudo*trizen*|sudo*makepkg*)
+            sakura_assist_warn \
+                "This builds an AUR package as root." \
+                "Files in the build end up owned by root, and the helper will refuse or misbehave later. Run it as yourself; it asks for a password when it needs one."
+            return 1 ;;
+        *btrfs*subvolume*delete*@*)
+            sakura_assist_warn \
+                "This deletes a BTRFS subvolume that the system is built on." \
+                "@ is the running system and @home is your files. Removing either takes the restore points with it, so there would be nothing left to go back to."
+            return 1 ;;
         *--overwrite*\**)
             sakura_assist_warn \
                 "This lets one package overwrite files belonging to another." \

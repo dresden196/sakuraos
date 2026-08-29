@@ -5,7 +5,7 @@ widgetStyle=Breeze
 ColorScheme=SakuraLight
 
 [kdeglobals][Icons]
-Theme=breeze
+Theme=SakuraLight
 
 [plasmarc][Theme]
 name=default
@@ -21,7 +21,7 @@ library=org.kde.breeze
 theme=Breeze
 
 [ksplashrc][KSplash]
-Theme=org.kde.breeze.desktop
+Theme=org.sakura.light.desktop
 
 [kwinrc][Plugins]
 blurEnabled=true

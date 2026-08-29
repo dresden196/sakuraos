@@ -38,6 +38,9 @@ package() {
     install -d "$pkgdir/usr/share/color-schemes"
     install -m644 "$startdir/color-schemes/"*.colors "$pkgdir/usr/share/color-schemes/"
 
+    install -d "$pkgdir/usr/share/icons"
+    cp -r "$startdir/icons/"* "$pkgdir/usr/share/icons/"
+
     install -d "$pkgdir/usr/share/plasma/look-and-feel"
     cp -r "$startdir/look-and-feel/"* "$pkgdir/usr/share/plasma/look-and-feel/"
     find "$pkgdir/usr/share/plasma/look-and-feel" -type f -exec chmod 644 {} +

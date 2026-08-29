@@ -1,0 +1,15 @@
+Why a splash at all
+===================
+
+The default is a scrolling list of systemd units, which is a debugging tool
+shown to everybody by default. It tells a person who can read it very little
+they need, and a person who cannot read it that something is wrong.
+
+`quiet splash` was already on the kernel command line. Without plymouth
+installed, `splash` does nothing at all, which is why the messages were still
+there -- the intent had been recorded and never implemented.
+
+The blossom turns and there is no progress bar, because a progress bar claims
+knowledge of how long a boot will take and nothing has that. When the disk is
+encrypted plymouth also owns the passphrase prompt, so the first thing typed
+on the machine is typed into something that looks like the machine.
