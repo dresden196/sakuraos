@@ -11,11 +11,12 @@ pkgdesc="SakuraOS update engine"
 arch=('any')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
-depends=('python' 'pacman-contrib' 'snapper' 'sakura-settings-core' 'polkit')
+depends=('reflector' 'python' 'pacman-contrib' 'snapper' 'sakura-settings-core' 'polkit')
 source=('sakura-update' 'sakura-update-helper' 'org.sakuraos.updates.policy'
         'sakura-updates.service' 'sakura-updates.timer'
-        'sakura-updates-schedule')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        'sakura-updates-schedule'
+        'sakura-mirrors' 'sakura-mirrors.service' 'sakura-mirrors.timer')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/sakura-update" "$pkgdir/usr/bin/sakura-update"
@@ -25,6 +26,11 @@ package() {
         "$pkgdir/usr/share/polkit-1/actions/org.sakuraos.updates.policy"
     install -Dm644 "$srcdir/sakura-updates.service" \
         "$pkgdir/usr/lib/systemd/system/sakura-updates.service"
+    install -Dm755 "$srcdir/sakura-mirrors" "$pkgdir/usr/bin/sakura-mirrors"
+    install -Dm644 "$srcdir/sakura-mirrors.service" \
+        "$pkgdir/usr/lib/systemd/system/sakura-mirrors.service"
+    install -Dm644 "$srcdir/sakura-mirrors.timer" \
+        "$pkgdir/usr/lib/systemd/system/sakura-mirrors.timer"
     install -Dm644 "$srcdir/sakura-updates.timer" \
         "$pkgdir/usr/lib/systemd/system/sakura-updates.timer"
     install -Dm755 "$srcdir/sakura-updates-schedule" \

@@ -149,9 +149,12 @@ docker run --rm \
         chown $HOST_UID:$HOST_GID /build/repo/sakura-core/os/x86_64/*
 
         cd /build/repo/sakura-core/os/x86_64
+        # No unsigned fallback. A database added to without --sign keeps its
+        # old signature, which no longer matches -- and the failure surfaces
+        # later as "signature from ... is invalid" during an ISO build, a long
+        # way from the cause. Better to fail here.
         su builder -c "GNUPGHOME=/home/builder/.gnupg repo-add --sign \
-            --key $SIGNER sakura-core.db.tar.gz *.pkg.tar.zst" || \
-        repo-add sakura-core.db.tar.gz ./*.pkg.tar.zst
+            --key $SIGNER sakura-core.db.tar.gz *.pkg.tar.zst"
         chown $HOST_UID:$HOST_GID /build/repo/sakura-core/os/x86_64/*
     '
 

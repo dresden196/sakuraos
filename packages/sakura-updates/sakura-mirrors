@@ -1,0 +1,43 @@
+#!/bin/sh
+# Keep the mirror list pointed at mirrors that are actually fast from here.
+#
+# Arch ships a mirrorlist ordered by nothing in particular, and an install
+# that picked the first entry can end up pulling a gigabyte of updates from
+# the other side of the world. Nothing about that looks broken -- it is just
+# slow, for ever, and the person has no reason to suspect the mirror.
+#
+# Run before the nightly update rather than on its own schedule: a mirror
+# ranking that is a week stale is no better than none, and the only moment it
+# has to be right is just before something large is downloaded.
+#
+# Deliberately narrow. --latest bounds the work, --age skips mirrors that are
+# behind (a fast mirror serving yesterday's database is worse than a slow
+# current one), and --protocol https because a mirror list is a list of places
+# to fetch executable code from.
+set -eu
+
+OUT=/etc/pacman.d/mirrorlist
+TMP=$(mktemp)
+trap 'rm -f "$TMP"' EXIT
+
+if ! command -v reflector >/dev/null 2>&1; then
+    echo "sakura-mirrors: reflector is not installed" >&2
+    exit 0
+fi
+
+if ! reflector --latest 20 --age 12 --protocol https --sort rate \
+        --save "$TMP" >/dev/null 2>&1; then
+    echo "sakura-mirrors: could not reach the mirror status service; keeping the current list" >&2
+    exit 0
+fi
+
+# A truncated or empty answer must never replace a working list. Somebody
+# whose mirrorlist is emptied by a background job has no way to install the
+# thing that would fix it.
+if [ "$(grep -c '^Server' "$TMP")" -lt 5 ]; then
+    echo "sakura-mirrors: too few mirrors returned; keeping the current list" >&2
+    exit 0
+fi
+
+install -Dm644 "$TMP" "$OUT"
+echo "sakura-mirrors: $(grep -c '^Server' "$OUT") mirrors, ranked by download rate"

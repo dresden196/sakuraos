@@ -1,0 +1,12 @@
+[Unit]
+Description=Weekly mirror ranking
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+# Every SakuraOS machine asking the mirror status service in the same second
+# would be a small denial of service aimed at Arch.
+RandomizedDelaySec=4h
+
+[Install]
+WantedBy=timers.target

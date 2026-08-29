@@ -87,7 +87,9 @@ sakura_assist_check() {
                 "This lets one package overwrite files belonging to another." \
                 "Ownership records end up wrong and the damage surfaces on a later update."
             return 1 ;;
-        *"rm -rf /"|*"rm -rf /"[!a-zA-Z0-9._-]*|*"rm -fr /"|*"rm -rf --no-preserve-root"*)
+        "rm -rf /"|"rm -fr /"|"sudo rm -rf /"|"sudo rm -fr /"|\
+        "rm -rf /"[!a-zA-Z0-9._-]*|"sudo rm -rf /"[!a-zA-Z0-9._-]*|\
+        *"; rm -rf /"*|*"&& rm -rf /"*|*"no-preserve-root"*)
             sakura_assist_warn \
                 "This deletes the entire filesystem." \
                 "There is no undo for this beyond restoring from a snapshot."
@@ -97,15 +99,64 @@ sakura_assist_check() {
                 "This formats a disk, erasing everything on it." \
                 "Check the device name carefully -- confusing sda with sdb is the usual accident."
             return 1 ;;
-        *"dd "*"of=/dev/"[sn]*)
+        *"dd "*"of=/dev/sd"[a-z]*|*"dd "*"of=/dev/nvme"*|*"dd "*"of=/dev/vd"[a-z]*|*"dd "*"of=/dev/hd"[a-z]*)
             sakura_assist_warn \
                 "This writes directly to a disk device." \
                 "If that is your system disk, it will not survive it."
             return 1 ;;
-        *"chmod"*" -R "*777*" /"|*"chmod -R 777 /"*)
+        *"chmod"*777*" /"|*"chmod"*777*" /usr"*|*"chmod"*777*" /etc"*)
             sakura_assist_warn \
-                "This makes the whole system world-writable." \
+                "This makes system files world-writable." \
                 "sudo and ssh refuse to work afterwards, and the only fix is a reinstall."
+            return 1 ;;
+        *"chmod"*000*" /"|*"chmod"*000*" /usr"*|*"chmod"*000*" /etc"*|*"chmod 0 /"*)
+            sakura_assist_warn \
+                "This removes every permission from the system." \
+                "Nothing can be read or run afterwards, including the tools to undo it."
+            return 1 ;;
+        *"chmod"*"+s"*"/bin/"*|*"chmod"*"+s"*"/usr/bin/"*)
+            sakura_assist_warn \
+                "This gives programs the power to run as root." \
+                "Any one of them can then be used to take over the machine."
+            return 1 ;;
+        *"chmod"*"-x"*"/bin/bash"*|*"chmod"*"-x"*"/bin/sh"*|*"chmod"*"-x"*"/lib"*"/ld-"*)
+            sakura_assist_warn \
+                "This makes the shell or the program loader unrunnable." \
+                "Nothing on the system starts after that, including a recovery shell."
+            return 1 ;;
+        # Not "rm -rf /" -- this is the one that empties every job silently and
+        # has no confirmation of its own. -e is the flag people mean.
+        *"crontab -r"*|*"crontab"*" -r "*)
+            sakura_assist_warn \
+                "This deletes all of your scheduled jobs at once." \
+                "There is no confirmation and no undo. 'crontab -e' is the one that edits them."
+            return 1 ;;
+        # A literal shape. Nothing legitimate looks like this, so it cannot
+        # fire on anything else.
+        *":(){"*":|:&"*"};:"*|*":(){:|:&};:"*)
+            sakura_assist_warn \
+                "This is a fork bomb." \
+                "It makes copies of itself until nothing else can run and the machine has to be reset."
+            return 1 ;;
+        *"blkdiscard"*"/dev/"*)
+            sakura_assist_warn \
+                "This tells the drive to discard everything on it." \
+                "It is immediate, it is done by the drive itself, and no recovery tool can undo it."
+            return 1 ;;
+        *">"*"/dev/sd"[a-z]|*">"*"/dev/nvme"*|*">"*"/dev/vd"[a-z])
+            sakura_assist_warn \
+                "This writes over a disk directly." \
+                "Whatever is on that disk -- partitions and all -- is gone as soon as it starts."
+            return 1 ;;
+        *"chown"*" -R "*" /"|*"chown"*" -R "*" /usr"*|*"chown"*" -R "*" /etc"*)
+            sakura_assist_warn \
+                "This changes the owner of system files." \
+                "sudo stops working, because it refuses to run when it is not owned by root."
+            return 1 ;;
+        *"hdparm"*"--fwdownload"*)
+            sakura_assist_warn \
+                "This writes new firmware onto the drive." \
+                "The wrong file, or an interruption, leaves a drive that no longer works at all."
             return 1 ;;
         *curl*"|"*"sh"|*curl*"|"*bash*|*wget*"|"*"sh"|*wget*"|"*bash*)
             sakura_assist_warn \

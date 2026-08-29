@@ -10,6 +10,11 @@
 #   ./build/test-vm.sh --reset-nvram  clear firmware boot entries, keep the disk
 #   ./build/test-vm.sh --installed  boot the installed system, not the ISO
 #   ./build/test-vm.sh --headless   no window (screenshots still work)
+#
+# SAKURA_VM_CPU overrides the guest CPU model (default: host). Needed to
+# test the kernel fallback: the installer picks the tuned x86-64-v3 kernel
+# or stock by what the CPU supports, and a host-passthrough guest always
+# looks modern. SAKURA_VM_CPU=Nehalem is a pre-AVX2 machine.
 #   ./build/test-vm.sh --gl         virgl acceleration; disables screenshots
 #
 # Screenshots: build/screenshot.sh out.png — works in every mode except --gl.
@@ -117,7 +122,7 @@ fi
 exec qemu-system-x86_64 \
     -enable-kvm \
     -machine q35,smm=on \
-    -cpu host \
+    -cpu "${SAKURA_VM_CPU:-host}" \
     -smp 8 \
     -m 6G \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$CODE" \
