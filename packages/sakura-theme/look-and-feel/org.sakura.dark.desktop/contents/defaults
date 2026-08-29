@@ -2,6 +2,8 @@
 widgetStyle=Breeze
 
 [kdeglobals][General]
+AccentColor=255,183,197
+accentColorFromWallpaper=false
 ColorScheme=SakuraDark
 
 [kdeglobals][Icons]

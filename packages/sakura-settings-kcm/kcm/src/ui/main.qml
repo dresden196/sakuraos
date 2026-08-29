@@ -76,7 +76,7 @@ KCM.SimpleKCM {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            text: i18n("Checks commands and package changes that are known to break Arch systems — partial upgrades, removing the last kernel, force-removing core packages. You can always override a specific check.")
+            text: i18n("Checks commands and package changes that are known to break Arch systems: partial upgrades, removing the last kernel, force-removing core packages. You can always override a specific check.")
         }
 
         Item { Kirigami.FormData.isSection: true; Kirigami.FormData.label: i18n("AUR") }
@@ -115,7 +115,7 @@ KCM.SimpleKCM {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            text: i18n("Not built yet. Until it is, the store will not install from the AUR at all — it refuses rather than building an unreviewed script without showing it to you first. AUR packages are searchable, so you can see what exists.")
+            text: i18n("Not built yet. Until it is, the store will not install from the AUR at all. It refuses rather than building an unreviewed script without showing it to you first. AUR packages are searchable, so you can see what exists.")
         }
 
         QQC2.CheckBox {
@@ -130,7 +130,7 @@ KCM.SimpleKCM {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            text: i18n("Not built yet. When it exists it will compare what you have installed against published attack campaigns — and it still will not detect an attack nobody has reported, so it will not be a substitute for reading what you install.")
+            text: i18n("Not built yet. When it exists it will compare what you have installed against published attack campaigns. It still will not detect an attack nobody has reported, so it will not be a substitute for reading what you install.")
         }
 
         QQC2.ComboBox {
@@ -142,7 +142,7 @@ KCM.SimpleKCM {
             valueRole: "value"
             model: [
                 { label: i18n("yay"),                       value: "yay"  },
-                { label: i18n("None — use the store only"), value: "none" },
+                { label: i18n("None, use the store only"), value: "none" },
             ]
             Layout.minimumWidth: Kirigami.Units.gridUnit * 15
             currentIndex: indexOfValue(cfg.aurHelper)
@@ -199,7 +199,7 @@ KCM.SimpleKCM {
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
             // The part that makes this better than installing Wine yourself.
-            text: i18n("Opening a Windows program asks first. Where a Linux version of the same application exists, SakuraOS offers that instead \u2014 running an installer through a compatibility layer is rarely what anybody actually wanted.")
+            text: i18n("Opening a Windows program asks first. Where a Linux version of the same application exists, SakuraOS offers that instead. Running an installer through a compatibility layer is rarely what anybody actually wanted.")
         }
 
         // Each Windows program runs in its own prefix, so this list is also
