@@ -24,9 +24,11 @@ source=(
     'sakura-snapshot-manage'
     'sakura-boot-success'
     'sakura-boot-success.service'
+    'sakura-kernel-sync'
+    'sakura-kernel-sync.service'
     'org.sakuraos.rollback.policy'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm644 "$srcdir/lib.sh"              "$pkgdir/usr/lib/sakura/snapshot-boot/lib.sh"
@@ -39,6 +41,10 @@ package() {
         "$pkgdir/usr/lib/sakura/snapshot-boot/sakura-boot-success"
     install -Dm644 "$srcdir/sakura-boot-success.service" \
         "$pkgdir/usr/lib/systemd/system/sakura-boot-success.service"
+    install -Dm755 "$srcdir/sakura-kernel-sync" \
+        "$pkgdir/usr/lib/sakura/snapshot-boot/sakura-kernel-sync"
+    install -Dm644 "$srcdir/sakura-kernel-sync.service" \
+        "$pkgdir/usr/lib/systemd/system/sakura-kernel-sync.service"
     install -Dm755 "$srcdir/sakura-snapshot-manage" \
         "$pkgdir/usr/lib/sakura/snapshot-boot/sakura-snapshot-manage"
     install -Dm755 "$srcdir/sakura-schedule-rollback" \

@@ -1,0 +1,21 @@
+[Unit]
+Description=Match the boot image to the installed kernel
+Documentation=man:mkinitcpio(8)
+# Needs the ESP mounted at /boot to write a UKI, and the root subvolume in
+# place to read the modules directory from.
+After=local-fs.target
+# Ahead of the desktop: if this is going to reboot, it should do it before
+# somebody has logged in and started work.
+Before=display-manager.service graphical.target
+ConditionPathExists=/usr/bin/mkinitcpio
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/sakura/snapshot-boot/sakura-kernel-sync
+# A failure here must never block the boot -- a system that comes up degraded
+# is still a system somebody can use to fix this.
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target
