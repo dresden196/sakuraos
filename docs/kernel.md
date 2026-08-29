@@ -224,6 +224,49 @@ one upstream actually tests costs four more minutes. AutoFDO builds the kernel
 twice plus a profiling run, so call it under an hour -- also affordable, though
 it needs a profile gathered from real workloads before it means anything.
 
+## Built for real, 2026-08-29: sixteen minutes, and a correction
+
+The 7.2.1 build recorded above was checked before being cleared, and it was
+not the configuration this document presents it as:
+
+    CONFIG_GENERIC_CPU=y
+    CONFIG_X86_64_VERSION=1
+
+x86-64 **v1** -- plain baseline. It would boot anywhere, and it carried none
+of the `-march` benefit the "tuned for modern CPUs" claim rests on. The
+fifteen- and nineteen-minute numbers above are sound as timings; the artefact
+was not what we intend to ship. Left unchecked it would have shipped as if it
+were, which is the whole reason `--verify` now reads the baseline back out of
+the prepared config instead of trusting that the variable arrived.
+
+The first build that is actually the shipping configuration, on Saelith in the
+same LXC, 88 threads, `BUILDDIR` on the 64 GB tmpfs:
+
+    linux-cachyos 7.2.2-1        16 min 15 s
+    package                      157 MB   (+ 44 MB headers)
+    installed size               149.71 MiB
+    modules                      6,489
+    kernel                       7.2.2-1-cachyos
+
+Confirmed in the shipped headers package rather than in the build tree:
+
+    CONFIG_GENERIC_CPU=y
+    CONFIG_X86_64_VERSION=3
+    CONFIG_LTO_CLANG_THIN=y
+    CONFIG_HZ=1000
+    CONFIG_SCHED_CLASS_EXT=y
+
+with `CONFIG_X86_NATIVE_CPU` absent. Sources verified against upstream's own
+b2sums and the tarball's PGP signature -- no `--skipinteg` anywhere -- and the
+package signed locally with our key rather than on the build box.
+
+Sixteen minutes for ThinLTO at v3 puts this firmly in cron-job territory, and
+settles the earlier question: there is no reason to ship the cheaper GCC build.
+
+**Not yet booted.** The package exists, is signed and is in the repository. No
+machine has started it. That is the next thing, and until it happens the claim
+stays unmet.
+
 ## What the laptop measurement was actually worth
 
 Run on 2026-08-26 on the development laptop: 14 cores, 10 given to the build,
