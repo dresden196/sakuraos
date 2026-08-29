@@ -22,6 +22,10 @@ depends=(
     # therefore does not need a kernel of our own. See docs/kernel.md.
     'sakura-tuning'
 
+    # Boot splash. 'splash' was already on the kernel command line and did
+    # nothing, because nothing was there to draw it.
+    'sakura-plymouth'
+
     # Base system
     'base'
     'linux'

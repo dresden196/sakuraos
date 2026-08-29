@@ -1,0 +1,27 @@
+[Plymouth Theme]
+Name=SakuraOS
+Description=A blossom, and nothing else, while the machine starts
+ModuleName=two-step
+
+[two-step]
+ImageDir=/usr/share/plymouth/themes/sakura
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.75
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.75
+HorizontalAlignment=.5
+VerticalAlignment=.5
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x1a1016
+BackgroundEndColor=0x1a1016
+
+# The blossom holds still, then turns once per revolution. A progress bar
+# implies knowledge of how long the boot will take, which nobody has.
+[boot-up]
+UseEndAnimation=false
+UseFirmwareBackground=false
+
+[shutdown]
+UseEndAnimation=false
+UseFirmwareBackground=false

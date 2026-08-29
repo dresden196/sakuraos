@@ -398,14 +398,27 @@ PRESET
 # from it. keyboard and keymap are already ahead of it, which matters more
 # than it looks -- the passphrase prompt is the first thing typed on this
 # machine, and on the layout the user chose rather than us.
+#
+# plymouth sits after kms and before encrypt, and both placements are
+# load-bearing. After kms, because it cannot draw before the display is up.
+# Before encrypt, because on an encrypted disk plymouth is what asks for the
+# passphrase -- put it after and the user gets a bare text prompt on top of a
+# splash that has already started, which looks like a failure.
 if [[ "$ENCRYPT" == "on" ]]; then
-    HOOKS_LINE="HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block encrypt btrfs filesystems fsck)"
+    HOOKS_LINE="HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont plymouth block encrypt btrfs filesystems fsck)"
 else
-    HOOKS_LINE="HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block btrfs filesystems fsck)"
+    HOOKS_LINE="HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont plymouth block btrfs filesystems fsck)"
 fi
 sed -i "s/^HOOKS=.*/$HOOKS_LINE/" \
     /mnt/etc/mkinitcpio.conf
 sed -i 's/^MODULES=.*/MODULES=(btrfs)/' /mnt/etc/mkinitcpio.conf
+
+# plymouth-set-default-theme writes the theme and would rebuild the initramfs
+# on its own; -R is deliberately not passed because mkinitcpio runs once at the
+# end of this script and rebuilding twice doubles the slowest step of an
+# install for no benefit.
+arch-chroot /mnt plymouth-set-default-theme sakura >/dev/null 2>&1 \
+    || warn "the boot splash theme could not be set; boot will show messages instead"
 
 # Make the target reference our repository exactly once, before [core].
 #

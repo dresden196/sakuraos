@@ -1,0 +1,15 @@
+[Icon Theme]
+Name=Sakura Dark
+Comment=Breeze, with SakuraOS's own application icons
+# Inherits rather than replaces. Drawing a complete icon set is thousands of
+# icons and years; claiming one by copying Breeze under a new name would be
+# both a lie and a maintenance burden. This overrides only the icons that are
+# ours to draw, and defers everything else to a set that is actually complete
+# and actually maintained.
+Inherits=breeze-dark,hicolor
+Directories=apps/48
+
+[apps/48]
+Size=48
+Context=Applications
+Type=Fixed
