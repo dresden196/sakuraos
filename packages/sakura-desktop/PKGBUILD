@@ -26,6 +26,11 @@ depends=(
     # nothing, because nothing was there to draw it.
     'sakura-plymouth'
 
+    # Known-campaign scanning for the AUR. Present even on a machine with the
+    # AUR switched off: the lists are about packages already on disk, and a
+    # machine that had the AUR on last month is exactly the one worth checking.
+    'sakura-aur-campaign-check'
+
     # Base system
     'base'
     'linux'

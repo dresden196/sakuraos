@@ -1,0 +1,67 @@
+# Maintainer: SakuraOS <dev@sakuraos.invalid>
+#
+# Known-campaign scanning for the AUR.
+#
+# This is not a malware scanner and is not named like one. It answers exactly
+# one question -- "am I holding something from a published attack campaign" --
+# by comparing what is installed against lists of packages that are already
+# known to have been compromised. Retrospective by construction: it cannot say
+# anything about a package nobody has reported yet, which is why the review
+# step in the store exists and is not replaced by this.
+#
+# Upstream is lenucksi/aur-malware-check (GPL-3.0, verified against the GitHub
+# API rather than taken from its README). Pinned by commit: for a tool whose
+# whole job is integrity, a moving branch is not a dependency, it is a hole.
+# The v3.0.0 tag was 66 commits behind master at the time of pinning, so the
+# pin is a commit rather than that tag.
+pkgname=sakura-aur-campaign-check
+pkgver=0.1.0
+pkgrel=1
+_commit=9023c17717024d87880a2433550340bbba1a12df
+pkgdesc="Checks installed AUR packages against published attack campaigns"
+arch=('any')
+url="https://github.com/lenucksi/aur-malware-check"
+license=('GPL-3.0-or-later')
+# python 3.14 for upstream; pacman for the package query it makes.
+depends=('python' 'pacman')
+makedepends=('git')
+source=("git+https://github.com/lenucksi/aur-malware-check.git#commit=$_commit"
+        'sakura-aur-campaign-check'
+        'sakura-aur-campaign-check.service'
+        'sakura-aur-campaign-check.timer'
+        '90-sakura-aur-campaign-check.hook')
+# The commit hash is the integrity check for a git source; there is nothing
+# for a checksum to add that the hash does not already guarantee.
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+package() {
+    cd "$srcdir/aur-malware-check"
+
+    # The scanner itself, kept whole and unmodified so it can be diffed
+    # against upstream at the pinned commit without unpicking our packaging.
+    install -d "$pkgdir/usr/lib/sakura/aur-campaign-check"
+    cp -r aur_check "$pkgdir/usr/lib/sakura/aur-campaign-check/"
+    # Tests ship with the source upstream; they are not wanted on a desktop.
+    rm -rf "$pkgdir/usr/lib/sakura/aur-campaign-check/aur_check/tests"
+    find "$pkgdir/usr/lib/sakura/aur-campaign-check" -name '__pycache__' \
+        -type d -exec rm -rf {} + 2>/dev/null || true
+
+    # The campaign data as shipped. Read-only: --refresh writes to a copy
+    # under /var/lib, so an update can never be blocked by a file the scanner
+    # rewrote inside /usr.
+    install -d "$pkgdir/usr/share/sakura/aur-campaign-check"
+    cp -r data "$pkgdir/usr/share/sakura/aur-campaign-check/"
+
+    install -Dm755 "$srcdir/sakura-aur-campaign-check" \
+        "$pkgdir/usr/bin/sakura-aur-campaign-check"
+    install -Dm644 "$srcdir/sakura-aur-campaign-check.service" \
+        "$pkgdir/usr/lib/systemd/system/sakura-aur-campaign-check.service"
+    install -Dm644 "$srcdir/sakura-aur-campaign-check.timer" \
+        "$pkgdir/usr/lib/systemd/system/sakura-aur-campaign-check.timer"
+    install -Dm644 "$srcdir/90-sakura-aur-campaign-check.hook" \
+        "$pkgdir/usr/share/libalpm/hooks/90-sakura-aur-campaign-check.hook"
+
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md \
+        "$pkgdir/usr/share/doc/$pkgname/upstream-README.md"
+}

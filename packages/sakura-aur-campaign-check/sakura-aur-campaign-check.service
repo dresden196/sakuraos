@@ -1,0 +1,22 @@
+[Unit]
+Description=Check installed AUR packages against published attack campaigns
+Documentation=https://github.com/lenucksi/aur-malware-check
+# The weekly run refreshes the package list before scanning, which is the
+# point of it: it catches packages disclosed after they were installed.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/sakura-aur-campaign-check
+# Root, for two reasons and no others: the eBPF check reads /sys/fs/bpf, and
+# the cache checks have to look in the desktop user's home rather than root's.
+# Everything it does is reading.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/sakura/aur-campaign-check
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+Nice=10
+IOSchedulingClass=idle

@@ -956,6 +956,64 @@ def aur_accepted() -> dict:
         return {}
 
 
+def aur_meta(name: str) -> dict:
+    """What the AUR itself says about a package, and what that is worth.
+
+    Free metadata with real signal. Package takeover is the dominant AUR
+    attack, and its fingerprint is visible here before the build script is
+    read at all: a package adopted last week, or orphaned, or two votes on
+    something claiming to be a popular tool.
+    """
+    data = fetch(f"{AUR_RPC}/info?arg[]={urllib.parse.quote(name)}", {}, tag="AUR")
+    results = (data or {}).get("results") or []
+    if not results:
+        return {}
+    r = results[0]
+    now = time.time()
+
+    def days_since(ts) -> int | None:
+        return int((now - ts) // 86400) if ts else None
+
+    meta = {
+        "maintainer": r.get("Maintainer") or "",
+        "orphaned": not r.get("Maintainer"),
+        "votes": r.get("NumVotes") or 0,
+        "popularity": round(float(r.get("Popularity") or 0), 2),
+        "out_of_date": bool(r.get("OutOfDate")),
+        "out_of_date_days": days_since(r.get("OutOfDate")),
+        "age_days": days_since(r.get("FirstSubmitted")),
+        "modified_days": days_since(r.get("LastModified")),
+        "version": r.get("Version") or "",
+        "url": r.get("URL") or "",
+    }
+
+    # Said in sentences, because "NumVotes: 2" means nothing to somebody who
+    # has never used the AUR, and "two people have voted for this" does. The
+    # levels are for ordering and colour, not for a verdict: none of these is
+    # proof of anything, and a package can be perfectly fine with all of them.
+    flags = []
+    if meta["orphaned"]:
+        flags.append({"level": "warn",
+                      "text": "Nobody maintains this package. Anybody can adopt it."})
+    if meta["out_of_date"]:
+        d = meta["out_of_date_days"]
+        flags.append({"level": "warn",
+                      "text": "Flagged out of date"
+                              + (f" {d} days ago." if d is not None else ".")})
+    if meta["age_days"] is not None and meta["age_days"] < 30:
+        flags.append({"level": "warn",
+                      "text": f"First published {meta['age_days']} days ago."})
+    if meta["modified_days"] is not None and meta["modified_days"] < 7:
+        flags.append({"level": "note",
+                      "text": f"The build script changed {meta['modified_days']} "
+                              "days ago. Read the diff below."})
+    if meta["votes"] < 10:
+        flags.append({"level": "note",
+                      "text": f"{meta['votes']} people have voted for this."})
+    meta["flags"] = flags
+    return meta
+
+
 def aur_review(name: str) -> dict:
     """The PKGBUILD, and what changed since this user last accepted one."""
     text = fetch_text(f"{AUR_BASE}/cgit/aur.git/plain/PKGBUILD?h={name}",
@@ -978,6 +1036,7 @@ def aur_review(name: str) -> dict:
         "name": name,
         "pkgbuild": text,
         "sha256": digest,
+        "meta": aur_meta(name),
         "seen_before": bool(prev),
         "unchanged": prev.get("sha256") == digest,
         "previously_accepted": prev.get("accepted", ""),
