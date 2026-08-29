@@ -31,9 +31,11 @@ depends=(
     # machine that had the AUR on last month is exactly the one worth checking.
     'sakura-aur-campaign-check'
 
-    # Base system
+    # Base system. No kernel named here on purpose: which one a machine can
+    # run depends on the machine, so the installer decides between the tuned
+    # x86-64-v3 kernel and the stock one and installs that. Arch's own base
+    # names no kernel either, for the same reason.
     'base'
-    'linux'
     'linux-firmware'
     'sudo'
     # systemd fsck's the ESP on every boot because genfstab gives it passno 2.

@@ -260,6 +260,51 @@ detect_graphics() {
     fi
 }
 
+# Which x86-64 feature level this machine has, and therefore which kernel it
+# can run at all. The tuned kernel is built for x86-64-v3 -- AVX2 and its
+# neighbours, roughly Haswell (2013) and Excavator (2015) onward. Older
+# hardware gets the stock kernel and gets it quietly: a machine that cannot
+# run the fast kernel is not a machine with a problem.
+#
+# glibc's loader is asked rather than /proc/cpuinfo parsed. It is the same
+# check the dynamic linker uses to pick hwcaps libraries, so this agrees with
+# the rest of the system by construction instead of by our reading of a flag
+# list. Flags are the fallback for a loader that is not where it should be.
+cpu_supports_v3() {
+    local ld
+    for ld in /lib/ld-linux-x86-64.so.2 /usr/lib/ld-linux-x86-64.so.2; do
+        [[ -x "$ld" ]] || continue
+        if "$ld" --help 2>/dev/null | grep -q "x86-64-v3 (supported"; then
+            return 0
+        fi
+        # It answered and did not list v3, which is an answer.
+        if "$ld" --help 2>/dev/null | grep -q "x86-64-v2"; then
+            return 1
+        fi
+    done
+    local f
+    for f in avx avx2 bmi1 bmi2 f16c fma movbe; do
+        grep -qw "$f" /proc/cpuinfo || return 1
+    done
+    return 0
+}
+
+# The kernel is decided here rather than named in sakura-desktop, because it
+# depends on the machine in front of us. The meta package deliberately names
+# no kernel at all, the way Arch's own base does not.
+KERNEL="linux"
+if cpu_supports_v3; then
+    if pacman -Si linux-cachyos >/dev/null 2>&1; then
+        KERNEL="linux-cachyos"
+        info "CPU supports x86-64-v3: installing the tuned kernel"
+    else
+        info "CPU supports x86-64-v3, but no tuned kernel is in the repository"
+        info "using the stock kernel"
+    fi
+else
+    info "CPU is older than x86-64-v3: using the stock kernel"
+fi
+
 GRAPHICS="${GRAPHICS:-auto}"
 [[ "$GRAPHICS" == "auto" ]] && GRAPHICS=$(detect_graphics)
 
@@ -272,7 +317,7 @@ case "$GRAPHICS" in
     nvidia-580xx)
         # DKMS builds against the running kernel, so the target needs headers
         # and a compiler for this to survive the next kernel update.
-        GRAPHICS_PACKAGES="nvidia-580xx-dkms nvidia-580xx-utils linux-headers base-devel"
+        GRAPHICS_PACKAGES="nvidia-580xx-dkms nvidia-580xx-utils ${KERNEL}-headers base-devel"
         info "NVIDIA card older than Turing: installing the frozen 580xx branch"
         info "NVIDIA no longer supports this GPU; SakuraOS maintains this driver"
         ;;
@@ -289,7 +334,7 @@ esac
 
 step "Installing packages"
 # shellcheck disable=SC2086  # deliberate word splitting of the extras list
-pacstrap -K /mnt sakura-desktop $GRAPHICS_PACKAGES $EXTRA_PACKAGES
+pacstrap -K /mnt "$KERNEL" sakura-desktop $GRAPHICS_PACKAGES $EXTRA_PACKAGES
 
 step "Generating fstab"
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -370,10 +415,10 @@ echo "$CRYPT_ARG $ROOT_ARG rootflags=subvol=@ rw quiet splash" \
 echo "sakura.recovery $CRYPT_ARG $RECOVERY_ROOT rw" \
     | tr -s ' ' > /mnt/etc/kernel/recovery-cmdline
 
-cat > /mnt/etc/mkinitcpio.d/linux.preset <<PRESET
+cat > "/mnt/etc/mkinitcpio.d/${KERNEL}.preset" <<PRESET
 # Two images from one kernel: the system, and the recovery environment that
 # can put the system back. Both are UKIs so both can be Secure Boot signed.
-ALL_kver="/boot/vmlinuz-linux"
+ALL_kver="/boot/vmlinuz-${KERNEL}"
 
 PRESETS=('default' 'recovery')
 
