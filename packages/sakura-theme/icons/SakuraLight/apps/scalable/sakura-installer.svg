@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="disc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffadbf"/>
+      <stop offset="100%" stop-color="#c9557a"/>
+    </linearGradient>
+  </defs>
+  <!-- Onto a disk, downward. The distinction from the store is the target:
+       the store puts an application somewhere, this puts a system somewhere. -->
+  <path d="M24 6v18" fill="none" stroke="#e26a8a" stroke-width="4" stroke-linecap="round"/>
+  <path d="M16 18l8 8 8-8" fill="none" stroke="#e26a8a" stroke-width="4"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="7" y="31" width="34" height="11" rx="3.5" fill="url(#disc)"/>
+  <circle cx="34" cy="36.5" r="2.2" fill="#fff2f6"/>
+  <rect x="12" y="35" width="12" height="3" rx="1.5" fill="#fff2f6" fill-opacity="0.75"/>
+</svg>
