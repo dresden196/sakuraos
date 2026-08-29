@@ -13,7 +13,22 @@ panel.opacity = "translucent";
 
 panel.addWidget("org.kde.plasma.kickoff");
 panel.addWidget("org.kde.plasma.pager");
-panel.addWidget("org.kde.plasma.icontasks");
+var tasks = panel.addWidget("org.kde.plasma.icontasks");
+
+// Pin what we actually ship. Left unset, icontasks falls back to Plasma's
+// built-in defaults, which pin Discover -- a store we do not install, so the
+// launcher pointed at a .desktop file that does not exist and showed up as a
+// broken icon on a fresh desktop.
+//
+// Deliberately short. Every pin is a claim that a new user needs this in the
+// first minute, and a panel that arrives full is one the user has to tidy
+// before it is theirs.
+tasks.currentConfigGroup = ["General"];
+tasks.writeConfig("launchers", [
+    "applications:org.kde.dolphin.desktop",
+    "applications:org.sakuraos.store.desktop",
+    "applications:org.kde.konsole.desktop",
+].join(","));
 panel.addWidget("org.kde.plasma.marginsseparator");
 panel.addWidget("org.kde.plasma.systemtray");
 panel.addWidget("org.kde.plasma.digitalclock");
