@@ -4,6 +4,6 @@ Name=Install SakuraOS
 GenericName=System Installer
 Comment=Install SakuraOS on this computer
 Exec=sakura-installer
-Icon=system-software-install
+Icon=sakura-installer
 Terminal=false
 Categories=System;
