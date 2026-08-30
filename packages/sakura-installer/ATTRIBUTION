@@ -20,4 +20,8 @@ so it always matches the machine it is shown on.
 The Linux mascot carries the customary request that Larry Ewing be credited
 as its author; that is the reason his name is written here rather than only
 in a commit message.
-  assets/credit-flatpak.png   Flatpak, from the flatpak/flatpak repository
+  assets/credit-btrfs.svg     Ours. Btrfs's own logo is available only under a
+                              non-free "fair use" tag, which is a doctrine for
+                              quoting inside an article and not a licence to
+                              ship a mark inside an operating system, so this
+                              is a drawing of three subvolumes instead.

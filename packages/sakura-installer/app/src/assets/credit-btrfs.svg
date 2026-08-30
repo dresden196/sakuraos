@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 64" width="140" height="64">
+  <!-- Drawn here rather than taken from elsewhere. The Btrfs logo is
+       available only as a non-free "fair use" file, which is a doctrine for
+       quoting inside an encyclopedia article and not a licence to ship a mark
+       inside an operating system. Three subvolumes, the newest in front:
+       what the filesystem is actually doing for this system. -->
+  <g fill="none" stroke="#e87f9e" stroke-width="3" stroke-linejoin="round">
+    <rect x="22" y="10" width="70" height="30" rx="6" opacity="0.35"/>
+    <rect x="30" y="17" width="70" height="30" rx="6" opacity="0.6"/>
+    <rect x="38" y="24" width="70" height="30" rx="6"/>
+  </g>
+  <circle cx="52" cy="39" r="3.2" fill="#e87f9e"/>
+  <circle cx="64" cy="39" r="3.2" fill="#e87f9e"/>
+  <circle cx="76" cy="39" r="3.2" fill="#e87f9e"/>
+</svg>
