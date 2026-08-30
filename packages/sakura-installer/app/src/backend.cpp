@@ -365,6 +365,203 @@ QVariantList Backend::keyboardLayouts() const
     return out;
 }
 
+// ---- network ------------------------------------------------------------
+//
+// nmcli's terse output is the interface here: -t gives colon-separated
+// fields with no header and no column padding, which is the only form of
+// its output that is safe to parse. Anything human-readable from nmcli
+// changes with the terminal width.
+
+QVariantMap Backend::networkState() const
+{
+    QVariantMap out;
+    out.insert(QStringLiteral("connected"), false);
+
+    const QString devices = runCapture(QStringLiteral("nmcli"),
+        {QStringLiteral("-t"), QStringLiteral("-f"),
+         QStringLiteral("DEVICE,TYPE,STATE,CONNECTION"), QStringLiteral("device")});
+
+    for (const QString &line : devices.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        const QStringList f = line.split(QLatin1Char(':'));
+        if (f.size() < 4 || f[1] == QLatin1String("loopback")) {
+            continue;
+        }
+        if (f[2] != QLatin1String("connected")) {
+            continue;
+        }
+        out.insert(QStringLiteral("connected"), true);
+        out.insert(QStringLiteral("device"), f[0]);
+        out.insert(QStringLiteral("type"), f[1]);
+        out.insert(QStringLiteral("name"), f[3]);
+
+        // The address is what tells somebody it actually worked. A device can
+        // read "connected" with no lease and nothing reachable behind it.
+        const QString addrs = runCapture(QStringLiteral("nmcli"),
+            {QStringLiteral("-t"), QStringLiteral("-f"), QStringLiteral("IP4.ADDRESS"),
+             QStringLiteral("device"), QStringLiteral("show"), f[0]});
+        const QStringList a = addrs.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        if (!a.isEmpty()) {
+            out.insert(QStringLiteral("address"),
+                       a.first().section(QLatin1Char(':'), 1).trimmed());
+        }
+        break;
+    }
+    return out;
+}
+
+bool Backend::hasWifiHardware() const
+{
+    const QString out = runCapture(QStringLiteral("nmcli"),
+        {QStringLiteral("-t"), QStringLiteral("-f"), QStringLiteral("TYPE"),
+         QStringLiteral("device")});
+    for (const QString &line : out.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        if (line.trimmed() == QLatin1String("wifi")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Backend::rescanWifi()
+{
+    QProcess::execute(QStringLiteral("nmcli"),
+        {QStringLiteral("device"), QStringLiteral("wifi"), QStringLiteral("rescan")});
+}
+
+QVariantList Backend::wifiNetworks() const
+{
+    QVariantList out;
+    const QString listing = runCapture(QStringLiteral("nmcli"),
+        {QStringLiteral("-t"), QStringLiteral("-f"),
+         QStringLiteral("IN-USE,SSID,SIGNAL,SECURITY"),
+         QStringLiteral("device"), QStringLiteral("wifi"), QStringLiteral("list")});
+
+    QSet<QString> seen;
+    for (const QString &line : listing.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
+        // An SSID may contain a colon, which nmcli escapes as "\:". Splitting
+        // naively would cut a network's name in half and mangle the fields
+        // after it, so the escape is honoured.
+        QStringList f;
+        QString cur;
+        for (int i = 0; i < line.size(); ++i) {
+            if (line[i] == QLatin1Char('\\') && i + 1 < line.size()) {
+                cur.append(line[++i]);
+            } else if (line[i] == QLatin1Char(':')) {
+                f.append(cur);
+                cur.clear();
+            } else {
+                cur.append(line[i]);
+            }
+        }
+        f.append(cur);
+        if (f.size() < 4 || f[1].isEmpty()) {
+            continue;
+        }
+        // Strongest entry wins: the same network seen through two access
+        // points is one network to the person choosing it.
+        if (seen.contains(f[1])) {
+            continue;
+        }
+        seen.insert(f[1]);
+
+        QVariantMap n;
+        n.insert(QStringLiteral("active"), f[0].trimmed() == QLatin1String("*"));
+        n.insert(QStringLiteral("ssid"), f[1]);
+        n.insert(QStringLiteral("signal"), f[2].toInt());
+        n.insert(QStringLiteral("secure"), !f[3].trimmed().isEmpty());
+        out.append(n);
+    }
+
+    std::sort(out.begin(), out.end(), [](const QVariant &a, const QVariant &b) {
+        return a.toMap().value(QStringLiteral("signal")).toInt()
+             > b.toMap().value(QStringLiteral("signal")).toInt();
+    });
+    return out;
+}
+
+QString Backend::connectWifi(const QString &ssid, const QString &password)
+{
+    QStringList args{QStringLiteral("device"), QStringLiteral("wifi"),
+                     QStringLiteral("connect"), ssid};
+    if (!password.isEmpty()) {
+        args << QStringLiteral("password") << password;
+    }
+    QProcess p;
+    p.setProcessChannelMode(QProcess::MergedChannels);
+    p.start(QStringLiteral("nmcli"), args);
+    // Associating, authenticating and getting a lease is not a two second
+    // job on a slow access point.
+    p.waitForFinished(45000);
+    if (p.exitCode() == 0) {
+        return QString();
+    }
+    const QString err = QString::fromUtf8(p.readAll()).trimmed();
+    // nmcli's own sentence, not a guess at what went wrong: it distinguishes
+    // a wrong passphrase from a network that is not there, and the person
+    // needs to know which.
+    return err.isEmpty() ? tr("Could not connect to %1.").arg(ssid)
+                         : err.section(QLatin1Char('\n'), -1);
+}
+
+QString Backend::applyStaticAddress(const QString &device, const QString &address,
+                                    const QString &gateway, const QString &dns)
+{
+    // The connection currently on the device, not a new profile: adding one
+    // leaves two claiming the same interface and whichever comes up second
+    // silently loses.
+    const QString name = runCapture(QStringLiteral("nmcli"),
+        {QStringLiteral("-t"), QStringLiteral("-f"), QStringLiteral("GENERAL.CONNECTION"),
+         QStringLiteral("device"), QStringLiteral("show"), device})
+        .section(QLatin1Char(':'), 1).trimmed();
+    if (name.isEmpty() || name == QLatin1String("--")) {
+        return tr("That connection is not set up yet. Connect first, then set an address.");
+    }
+
+    QStringList args{QStringLiteral("connection"), QStringLiteral("modify"), name,
+                     QStringLiteral("ipv4.method"), QStringLiteral("manual"),
+                     QStringLiteral("ipv4.addresses"), address};
+    if (!gateway.isEmpty()) {
+        args << QStringLiteral("ipv4.gateway") << gateway;
+    }
+    if (!dns.isEmpty()) {
+        args << QStringLiteral("ipv4.dns") << dns;
+    }
+
+    QProcess p;
+    p.setProcessChannelMode(QProcess::MergedChannels);
+    p.start(QStringLiteral("nmcli"), args);
+    p.waitForFinished(15000);
+    if (p.exitCode() != 0) {
+        const QString err = QString::fromUtf8(p.readAll()).trimmed();
+        return err.isEmpty() ? tr("That address was not accepted.")
+                             : err.section(QLatin1Char('\n'), -1);
+    }
+
+    QProcess::execute(QStringLiteral("nmcli"),
+        {QStringLiteral("connection"), QStringLiteral("up"), name});
+    return QString();
+}
+
+QString Backend::useAutomaticAddress(const QString &device)
+{
+    const QString name = runCapture(QStringLiteral("nmcli"),
+        {QStringLiteral("-t"), QStringLiteral("-f"), QStringLiteral("GENERAL.CONNECTION"),
+         QStringLiteral("device"), QStringLiteral("show"), device})
+        .section(QLatin1Char(':'), 1).trimmed();
+    if (name.isEmpty() || name == QLatin1String("--")) {
+        return tr("That connection is not set up yet.");
+    }
+    QProcess::execute(QStringLiteral("nmcli"),
+        {QStringLiteral("connection"), QStringLiteral("modify"), name,
+         QStringLiteral("ipv4.method"), QStringLiteral("auto"),
+         QStringLiteral("ipv4.addresses"), QString(),
+         QStringLiteral("ipv4.gateway"), QString(),
+         QStringLiteral("ipv4.dns"), QString()});
+    QProcess::execute(QStringLiteral("nmcli"),
+        {QStringLiteral("connection"), QStringLiteral("up"), name});
+    return QString();
+}
+
 QStringList Backend::avatars() const
 {
     QStringList out;

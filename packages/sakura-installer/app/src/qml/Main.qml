@@ -102,6 +102,7 @@ QQC2.ApplicationWindow {
     readonly property var steps: [
         { title: "Language",   blurb: "What this machine speaks" },
         { title: "Keyboard",   blurb: "How your keys are laid out" },
+        { title: "Network",    blurb: "Getting this machine online" },
         { title: "Time",       blurb: "Where you are, and how you read a clock" },
         { title: "Appearance", blurb: "Light or dark" },
         { title: "Disk",       blurb: "Where SakuraOS goes" },
@@ -918,16 +919,22 @@ QQC2.ApplicationWindow {
                         // read once it is in a language you know.
                         case 0: return languagePage
                         case 1: return keyboardPage
-                        case 2: return timePage
-                        case 3: return themePage
-                        case 4: return diskPage
-                        case 5: return encryptPage
-                        case 6: return accountPage
-                        case 7: return browserPage
-                        case 8: return updatesPage
-                        case 9: return featuresPage
-                        case 10: return privacyPage
-                        case 11: return summaryPage
+                        // Network before anything that needs it. Most of an
+                        // install is fetched from Arch's mirrors, so a machine
+                        // that is not online cannot finish one -- and a laptop
+                        // with only wifi could not get online at all until
+                        // this step existed.
+                        case 2: return networkPage
+                        case 3: return timePage
+                        case 4: return themePage
+                        case 5: return diskPage
+                        case 6: return encryptPage
+                        case 7: return accountPage
+                        case 8: return browserPage
+                        case 9: return updatesPage
+                        case 10: return featuresPage
+                        case 11: return privacyPage
+                        case 12: return summaryPage
                         default: return installPage
                         }
                     }
@@ -952,7 +959,7 @@ QQC2.ApplicationWindow {
                     // bound was left behind when language was added, so Back
                     // vanished on the final screen -- the one place somebody
                     // is most likely to want to check an earlier answer.
-                    visible: root.step > 0 && root.step < 12
+                    visible: root.step > 0 && root.step < 13
                     padding: 11
                     leftPadding: 20
                     rightPadding: 20
@@ -976,8 +983,8 @@ QQC2.ApplicationWindow {
                 QQC2.Button {
                     // Ten screens now that language leads: 0..9, with the
                     // install itself at 10.
-                    text: root.step === 11 ? "Install SakuraOS" : "Continue"
-                    visible: root.step < 12
+                    text: root.step === 12 ? "Install SakuraOS" : "Continue"
+                    visible: root.step < 13
                     enabled: root.canContinue()
                     padding: 11
                     leftPadding: 26
@@ -1423,6 +1430,253 @@ QQC2.ApplicationWindow {
                     placeholderText: "Type a few keys to check they come out right…"
                 }
             }
+            Item { Layout.fillHeight: true }
+        }
+    }
+
+    Component {
+        id: networkPage
+        ColumnLayout {
+            id: netCol
+            spacing: 16
+
+            property var state: ({})
+            property var networks: []
+            property string busy: ""
+            property string error: ""
+            property bool manual: false
+            property string joining: ""
+
+            function refresh() {
+                state = backend.networkState()
+                if (backend.hasWifiHardware()) {
+                    networks = backend.wifiNetworks()
+                }
+            }
+
+            Component.onCompleted: refresh()
+
+            // Something has to keep this honest while the page is open: a
+            // cable pulled out, or a lease arriving a few seconds after the
+            // page was drawn, should show without anybody pressing anything.
+            Timer {
+                interval: 4000; running: true; repeat: true
+                onTriggered: if (netCol.busy === "") netCol.refresh()
+            }
+
+            Item { Layout.preferredHeight: 34 }
+            Heading {
+                title: "Network"
+                subtitle: "SakuraOS downloads most of itself while it installs, so this machine needs to be online before the next step."
+            }
+
+            // ---- where things stand ---------------------------------------
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 64
+                radius: 12
+                color: root.card
+                border.width: 1
+                border.color: netCol.state.connected ? root.accent : root.line
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    spacing: 12
+                    Rectangle {
+                        width: 10; height: 10; radius: 5
+                        color: netCol.state.connected ? "#8fd694" : root.warn
+                    }
+                    ColumnLayout {
+                        spacing: 1
+                        QQC2.Label {
+                            text: netCol.state.connected
+                                  ? (netCol.state.type === "wifi"
+                                     ? "Connected to " + (netCol.state.name || "wifi")
+                                     : "Connected by cable")
+                                  : "Not connected"
+                            color: root.text; font.pixelSize: 14; font.weight: Font.DemiBold
+                        }
+                        QQC2.Label {
+                            text: netCol.state.connected
+                                  ? (netCol.state.address || "waiting for an address")
+                                    + "  ·  " + (netCol.state.device || "")
+                                  : "Choose a network below, or plug in a cable."
+                            color: root.dim; font.pixelSize: 12
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                    QQC2.Button {
+                        text: "Refresh"
+                        visible: backend.hasWifiHardware()
+                        onClicked: { backend.rescanWifi(); netCol.refresh() }
+                    }
+                }
+            }
+
+            // ---- wifi ------------------------------------------------------
+            QQC2.Label {
+                text: "Wireless networks"
+                color: root.dim; font.pixelSize: 13
+                visible: backend.hasWifiHardware()
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                visible: !backend.hasWifiHardware()
+                text: "This machine has no wireless hardware, so it needs a cable."
+                color: root.dim; font.pixelSize: 12
+            }
+
+            QQC2.ScrollView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(200, netCol.networks.length * 46 + 4)
+                visible: backend.hasWifiHardware() && netCol.networks.length > 0
+                clip: true
+                contentWidth: availableWidth
+
+                ColumnLayout {
+                    width: parent.parent.availableWidth
+                    spacing: 2
+                    Repeater {
+                        model: netCol.networks
+                        delegate: Rectangle {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: 44
+                            radius: 8
+                            color: netCol.joining === modelData.ssid ? root.cardUp
+                                 : modelData.active ? Qt.rgba(1,1,1,0.05) : "transparent"
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 12
+                                spacing: 10
+                                QQC2.Label {
+                                    text: modelData.active ? "\u2713" : (modelData.secure ? "\u1F512" : "")
+                                    color: modelData.active ? root.accent : root.dim
+                                    font.pixelSize: 13
+                                }
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.ssid
+                                    elide: Text.ElideRight
+                                    color: root.text; font.pixelSize: 13
+                                }
+                                QQC2.Label {
+                                    // Bars rather than a percentage: nobody
+                                    // acts differently on 62 than on 58.
+                                    text: modelData.signal >= 70 ? "\u2022\u2022\u2022"
+                                        : modelData.signal >= 40 ? "\u2022\u2022"
+                                        : "\u2022"
+                                    color: root.dim; font.pixelSize: 13
+                                }
+                            }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                            TapHandler {
+                                onTapped: {
+                                    netCol.error = ""
+                                    netCol.joining = netCol.joining === modelData.ssid
+                                                     ? "" : modelData.ssid
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ---- joining one ----------------------------------------------
+            RowLayout {
+                Layout.fillWidth: true
+                visible: netCol.joining !== ""
+                spacing: 10
+                Field {
+                    id: wifiPass
+                    Layout.fillWidth: true
+                    placeholderText: "Password for " + netCol.joining
+                    echoMode: TextInput.Password
+                    onAccepted: joinButton.clicked()
+                }
+                QQC2.Button {
+                    id: joinButton
+                    text: netCol.busy !== "" ? "Connecting…" : "Connect"
+                    enabled: netCol.busy === ""
+                    onClicked: {
+                        netCol.busy = netCol.joining
+                        netCol.error = ""
+                        var err = backend.connectWifi(netCol.joining, wifiPass.text)
+                        netCol.busy = ""
+                        netCol.error = err
+                        if (err === "") {
+                            netCol.joining = ""
+                            wifiPass.text = ""
+                        }
+                        netCol.refresh()
+                    }
+                }
+            }
+
+            QQC2.Label {
+                Layout.fillWidth: true
+                visible: netCol.error !== ""
+                wrapMode: Text.WordWrap
+                text: netCol.error
+                color: "#ff9db0"; font.pixelSize: 12
+            }
+
+            // ---- addresses by hand -----------------------------------------
+            QQC2.Button {
+                text: netCol.manual ? "Use an automatic address"
+                                    : "Set the address myself"
+                flat: true
+                onClicked: {
+                    netCol.manual = !netCol.manual
+                    if (!netCol.manual && netCol.state.device) {
+                        netCol.error = backend.useAutomaticAddress(netCol.state.device)
+                        netCol.refresh()
+                    }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: netCol.manual
+                spacing: 8
+                QQC2.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: "For a network with no DHCP. The address needs its prefix "
+                        + "length, as in 192.168.1.50/24."
+                    color: root.dim; font.pixelSize: 12
+                }
+                Field { id: ipAddr; Layout.fillWidth: true; placeholderText: "Address, e.g. 192.168.1.50/24" }
+                Field { id: ipGw;   Layout.fillWidth: true; placeholderText: "Gateway, e.g. 192.168.1.1" }
+                Field { id: ipDns;  Layout.fillWidth: true; placeholderText: "DNS, e.g. 1.1.1.1 (optional)" }
+                QQC2.Button {
+                    text: "Apply"
+                    enabled: ipAddr.text.trim() !== "" && !!netCol.state.device
+                    onClicked: {
+                        netCol.error = backend.applyStaticAddress(
+                            netCol.state.device, ipAddr.text.trim(),
+                            ipGw.text.trim(), ipDns.text.trim())
+                        netCol.refresh()
+                    }
+                }
+            }
+
+            // Said plainly rather than by disabling Continue with no reason
+            // given. Somebody installing onto a machine that will be online
+            // later is allowed to carry on and find out; somebody who simply
+            // has not noticed needs telling.
+            QQC2.Label {
+                Layout.fillWidth: true
+                visible: !netCol.state.connected
+                wrapMode: Text.WordWrap
+                text: "You can continue without a connection, but the install will "
+                    + "stop when it tries to fetch packages."
+                color: root.warn; font.pixelSize: 12
+            }
+
             Item { Layout.fillHeight: true }
         }
     }
