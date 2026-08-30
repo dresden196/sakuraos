@@ -87,6 +87,10 @@ QQC2.ApplicationWindow {
         disk: "",
         fullname: "",
         username: "",
+        // The accent, as a hex string. Cherry blossom by default -- it is the
+        // name of the operating system -- but somebody who does not want a
+        // pink desktop should not have to live with one.
+        accent: "#ffb7c5",
         hostname: "sakura",
         password: "",
         avatar: "",
@@ -124,6 +128,18 @@ QQC2.ApplicationWindow {
     // asks whether a disk has been chosen. Whenever a step is added, this
     // switch moves with it -- it is the one place the numbers are not
     // obviously about pages.
+    // One or two letters from whatever has been typed so far. Two words give
+    // two initials, one word gives one; nothing typed gives nothing, and the
+    // caller draws a plain circle rather than a letter that is not there.
+    function initialsFor(name) {
+        var parts = (name || "").trim().split(/\s+/).filter(function (w) {
+            return w.length > 0
+        })
+        if (parts.length === 0) return ""
+        if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
+        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
+    }
+
     function canContinue() {
         switch (step) {
         case 5: return answers.disk !== ""
@@ -345,12 +361,11 @@ QQC2.ApplicationWindow {
                                 + "points and the recovery boot are built on it."
                         },
                         {
-                            icon: "qrc:/assets/credit-flatpak.png",
-                            name: "Flatpak",
-                            body: "How most of the software in the store arrives, and why an "
-                                + "application can be current without the system underneath "
-                                + "it having to change. Flathub is where nearly all of it "
-                                + "comes from."
+                            icon: "qrc:/assets/credit-btrfs.svg",
+                            name: "Btrfs",
+                            body: "The filesystem, and the reason this system can be put back. "
+                                + "Every restore point is one of its snapshots, taken in a "
+                                + "moment and costing almost nothing until something changes."
                         }
                     ]
                     delegate: Rectangle {
@@ -416,7 +431,7 @@ QQC2.ApplicationWindow {
                 // Named because they are load-bearing, not as a list of
                 // dependencies. Each of these is doing something SakuraOS
                 // claims as its own on the previous screen.
-                text: "And, among others: BTRFS and snapper for the restore points, "
+                text: "And, among others: snapper for the restore points, "
                     + "mkinitcpio for the recovery environment, Flatpak, Snap and AppImage "
                     + "for the software, ODRS for the reviews, and cryptsetup for the "
                     + "encryption.\n\n"
@@ -545,12 +560,11 @@ QQC2.ApplicationWindow {
                             // upstream is thanked; a tour card that reads as
                             // an advertisement for somebody else tells the
                             // person nothing about their own computer.
-                            body: "SakuraOS looks at your processor and installs the kernel "
-                                + "that suits it -- one built and tuned for hardware from the "
-                                + "last decade, or the standard one for anything older. Either "
-                                + "way it is scheduled for a desktop rather than a server, so "
-                                + "the machine stays responsive while it is busy. You are not "
-                                + "asked, and there is nothing to undo."
+                            body: "SakuraOS uses a kernel tuned by CachyOS, with our own "
+                                + "tuning on top of it. Don't have a 2013 or newer processor? "
+                                + "That is fine -- SakuraOS notices and falls back to the "
+                                + "standard kernel for older machines. You are not asked, and "
+                                + "there is nothing to undo."
                         },
                         {
                             title: "It can undo itself",
@@ -1950,6 +1964,76 @@ QQC2.ApplicationWindow {
                 color: root.dim
                 font.pixelSize: 13
             }
+
+            QQC2.Label {
+                text: "Accent colour"
+                color: root.dim; font.pixelSize: 13
+                topPadding: 10
+            }
+            QQC2.Label {
+                Layout.fillWidth: true
+                Layout.maximumWidth: 560
+                wrapMode: Text.WordWrap
+                text: "Used for highlights, folders and the shape of the cursor's "
+                    + "attention. It can be changed later in System Settings."
+                color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.85)
+                font.pixelSize: 12
+            }
+
+            Flow {
+                Layout.fillWidth: true
+                spacing: 12
+                Repeater {
+                    // The first is the default and says so. The rest are
+                    // spaced around the wheel rather than being six shades of
+                    // the same idea, and each is mid-toned so a white glyph
+                    // on a folder stays readable -- the same constraint the
+                    // folder icons are recoloured under.
+                    model: [
+                        { hex: "#ffb7c5", name: "Cherry blossom" },
+                        { hex: "#e8799a", name: "Rose" },
+                        { hex: "#c58bd6", name: "Lilac" },
+                        { hex: "#7aa2f7", name: "Cornflower" },
+                        { hex: "#5fbf9f", name: "Jade" },
+                        { hex: "#e0a458", name: "Amber" },
+                        { hex: "#d96f6f", name: "Clay" },
+                        { hex: "#9aa5b1", name: "Slate" }
+                    ]
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        required property int index
+                        spacing: 5
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            width: 46; height: 46; radius: 23
+                            color: modelData.hex
+                            border.width: root.answers.accent === modelData.hex ? 3 : 0
+                            border.color: root.text
+                            QQC2.Label {
+                                anchors.centerIn: parent
+                                visible: root.answers.accent === modelData.hex
+                                text: "\u2713"
+                                color: "#3a2731"
+                                font.pixelSize: 20; font.weight: Font.DemiBold
+                            }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                            TapHandler {
+                                onTapped: {
+                                    root.answers.accent = modelData.hex
+                                    root.answersChanged()
+                                }
+                            }
+                        }
+                        QQC2.Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: index === 0 ? "Default" : modelData.name
+                            color: root.answers.accent === modelData.hex ? root.text : root.dim
+                            font.pixelSize: 11
+                        }
+                    }
+                }
+            }
+
             Item { Layout.fillHeight: true }
         }
     }
@@ -2150,6 +2234,32 @@ QQC2.ApplicationWindow {
             Flow {
                 Layout.fillWidth: true
                 spacing: 10
+
+                // Your initials in the colour you picked, and the one that is
+                // used unless something else is chosen. It costs nothing, it
+                // is never a photograph of somebody who is not you, and it
+                // fills in as the name is typed rather than sitting empty
+                // waiting to be noticed.
+                Rectangle {
+                    width: 54; height: 54; radius: 27
+                    color: root.answers.accent
+                    border.width: root.answers.avatar === "" ? 3 : 1
+                    border.color: root.answers.avatar === "" ? root.text : Qt.rgba(1,1,1,0.1)
+                    QQC2.Label {
+                        anchors.centerIn: parent
+                        text: root.initialsFor(root.answers.fullname)
+                        // Dark ink on every swatch in the picker: they are all
+                        // mid-toned for exactly this reason.
+                        color: "#3a2731"
+                        font.pixelSize: 20
+                        font.weight: Font.DemiBold
+                    }
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    TapHandler {
+                        onTapped: { root.answers.avatar = ""; root.answersChanged() }
+                    }
+                }
+
                 Repeater {
                     // A picture chosen from disk is prepended so it appears in
                     // the ring already selected, rather than being recorded
@@ -2243,8 +2353,12 @@ QQC2.ApplicationWindow {
 
             QQC2.Label { text: "Your name"; color: root.dim; font.pixelSize: 13; topPadding: 8 }
             Field {
+                id: fullNameField
                 Layout.maximumWidth: 420
-                placeholderText: "Dresden"
+                // Not an example name. This said "Dresden", which is the name
+                // of the person who wrote it, shown to everybody else who ever
+                // installs this -- and any name put here is somebody's.
+                placeholderText: "The name you go by"
                 onTextChanged: {
                     root.answers.fullname = text; root.answersChanged()
                     if (root.answers.username === "")
@@ -2255,7 +2369,8 @@ QQC2.ApplicationWindow {
             Field {
                 id: autoUser
                 Layout.maximumWidth: 420
-                placeholderText: "dresden"
+                // Says what the field wants rather than naming a person.
+                placeholderText: "lowercase, no spaces"
                 onTextChanged: { root.answers.username = text; root.answersChanged() }
             }
             QQC2.Label { text: "Password"; color: root.dim; font.pixelSize: 13 }
