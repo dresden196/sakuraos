@@ -32,11 +32,15 @@ run() { "$REPO_ROOT/build/guest-run.sh" "$@"; }
 
 pass=0; fail=0
 check() {
-    local label="$1" cmd="$2"
-    if run "$cmd" >/dev/null 2>&1; then
+    local label="$1" cmd="$2" out
+    # The failing command's own words, kept. Discarding them turned every
+    # failure into a guess -- the repo checks were blamed on a stale mirror,
+    # then a bad signature, then a network race, none of which they were.
+    if out=$(run "$cmd" 2>&1); then
         printf '  ok    %s\n' "$label"; pass=$((pass + 1))
     else
         printf '  FAIL  %s\n' "$label"; fail=$((fail + 1))
+        printf '        %s\n' "$(printf '%s' "$out" | tail -3 | tr '\n' ' ' | cut -c1-200)"
     fi
 }
 
