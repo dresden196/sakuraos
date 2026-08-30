@@ -116,15 +116,23 @@ QQC2.ApplicationWindow {
         { title: "Install",    blurb: "" }
     ]
 
+    // Guards for the steps that have a wrong answer as well as a right one.
+    //
+    // These are indices into steps[], so inserting a step shifts every one of
+    // them. Adding Network in third place and not moving these left Continue
+    // dead on Appearance, because Appearance had become case 4 and case 4
+    // asks whether a disk has been chosen. Whenever a step is added, this
+    // switch moves with it -- it is the one place the numbers are not
+    // obviously about pages.
     function canContinue() {
         switch (step) {
-        case 4: return answers.disk !== ""
+        case 5: return answers.disk !== ""
         // Both fields, matching. A mistyped passphrase on an encrypted disk
         // is discovered at the next boot, when it is far too late.
-        case 5: return !answers.encrypt
+        case 6: return !answers.encrypt
                     || (answers.encryptPassword.length >= 6
                         && answers.encryptPassword === answers.encryptConfirm)
-        case 6: return answers.username.length > 0 && answers.password.length >= 4
+        case 7: return answers.username.length > 0 && answers.password.length >= 4
         default: return true
         }
     }
@@ -278,19 +286,6 @@ QQC2.ApplicationWindow {
                 // 1024-wide screen, which is not an unusual screen. Cards per
                 // row is decided by the width there actually is.
                 columns: Math.max(2, Math.min(4, Math.floor(width / 220)))
-                // Same reason as the tour cards: two boxes of different
-                // heights side by side reads as a layout that went wrong.
-                property real cardHeight: 0
-                function measure() {
-                    var tallest = 0
-                    for (var i = 0; i < children.length; ++i) {
-                        var c = children[i]
-                        if (c.contentHeight !== undefined && c.contentHeight > tallest) {
-                            tallest = c.contentHeight
-                        }
-                    }
-                    cardHeight = tallest
-                }
                 Repeater {
                     model: [
                         {
@@ -360,12 +355,16 @@ QQC2.ApplicationWindow {
                     ]
                     delegate: Rectangle {
                         required property var modelData
-                        readonly property real contentHeight: credit.implicitHeight + 36
-                        onContentHeightChanged: creditRow.measure()
-                        Component.onCompleted: creditRow.measure()
+                        // Equal heights come from the grid now. The card used
+                        // to measure its own content, hand that to a shared
+                        // tallest-card value, and read that value back as its
+                        // own height -- a binding loop Qt reported on every
+                        // launch. A GridLayout already gives every cell in a
+                        // row the height of the tallest, which is the same
+                        // result asked for once instead of in a circle.
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Math.max(creditRow.cardHeight,
-                                                         contentHeight)
+                        Layout.fillHeight: true
+                        implicitHeight: credit.implicitHeight + 36
                         radius: 14
                         color: root.card
                         border.width: 1
@@ -535,34 +534,23 @@ QQC2.ApplicationWindow {
                 //
                 // Sized to their own text they came out ragged -- six boxes of
                 // six different heights, which reads as a broken layout rather
-                // than as six things worth reading. Recomputed rather than
-                // only ever growing, so it still settles correctly when the
-                // window is resized and the text reflows.
-                property real cardHeight: 0
-                function measure() {
-                    var tallest = 0
-                    for (var i = 0; i < children.length; ++i) {
-                        var c = children[i]
-                        if (c.contentHeight !== undefined && c.contentHeight > tallest) {
-                            tallest = c.contentHeight
-                        }
-                    }
-                    cardHeight = tallest
-                }
+                // than as six things worth reading. The grid equalises them.
 
                 Repeater {
                     model: [
                         {
                             title: "Built for modern machines, and older ones",
-                            // Written after the fallback was real rather than
-                            // planned: both halves of this are things the
-                            // installer has been watched doing.
-                            body: "On a 2013 processor or newer, SakuraOS uses the CachyOS "
-                                + "kernel -- its scheduler work, its build configuration, its "
-                                + "hardware patches -- with our own tuning on top. On anything "
-                                + "older it quietly installs the standard Arch kernel instead. "
-                                + "SakuraOS checks which one your machine can run and picks it "
-                                + "for you; there is nothing to choose and nothing to undo."
+                            // About what this machine does, not about whose
+                            // patches we build. The credits page is where
+                            // upstream is thanked; a tour card that reads as
+                            // an advertisement for somebody else tells the
+                            // person nothing about their own computer.
+                            body: "SakuraOS looks at your processor and installs the kernel "
+                                + "that suits it -- one built and tuned for hardware from the "
+                                + "last decade, or the standard one for anything older. Either "
+                                + "way it is scheduled for a desktop rather than a server, so "
+                                + "the machine stays responsive while it is busy. You are not "
+                                + "asked, and there is nothing to undo."
                         },
                         {
                             title: "It can undo itself",
@@ -602,14 +590,15 @@ QQC2.ApplicationWindow {
                     ]
                     delegate: Rectangle {
                         required property var modelData
-                        // What this card would need if it were alone. The
-                        // grid takes the largest and gives it to all of them.
-                        readonly property real contentHeight: card.implicitHeight + 34
-                        onContentHeightChanged: tourGrid.measure()
-                        Component.onCompleted: tourGrid.measure()
+                        // Equal heights come from the grid. Measuring its own
+                        // content, feeding that to a shared tallest value and
+                        // reading that back as its own height was a binding
+                        // loop, reported on every launch; fillHeight in a
+                        // GridLayout gives every cell in a row the height of
+                        // the tallest without the circle.
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Math.max(tourGrid.cardHeight,
-                                                         contentHeight)
+                        Layout.fillHeight: true
+                        implicitHeight: card.implicitHeight + 34
                         radius: 14
                         color: root.card
                         border.width: 1

@@ -689,6 +689,28 @@ snapper --no-dbus -c root set-config TIMELINE_CREATE=no NUMBER_LIMIT=10 \
 snapper --no-dbus -c root create --description "installation complete" --cleanup-algorithm number
 CHROOT
 
+# The password wallet needs no configuration here, and that is worth writing
+# down because it looks like it should.
+#
+# KWallet asking for a password every time an application wants a stored
+# secret is the loudest complaint about a KDE desktop, and the advice people
+# find is to switch it off -- which puts wifi, Samba and browser passwords
+# back in plain text and breaks anything expecting a Secret Service.
+#
+# The fix is pam_kwallet5, which opens the wallet with the password already
+# typed at the login screen. Arch's /etc/pam.d/sddm already carries both
+# lines:
+#
+#   -auth       optional    pam_kwallet5.so
+#   -session    optional    pam_kwallet5.so         auto_start
+#
+# The leading dash is not a comment. In PAM it means "skip this silently if
+# the module is not installed", so the lines do nothing on a machine without
+# kwallet-pam and take effect the moment there is one. Installing the package
+# -- see sakura-desktop -- is the whole of it. Editing this file to add them
+# again was written first and thrown away: it produced duplicate entries in
+# the login stack, which is a way to be asked twice rather than not at all.
+
 step "Clearing the installation package cache"
 # pacstrap leaves every package it installed in the target's cache -- 1.7 GB
 # on a normal install, and of no further use: the machine's way back is a
