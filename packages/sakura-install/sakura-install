@@ -293,13 +293,23 @@ cpu_supports_v3() {
 # depends on the machine in front of us. The meta package deliberately names
 # no kernel at all, the way Arch's own base does not.
 KERNEL="linux"
+# pacman -Si reads the sync databases, and on a freshly booted live image
+# those have not been loaded yet -- so the query returns nothing, the tuned
+# kernel looks absent, and every machine quietly gets the stock one. That is
+# exactly what happened on the first real install: the CPU reported v3 and
+# stock was installed anyway. Cheap on file:// media, and it has to happen
+# before pacstrap regardless.
+pacman -Sy >/dev/null 2>&1 || true
 if cpu_supports_v3; then
     if pacman -Si linux-cachyos >/dev/null 2>&1; then
         KERNEL="linux-cachyos"
         info "CPU supports x86-64-v3: installing the tuned kernel"
     else
-        info "CPU supports x86-64-v3, but no tuned kernel is in the repository"
-        info "using the stock kernel"
+        # Worth saying plainly. This machine could run the tuned kernel and is
+        # not getting it, which is a packaging problem rather than a property
+        # of the hardware, and it should not read like a normal outcome.
+        info "WARNING: this CPU supports x86-64-v3 but linux-cachyos was not"
+        info "found in the repository; falling back to the stock kernel"
     fi
 else
     info "CPU is older than x86-64-v3: using the stock kernel"

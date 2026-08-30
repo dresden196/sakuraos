@@ -14,5 +14,9 @@
          rcc rejects the whole file.) -->
     <file>assets/credit-kde.svg</file>
     <file>assets/credit-limine.png</file>
+    <file>assets/credit-cachyos.svg</file>
+    <file>assets/credit-gnu.png</file>
+    <file>assets/credit-linux.svg</file>
+    <file>assets/credit-systemd.svg</file>
   </qresource>
 </RCC>

@@ -75,3 +75,27 @@ CPU supports — the same check the dynamic linker uses for hwcaps libraries, so
 it agrees with the rest of the system by construction. v3 and above get this
 kernel; anything older gets stock `linux`, quietly. `sakura-desktop` names no
 kernel at all, the way Arch's `base` does not.
+
+## Attribution and naming
+
+The installer's credits page carries CachyOS alongside Arch, KDE and Limine,
+with their own logo from cachyos.org. Their scheduler work, build
+configuration and hardware patches are the reason this kernel is worth
+shipping, and the credit belongs where a user will see it rather than only in
+a source file.
+
+**The kernel is not renamed, and this is a deliberate trade.** The obvious
+move -- calling the package `linux-sakura` so nothing says "cachyos" -- means
+patching their PKGBUILD, and that is exactly what costs the property this
+package is built on: their `b2sums` and the tarball's PGP signature verify
+only because the file is used byte for byte. `_pkgsuffix` is assigned
+unconditionally inside their script, so it cannot be overridden from the
+environment either; renaming genuinely requires a fork.
+
+What a user actually sees at boot is already ours. The limine entries read
+`SakuraOS` and `SakuraOS Recovery`, and the firmware entry is `SakuraOS`;
+none of them mention the kernel package. Verified on an installed machine.
+
+What still says `cachyos` is `uname -r` (`7.2.2-1-cachyos`) and the package
+name in the store. Those are surfaces we control the *presentation* of, so
+the answer is to label it there rather than to fork upstream for a string.

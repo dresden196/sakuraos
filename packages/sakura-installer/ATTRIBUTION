@@ -1,16 +1,22 @@
-Browser icons
-=============
+Logos shown on the installer's credits page.
 
-The installer shows each browser's own icon, taken from the package that
-ships it, to identify which browser you are choosing. Using a mark to refer
-to the product it belongs to is ordinary nominative use, and it is what every
-software centre does.
+Each is the project's own mark, taken from the project's own hands rather
+than from a clip-art site, and used to credit them. None of these projects
+endorses SakuraOS, and none of these marks is ours. If any of them would
+rather we did not use theirs, remove the entry -- the credit can be text.
 
-  Zen      app.zen_browser.zen (Flatpak)   MPL-2.0 project
-  Firefox  firefox                          Mozilla trademark, used to refer
-                                            to Firefox
-  Brave    brave-bin                        Brave Software trademark
-  Chrome   google-chrome                    Google trademark
+  assets/credit-kde.svg       KDE, from kde.org brand assets
+  assets/credit-limine.png    Limine, from the Limine repository
+  assets/credit-cachyos.svg   CachyOS, from cachyos.org
+  assets/credit-systemd.svg   systemd, from systemd/systemd docs/assets
+  assets/credit-linux.svg     Tux, the Linux mascot, originally by Larry Ewing
+                              (lewing@isc.tamu.edu), created with GIMP
+  assets/credit-gnu.png       The GNU head, from Wikimedia Commons
 
-These are the vendors' marks, not ours. If any vendor objects, the icon comes
-out; the grid does not depend on them.
+Arch Linux's logo is not bundled. It is read at runtime from
+/usr/share/pixmaps/archlinux-logo.svg, which the filesystem package provides,
+so it always matches the machine it is shown on.
+
+The Linux mascot carries the customary request that Larry Ewing be credited
+as its author; that is the reason his name is written here rather than only
+in a commit message.
