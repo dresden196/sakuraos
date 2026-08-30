@@ -20,6 +20,7 @@ QQC2.ApplicationWindow {
     visible: true
     title: "Install SakuraOS"
 
+
     // ---- palette -----------------------------------------------------------
     // Bound to the appearance answer rather than fixed, so choosing light or
     // dark on that screen repaints the installer itself. Showing someone the
@@ -224,11 +225,25 @@ QQC2.ApplicationWindow {
     // Off the tour rather than in the sequence: nobody should have to page
     // past a credits screen to install an operating system, and burying it
     // where nobody finds it is not much better than not having one.
-    Item {
+    QQC2.ScrollView {
         anchors.fill: parent
         visible: root.step === -1
+        contentWidth: availableWidth
+        clip: true
+
+        // Centred when it fits, scrolled when it does not. These pages had
+        // the column centred in the window with nothing to scroll, so on a
+        // screen shorter than the content -- 1024x768, where plenty of older
+        // laptops live -- it overflowed equally top and bottom: the heading
+        // above the edge and the buttons below it, unreachable, with no way
+        // to get to them. The spacer keeps the centred look on a tall screen.
+        Item {
+            width: parent.width
+            implicitHeight: Math.max(inner1.implicitHeight + 80,
+                                     root.height)
 
         ColumnLayout {
+            id: inner1
             anchors.centerIn: parent
             width: Math.min(940, parent.width - 100)
             spacing: 20
@@ -251,10 +266,17 @@ QQC2.ApplicationWindow {
 
             Item { Layout.preferredHeight: 6 }
 
-            RowLayout {
+            GridLayout {
                 id: creditRow
                 Layout.fillWidth: true
-                spacing: 18
+                columnSpacing: 18
+                rowSpacing: 18
+                // Wraps. This was a RowLayout when there were three of these,
+                // and adding four more squeezed every card until the text
+                // clipped and the last one ran off the right edge -- on a
+                // 1024-wide screen, which is not an unusual screen. Cards per
+                // row is decided by the width there actually is.
+                columns: Math.max(2, Math.min(4, Math.floor(width / 220)))
                 // Same reason as the tour cards: two boxes of different
                 // heights side by side reads as a layout that went wrong.
                 property real cardHeight: 0
@@ -325,6 +347,14 @@ QQC2.ApplicationWindow {
                             body: "What starts this machine, keeps its services running and "
                                 + "puts it back together when something fails. The restore "
                                 + "points and the recovery boot are built on it."
+                        },
+                        {
+                            icon: "qrc:/assets/credit-flatpak.png",
+                            name: "Flatpak",
+                            body: "How most of the software in the store arrives, and why an "
+                                + "application can be current without the system underneath "
+                                + "it having to change. Flathub is where nearly all of it "
+                                + "comes from."
                         }
                     ]
                     delegate: Rectangle {
@@ -350,6 +380,14 @@ QQC2.ApplicationWindow {
                                 sourceSize: Qt.size(140, 64)
                                 fillMode: Image.PreserveAspectFit
                                 Layout.preferredHeight: 56
+                                // Height alone does not bound a logo. These
+                                // marks are not all square -- systemd's is a
+                                // wordmark several times wider than it is
+                                // tall -- and with only a height set the item
+                                // took its natural width, burst out of its
+                                // card and shoved the text off the side.
+                                Layout.maximumWidth: 140
+                                Layout.maximumHeight: 56
                             }
                             QQC2.Label {
                                 Layout.alignment: Qt.AlignHCenter
@@ -436,6 +474,7 @@ QQC2.ApplicationWindow {
                 }
             }
         }
+        }
     }
 
     // ---- what this distribution actually does differently -------------------
@@ -443,11 +482,25 @@ QQC2.ApplicationWindow {
     // booted an unfamiliar system has no idea what they are agreeing to set
     // up. Every claim here is one the machine can be held to; the ones that
     // are not yet true are not on this page.
-    Item {
+    QQC2.ScrollView {
         anchors.fill: parent
         visible: root.step === -2
+        contentWidth: availableWidth
+        clip: true
+
+        // Centred when it fits, scrolled when it does not. These pages had
+        // the column centred in the window with nothing to scroll, so on a
+        // screen shorter than the content -- 1024x768, where plenty of older
+        // laptops live -- it overflowed equally top and bottom: the heading
+        // above the edge and the buttons below it, unreachable, with no way
+        // to get to them. The spacer keeps the centred look on a tall screen.
+        Item {
+            width: parent.width
+            implicitHeight: Math.max(inner2.implicitHeight + 80,
+                                     root.height)
 
         ColumnLayout {
+            id: inner2
             anchors.centerIn: parent
             width: Math.min(880, parent.width - 100)
             spacing: 20
@@ -499,10 +552,16 @@ QQC2.ApplicationWindow {
                 Repeater {
                     model: [
                         {
-                            title: "Built for a modern machine",
-                            body: "A kernel tuned for better scheduling and built for the processors "
-                                + "people actually own, rather than for the oldest one still "
-                                + "supported. The same hardware, doing more."
+                            title: "Built for modern machines, and older ones",
+                            // Written after the fallback was real rather than
+                            // planned: both halves of this are things the
+                            // installer has been watched doing.
+                            body: "On a 2013 processor or newer, SakuraOS uses the CachyOS "
+                                + "kernel -- its scheduler work, its build configuration, its "
+                                + "hardware patches -- with our own tuning on top. On anything "
+                                + "older it quietly installs the standard Arch kernel instead. "
+                                + "SakuraOS checks which one your machine can run and picks it "
+                                + "for you; there is nothing to choose and nothing to undo."
                         },
                         {
                             title: "It can undo itself",
@@ -615,13 +674,28 @@ QQC2.ApplicationWindow {
                 }
             }
         }
+        }
     }
 
-    Item {
+    QQC2.ScrollView {
         anchors.fill: parent
         visible: root.step === -3
+        contentWidth: availableWidth
+        clip: true
+
+        // Centred when it fits, scrolled when it does not. These pages had
+        // the column centred in the window with nothing to scroll, so on a
+        // screen shorter than the content -- 1024x768, where plenty of older
+        // laptops live -- it overflowed equally top and bottom: the heading
+        // above the edge and the buttons below it, unreachable, with no way
+        // to get to them. The spacer keeps the centred look on a tall screen.
+        Item {
+            width: parent.width
+            implicitHeight: Math.max(inner3.implicitHeight + 80,
+                                     root.height)
 
         ColumnLayout {
+            id: inner3
             anchors.centerIn: parent
             width: Math.min(560, parent.width - 100)
             spacing: 0
@@ -712,6 +786,7 @@ QQC2.ApplicationWindow {
                     color: parent.down ? Qt.darker(root.accent, 1.15) : root.accent
                 }
             }
+        }
         }
     }
 
@@ -804,8 +879,30 @@ QQC2.ApplicationWindow {
             QQC2.ScrollView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                // A ScrollView takes its implicit height from its content, so
+                // a tall page made the column ask for more room than the
+                // window has and pushed Back and Continue off the bottom of
+                // the screen -- on 1024x768, where a good number of older
+                // laptops still live, and where the buttons being unreachable
+                // means the install cannot be completed at all. Asking for
+                // nothing and filling what is left is the whole fix.
+                Layout.preferredHeight: 0
+                Layout.minimumHeight: 0
                 clip: true
                 contentWidth: availableWidth
+
+                // Back to the top on every page. Without this the scroll
+                // position carries over, so stepping from a long page to a
+                // short one opens it already scrolled down with its heading
+                // above the fold -- which reads as a page that is cut off.
+                id: pageScroll
+                Connections {
+                    target: root
+                    function onStepChanged() {
+                        if (pageScroll.contentItem)
+                            pageScroll.contentItem.contentY = 0
+                    }
+                }
 
                 Item {
                     width: parent.width
