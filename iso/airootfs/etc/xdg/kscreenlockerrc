@@ -1,0 +1,14 @@
+# No screen lock on the install media.
+#
+# The live user has no password -- NP in passwd -- so the lock screen cannot
+# be passed. KDE locks after five minutes idle by default, which means
+# somebody who reads the disk step, goes to make a cup of tea and comes back
+# is locked out of the installer with no way in and no option but to reboot
+# and start the install again.
+#
+# This is the install media only. An installed system keeps the normal
+# locking behaviour, where the user has a password and locking is the point.
+[Daemon]
+Autolock=false
+LockOnResume=false
+LockOnStart=false

@@ -18,5 +18,6 @@
     <file>assets/credit-gnu.png</file>
     <file>assets/credit-linux.svg</file>
     <file>assets/credit-systemd.svg</file>
+    <file>assets/credit-flatpak.png</file>
   </qresource>
 </RCC>
