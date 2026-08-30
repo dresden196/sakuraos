@@ -131,9 +131,43 @@ depends=(
     # docs/defaults.md, where the mpv-versus-VLC question is still open.
     'haruna'
 
-    # Fonts, otherwise the session renders as tofu
+    # Fonts, otherwise the session renders as tofu. The CJK set is not
+    # optional here: without it Chinese, Japanese and Korean text renders as
+    # empty boxes, which on an operating system named after a Japanese word
+    # is a poor look and a broken machine for anyone reading those scripts.
     'noto-fonts'
     'noto-fonts-emoji'
+    'noto-fonts-cjk'
+    # noto-fonts-extra is deliberately not here. It is 331 MiB of additional
+    # weights and widths -- "additional variants" is upstream's own
+    # description -- on top of the 107 MiB base set, and it buys typography
+    # rather than coverage. On media that ships offline that is a third of a
+    # gigabyte for styles almost nobody will look at. CJK is the opposite: it
+    # is 299 MiB that decides whether text renders at all.
+
+    # Codecs. GStreamer's good and bad sets arrive as dependencies; ugly and
+    # libav do not, and without them Haruna fails on H.264, H.265 and MP3 --
+    # which is to say on most of what anybody actually has. ffmpegthumbs is
+    # what puts thumbnails on videos in Dolphin.
+    'gst-plugins-ugly'
+    'gst-libav'
+    'ffmpegthumbs'
+
+    # A terminal with no editor in it is a trap: visudo, crontab -e and
+    # anything reading $EDITOR all land on nothing. nano rather than vim
+    # because somebody who did not choose to be in a text editor can leave
+    # nano without being told how.
+    'nano'
+
+    # Named rather than left to arrive as somebody else's dependency. curl and
+    # git in particular are load-bearing -- the store fetches with one and
+    # clones from the AUR with the other -- and a dependency that arrives by
+    # accident can leave by accident too. unzip is what Ark shells out to for
+    # the most common archive format there is.
+    'curl'
+    'wget'
+    'git'
+    'unzip'
 
     # The store itself. It was missing from this list entirely, so a freshly
     # installed machine had no way to install software -- the one thing the

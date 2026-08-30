@@ -148,7 +148,14 @@ if (( ! verify_only )); then
     # hostnames: they were failing here while "the network" was reported up.
     echo -n ">> waiting for the network"
     deadline=$(( SECONDS + 180 ))
-    until run "getent hosts archlinux.org >/dev/null && curl -sS -o /dev/null --max-time 10 http://173.233.87.167/" >/dev/null 2>&1; do
+    # Waits for the thing the checks below actually use. Resolving
+    # archlinux.org and reaching the repository host by IP over HTTP was not
+    # that: pacman fetches sakura-core over HTTPS from repo.sakuraos.org, and
+    # a machine where that name or its certificate is not ready yet passes
+    # this gate and then fails "the repo resolves" -- which reads as a broken
+    # repository rather than as a test that started too early. Fetching the
+    # database is the same request pacman is about to make.
+    until run "getent hosts archlinux.org >/dev/null && curl -sS -o /dev/null --max-time 10 https://repo.sakuraos.org/sakura-core/os/x86_64/sakura-core.db" >/dev/null 2>&1; do
         (( SECONDS < deadline )) || { echo " (still not resolving; repo checks may fail)"; break; }
         echo -n .
         sleep 5
