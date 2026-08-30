@@ -49,6 +49,20 @@ echo ">> signing with $SIGNER"
 mkdir -p "$REPO_DIR"
 docker volume create "$CACHE_VOLUME" >/dev/null
 
+# Every build gets a version of its own.
+#
+# Our PKGBUILDs all say pkgrel=1 and always have, so two different builds of
+# the same package were indistinguishable to pacman. A copy cached from the
+# install media then collides with a differently-built package of the same
+# name on the repository, and pacman calls the cached one corrupt rather than
+# stale -- which is exactly how the first update on a new machine failed.
+#
+# Commit count rather than a timestamp: it moves when the source moves, so
+# rebuilding the same commit does not manufacture an update for every package
+# on every machine. Stamped into the copy under $WORK, never into the tree.
+BUILD_STAMP="$(git -C "$REPO_ROOT" rev-list --count HEAD 2>/dev/null || echo 0)"
+echo ">> build stamp: pkgrel suffix .$BUILD_STAMP"
+
 rc=0
 docker run --rm \
     -v "$REPO_ROOT:/build" \
@@ -56,6 +70,7 @@ docker run --rm \
     -v "$CACHE_VOLUME:/var/cache/pacman/pkg" \
     -e "SIGNER=$SIGNER" \
     -e "SKIP_AUR=$SKIP_AUR" \
+    -e "BUILD_STAMP=$BUILD_STAMP" \
     -e "HOST_UID=$(id -u)" \
     -e "HOST_GID=$(id -g)" \
     -w /build \
@@ -99,6 +114,10 @@ docker run --rm \
             if [[ ! -f "$dir/PKGBUILD" ]]; then continue; fi
             echo ">>> building $name"
             cp -r "$dir" "$WORK/$name"
+            # Stamp the copy, not the tree: the working directory stays clean
+            # and the PKGBUILD under version control keeps saying pkgrel=1.
+            sed -i -E "s/^pkgrel=([0-9]+)\$/pkgrel=\\1.$BUILD_STAMP/" \
+                "$WORK/$name/PKGBUILD"
             chown -R builder:builder "$WORK/$name"
 
             # Compiled packages need their runtime libraries present at build
