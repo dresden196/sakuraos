@@ -1386,6 +1386,17 @@ def cmd_install(args) -> int:
                         error="An AppImage needs either a file or a link.")
                 return 2
         elif args.source == "aur":
+            # Checked before the review, because the review is not the reason.
+            # With the AUR switched off this refused with "has not been
+            # reviewed yet", which sends somebody to read a build script when
+            # what they actually need is a setting -- and reading it would not
+            # have helped, because the next refusal was waiting behind it.
+            if not AurSource().available():
+                tx.emit(tx.FAILED,
+                        error="The AUR is switched off. Turn it on in SakuraOS "
+                              "Settings to install this.",
+                        recoverable=False)
+                return 2
             rc = tx.install_aur(args.id)
         else:
             tx.emit(tx.FAILED, error=f"Unknown source: {args.source}")

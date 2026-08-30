@@ -641,7 +641,13 @@ def install_aur(name: str) -> int:
     # the toolchain, and a desktop install rightly does not ship one. It is
     # pulled in on the first AUR install rather than on every machine that
     # never touches the AUR.
-    deps = ["base-devel"] + _aur_srcinfo_deps(name)
+    # git as well as base-devel, and it is not a detail: the AUR is fetched by
+    # cloning, base-devel on Arch does not include git, and a desktop install
+    # has no reason to have it. Missing, this failed with a bare
+    # FileNotFoundError naming 'git' after the dependencies had already been
+    # installed -- which only showed up on a machine that had never been
+    # developed on. Every VM used for testing already had it.
+    deps = ["base-devel", "git"] + _aur_srcinfo_deps(name)
     if deps:
         rc = stream(["pkexec", "pacman", "-S", "--noconfirm", "--needed",
                      "--asdeps", "--"] + deps, DOWNLOADING, _pacman_progress)
@@ -654,6 +660,10 @@ def install_aur(name: str) -> int:
     #    right to: this is the step that executes somebody else's shell script.
     work = tempfile.mkdtemp(prefix="sakura-aur-")
     try:
+        if not shutil.which("git"):
+            emit(FAILED, error="git is needed to fetch from the AUR and is "
+                               "not installed.", recoverable=True)
+            return 2
         rc = stream(["git", "clone", "--depth", "1",
                      f"https://aur.archlinux.org/{name}.git",
                      f"{work}/{name}"], DOWNLOADING)
