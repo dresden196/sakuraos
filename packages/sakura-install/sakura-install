@@ -689,6 +689,25 @@ snapper --no-dbus -c root set-config TIMELINE_CREATE=no NUMBER_LIMIT=10 \
 snapper --no-dbus -c root create --description "installation complete" --cleanup-algorithm number
 CHROOT
 
+step "Clearing the installation package cache"
+# pacstrap leaves every package it installed in the target's cache -- 1.7 GB
+# on a normal install, and of no further use: the machine's way back is a
+# restore point, not a reinstall from cache.
+#
+# It also causes a real failure. Our own packages keep the same version
+# string across rebuilds, so a copy cached from the install media and a
+# differently-built package of the same name on the repository disagree, and
+# pacman reports the cached one as corrupt rather than as stale:
+#
+#   File /var/cache/pacman/pkg/sakura-store-0.1.0-1-any.pkg.tar.zst is
+#   corrupted (invalid or corrupted package (checksum))
+#
+# which is how the first update on a brand new machine failed. The versions
+# are stamped per build now as well, so the two cannot collide; this keeps
+# the disk space regardless.
+rm -f /mnt/var/cache/pacman/pkg/*.pkg.tar.zst \
+      /mnt/var/cache/pacman/pkg/*.pkg.tar.zst.sig 2>/dev/null || true
+
 step "Registering with firmware"
 efibootmgr --create --disk "$DISK" --part 1 \
     --loader '\EFI\sakura\limine.efi' --label "SakuraOS" --unicode >/dev/null 2>&1 \
