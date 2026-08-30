@@ -368,14 +368,19 @@ QVariantList Backend::keyboardLayouts() const
 QStringList Backend::avatars() const
 {
     QStringList out;
-    // Plasma ships a set of these and plasma-workspace is already pulled in,
-    // so there is nothing to draw or package. /usr/share/sddm/faces is a
-    // different thing entirely -- it holds per-user login pictures and on a
-    // fresh system contains only root.face.icon.
-    for (const QString &dir : {QStringLiteral("/usr/share/plasma/avatars"),
+    // GNOME's set, shipped by sakura-theme. Photographs of objects rather
+    // than drawings of people: a cartoon face is a picture of somebody who
+    // is not you, and the illustrated sets desktops ship read as a child's
+    // avatar picker. Plasma's are deliberately not offered alongside them --
+    // mixing two art styles in one ring looks like neither was chosen.
+    //
+    // /usr/share/sddm/faces is a different thing entirely: per-user login
+    // pictures, and on a fresh system it holds only root.face.icon.
+    for (const QString &dir : {QStringLiteral("/usr/share/sakura/avatars"),
                                QStringLiteral("/usr/share/sddm/faces")}) {
         QDir d(dir);
-        const auto files = d.entryList({QStringLiteral("*.png"), QStringLiteral("*.face.icon")},
+        const auto files = d.entryList({QStringLiteral("*.jpg"), QStringLiteral("*.png"),
+                                        QStringLiteral("*.face.icon")},
                                        QDir::Files, QDir::Name);
         for (const QString &f : files) {
             // Several of these have spaces in the filename, so the URL has to

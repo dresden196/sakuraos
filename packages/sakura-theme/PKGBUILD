@@ -38,6 +38,12 @@ package() {
     install -d "$pkgdir/usr/share/color-schemes"
     install -m644 "$startdir/color-schemes/"*.colors "$pkgdir/usr/share/color-schemes/"
 
+    # User pictures for the installer's account page. See avatars/ATTRIBUTION.
+    install -d "$pkgdir/usr/share/sakura/avatars"
+    install -m644 "$startdir/avatars/"*.jpg "$pkgdir/usr/share/sakura/avatars/"
+    install -Dm644 "$startdir/avatars/ATTRIBUTION" \
+        "$pkgdir/usr/share/licenses/$pkgname/AVATARS-ATTRIBUTION"
+
     install -d "$pkgdir/usr/share/icons"
     cp -r "$startdir/icons/"* "$pkgdir/usr/share/icons/"
 

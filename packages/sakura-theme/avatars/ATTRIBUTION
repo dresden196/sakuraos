@@ -1,0 +1,12 @@
+The user pictures offered by the installer.
+
+Taken unchanged from GNOME's gnome-control-center, which ships them at
+/usr/share/pixmaps/faces:
+
+    https://gitlab.gnome.org/GNOME/gnome-control-center
+    GPL-2.0-or-later
+
+Photographs of objects rather than drawings of people, which is the whole
+reason for preferring them: a cartoon face is a picture of somebody who is
+not you, and the illustrated sets shipped by desktops tend to read as a
+child's avatar picker. A bicycle does not claim to be anybody.

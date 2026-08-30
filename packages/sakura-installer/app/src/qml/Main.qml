@@ -3,6 +3,7 @@ import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import QtQuick.Window
 import QtQuick.Dialogs
+import QtQuick.Effects
 
 QQC2.ApplicationWindow {
     id: root
@@ -1826,12 +1827,37 @@ QQC2.ApplicationWindow {
                         color: root.card
                         border.width: root.answers.avatar === modelData ? 3 : 1
                         border.color: root.answers.avatar === modelData ? root.accent : Qt.rgba(1,1,1,0.1)
-                        Image {
+
+                        // Round pictures need a mask. layer.enabled on its own
+                        // -- which is what was here -- allocates a texture and
+                        // draws nothing differently, so every picture sat as a
+                        // square inside a circular border with its corners
+                        // hanging over the edge.
+                        Item {
+                            id: shot
                             anchors.fill: parent
                             anchors.margins: 3
-                            source: modelData
-                            fillMode: Image.PreserveAspectCrop
-                            layer.enabled: true
+                            Image {
+                                id: shotImage
+                                anchors.fill: parent
+                                source: modelData
+                                fillMode: Image.PreserveAspectCrop
+                                asynchronous: true
+                                visible: false
+                            }
+                            Rectangle {
+                                id: shotMask
+                                anchors.fill: parent
+                                radius: width / 2
+                                visible: false
+                                layer.enabled: true
+                            }
+                            MultiEffect {
+                                anchors.fill: parent
+                                source: shotImage
+                                maskEnabled: true
+                                maskSource: shotMask
+                            }
                         }
                         MouseArea {
                             anchors.fill: parent
