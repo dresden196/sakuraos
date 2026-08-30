@@ -90,6 +90,25 @@ depends=(
     'pipewire-pulse'
     'wireplumber'
 
+    # Audio effects: an equaliser, and the noise suppression people actually
+    # want on a laptop microphone. Its own application rather than something
+    # buried in settings, because it is a thing you open, fiddle with and
+    # close.
+    'easyeffects'
+
+    # KWallet asking for a password every time an application starts is one
+    # of the loudest complaints about a KDE desktop, and the advice people
+    # find is to switch it off -- which puts wifi, Samba and browser
+    # passwords back in plain text and breaks anything that expects a Secret
+    # Service. kwallet-pam is the actual fix: the wallet is unlocked by the
+    # password already typed at login, so it never asks again. See
+    # sakura-install for the PAM lines that make it work; the package alone
+    # does nothing.
+    'kwallet-pam'
+    # The window for looking at what is stored and forgetting one of them.
+    # Without it a wallet can be filled but never inspected.
+    'kwalletmanager'
+
     # Bluetooth. bluedevil above is only the Plasma front end -- without the
     # daemon it has nothing to talk to, so Bluetooth did not work at all.
     'bluez'
