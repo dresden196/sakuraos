@@ -37,6 +37,23 @@ public:
     // show the layout being chosen rather than describe it.
     Q_INVOKABLE QVariantList keyboardPreview(const QString &layout) const;
     Q_INVOKABLE QStringList avatars() const;
+
+    // ---- network -------------------------------------------------------
+    // An install fetches most of its packages from Arch's mirrors, so a
+    // machine with no connection cannot complete one. Everything here goes
+    // through nmcli: NetworkManager is running on the live image already,
+    // and a second way of configuring an interface is a second thing to
+    // disagree with the first.
+    Q_INVOKABLE QVariantMap networkState() const;
+    Q_INVOKABLE bool hasWifiHardware() const;
+    Q_INVOKABLE QVariantList wifiNetworks() const;
+    Q_INVOKABLE void rescanWifi();
+    Q_INVOKABLE QString connectWifi(const QString &ssid, const QString &password);
+    Q_INVOKABLE QString applyStaticAddress(const QString &device,
+                                           const QString &address,
+                                           const QString &gateway,
+                                           const QString &dns);
+    Q_INVOKABLE QString useAutomaticAddress(const QString &device);
     Q_INVOKABLE QString guessTimezone() const;
     // Seconds from UTC for a zone, right now -- so the clock on the time
     // screen shows the time in the zone being chosen rather than the time
