@@ -296,6 +296,34 @@ QQC2.ApplicationWindow {
                             body: "The bootloader, and the menu that offers a restore point or "
                                 + "another operating system. Every recovery SakuraOS promises "
                                 + "starts with Limine handing over."
+                        },
+                        {
+                            icon: "qrc:/assets/credit-cachyos.svg",
+                            name: "CachyOS",
+                            body: "The kernel. Its scheduler work, its build configuration and "
+                                + "its hardware patches are what make this machine feel quick, "
+                                + "and SakuraOS builds their work rather than its own."
+                        },
+                        {
+                            icon: "qrc:/assets/credit-linux.svg",
+                            name: "Linux",
+                            body: "The kernel underneath all of it. Every drive, every network "
+                                + "card and every screen this system will ever talk to, it "
+                                + "talks to through Linux."
+                        },
+                        {
+                            icon: "qrc:/assets/credit-gnu.png",
+                            name: "GNU",
+                            body: "The compiler, the C library and the shell -- the tools "
+                                + "everything else here was built with, and largely built "
+                                + "from. There is no version of this project without them."
+                        },
+                        {
+                            icon: "qrc:/assets/credit-systemd.svg",
+                            name: "systemd",
+                            body: "What starts this machine, keeps its services running and "
+                                + "puts it back together when something fails. The restore "
+                                + "points and the recovery boot are built on it."
                         }
                     ]
                     delegate: Rectangle {
@@ -352,7 +380,11 @@ QQC2.ApplicationWindow {
                 text: "And, among others: BTRFS and snapper for the restore points, "
                     + "mkinitcpio for the recovery environment, Flatpak, Snap and AppImage "
                     + "for the software, ODRS for the reviews, and cryptsetup for the "
-                    + "encryption."
+                    + "encryption.\n\n"
+                    + "Behind those are thousands more projects, and the people who "
+                    + "maintain them mostly without being paid for it. SakuraOS is a "
+                    + "small amount of new work resting on a very large amount of "
+                    + "theirs."
                 color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.85)
                 font.pixelSize: 12
                 lineHeight: 1.3

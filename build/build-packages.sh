@@ -204,6 +204,8 @@ docker run --rm \
         # and is fetched over the network when the installer asks for it.
         CORE=/build/repo/sakura-core/os/x86_64
         EXTRA=/build/repo/sakura-extra/os/x86_64
+        KERNELS=/build/out/kernel
+        mkdir -p "$KERNELS"
         # repo-add runs as builder and writes a lockfile beside the database,
         # so the directories must be builder-writable rather than root-owned.
         install -d -o builder -g builder "$CORE" "$EXTRA"
@@ -211,6 +213,14 @@ docker run --rm \
         # Start from empty. repo-add happily keeps several versions of the
         # same package, so without this the repo silently accumulates every
         # build ever made and pacman may serve a stale one.
+        #
+        # Emptying it also deletes anything this script did not build, which
+        # is how the kernel disappeared: build-kernel.sh puts linux-cachyos in
+        # the repo and nowhere else, so every later run of this script removed
+        # it, the next ISO shipped without it, and every install quietly fell
+        # back to the stock kernel. Nothing failed; the feature simply was not
+        # there. Kernels are kept out of tree in out/kernel and copied back in
+        # below, the same way AUR rebuilds are carried across --skip-aur.
         for d in "$CORE" "$EXTRA"; do
             rm -f "$d"/*.pkg.tar.zst "$d"/*.pkg.tar.zst.sig "$d"/*.db* "$d"/*.files*
         done
@@ -231,7 +241,10 @@ docker run --rm \
         # $REUSE holds AUR packages carried over from a previous run under
         # --skip-aur; without it here the repo would be published with our
         # packages alone and every AUR dependency silently missing.
-        done < <(find "$WORK" "$REUSE" -name "*.pkg.tar.zst" 2>/dev/null)
+        # KERNELS is out/kernel: built by build-kernel.sh, which takes twenty
+        # minutes on a build box and must not be a casualty of rebuilding a
+        # QML file.
+        done < <(find "$WORK" "$REUSE" "$KERNELS" -name "*.pkg.tar.zst" 2>/dev/null)
 
         for d in "$CORE" "$EXTRA"; do
             name=$(basename "$(dirname "$(dirname "$d")")")

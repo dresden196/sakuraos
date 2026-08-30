@@ -144,6 +144,12 @@ docker run --rm \
             exit 0
         fi
 
+        # Kept outside the repository as well. build-packages.sh empties the
+        # repo on every run, so the repo alone is not somewhere a twenty
+        # minute artefact can live.
+        mkdir -p /build/out/kernel
+        rm -f /build/out/kernel/*.pkg.tar.zst*
+        cp $WORK/src/$KERNEL_VARIANT/*.pkg.tar.zst* /build/out/kernel/
         cp $WORK/src/$KERNEL_VARIANT/*.pkg.tar.zst* \
            /build/repo/sakura-core/os/x86_64/
         chown $HOST_UID:$HOST_GID /build/repo/sakura-core/os/x86_64/*

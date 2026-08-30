@@ -14,7 +14,7 @@ the site.
 
 | Claim | Where it is made | Status |
 |---|---|---|
-| Kernel tuned for scheduling and modern CPUs | Installer tour, site | **Built, not yet booted.** `linux-cachyos` 7.2.2 built for x86-64-v3 with ThinLTO, signed, in the repository; the installer picks it by asking glibc's loader what the CPU supports and falls back to stock `linux` below v3. No machine has started it yet, so the claim is not true until one has. See `docs/kernel.md`. |
+| Kernel tuned for scheduling and modern CPUs | Installer tour, site | **Done.** `linux-cachyos` 7.2.2 built for x86-64-v3 with ThinLTO, signed, and booted: an installed machine runs `7.2.2-1-cachyos` with sched_ext present. The installer picks it by asking glibc's loader what the CPU supports; a Nehalem guest gets stock `linux` instead, verified separately. Runtime tuning is `sakura-tuning` and works on either. See `docs/kernel.md`. |
 | BTRFS with automatic snapshots | Installer tour, site | **Done.** `@ @home @log @pkg @snapshots`, snap-pac before every transaction. |
 | Restore points, automatic and manual | Installer tour | **Done.** Manual ones from the Update Center; rollback verified end to end. |
 | Updates applied in the background | Installer tour, site | **Done.** `sakura-updates.timer` for the system, `sakura-store-updates.timer` for applications. |
