@@ -2,7 +2,7 @@
 Type=Application
 Name=Install SakuraOS
 Exec=sakura-installer
-Icon=system-software-install
+Icon=sakura-installer
 Terminal=false
 NoDisplay=true
 X-KDE-autostart-phase=2
