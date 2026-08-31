@@ -193,3 +193,52 @@ snap-pac
 pacman-contrib
 ntfs-3g
 os-prober
+
+# ---- everything the installed system has -------------------------------
+# The live image is the installed system now: sakura-install copies this
+# filesystem onto the disk rather than rebuilding it from packages, so
+# anything sakura-desktop declares has to be here or it will not be on the
+# machine afterwards.
+#
+# These two lists drifted apart while nobody was comparing them -- the live
+# image was missing thirty-eight of them, including every user-facing
+# application and the whole printing stack. Whenever sakura-desktop gains a
+# package, it belongs here too.
+bluez-utils
+cups
+cups-filters
+cups-pdf
+easyeffects
+ffmpegthumbs
+filelight
+foomatic-db
+foomatic-db-ppds
+git
+gst-libav
+gst-plugins-ugly
+gutenprint
+gwenview
+haruna
+kamoso
+kcalc
+kdeconnect
+kdenlive
+kolourpaint
+kwalletmanager
+kwallet-pam
+merkuro
+noto-fonts-cjk
+okular
+plasma-systemmonitor
+print-manager
+sakura-aur-campaign-check
+sakura-plymouth
+sakura-tuning
+sakura-wine
+sane
+skanpage
+snapd
+spectacle
+unzip
+wget
+zram-generator

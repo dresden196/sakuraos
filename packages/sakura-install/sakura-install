@@ -51,6 +51,7 @@ while [[ $# -gt 0 ]]; do
         --encryption-password-stdin) CRYPTPASS_STDIN=1; shift ;;
         --secureboot) SECUREBOOT="$2"; shift 2 ;;   # auto | on | off
         --extra-packages) EXTRA_PACKAGES="$2"; shift 2 ;;
+        --method) METHOD="$2"; shift 2 ;;
         --graphics) GRAPHICS="$2"; shift 2 ;;
         --theme) THEME="$2"; shift 2 ;;         # dark | light   # auto | nvidia-open | nvidia-580xx | nouveau | none
         --yes)        ASSUME_YES=1; shift ;;
@@ -117,6 +118,10 @@ largest_free_space() {
 swapoff -a 2>/dev/null || true
 umount -R /mnt 2>/dev/null || true
 
+# Only when the packages come over the network. A copy install is the whole
+# reason this can be done with the cable out, so requiring a connection first
+# would defeat the point of it.
+if [[ "${METHOD:-copy}" == "online" ]]; then
 step "Checking this machine can reach the package repositories"
 # Before anything is written to the disk, and that ordering is the point.
 #
@@ -150,6 +155,7 @@ Most of SakuraOS comes from them, so the install would stop part way through
 with the disk already erased. Nothing has been changed.
 
 Check the connection on the Network step and try again."
+fi
 fi
 
 if [[ "$MODE" == "alongside" ]]; then
@@ -377,9 +383,111 @@ case "$GRAPHICS" in
         ;;
 esac
 
-step "Installing packages"
-# shellcheck disable=SC2086  # deliberate word splitting of the extras list
-pacstrap -K /mnt "$KERNEL" sakura-desktop $GRAPHICS_PACKAGES $EXTRA_PACKAGES
+# How the system gets onto the disk.
+#
+#   copy    transfer the filesystem this installer is running from
+#   online  rebuild it from packages with pacstrap
+#
+# Copy is the default and is what Ubuntu, Fedora and Mint do. The install
+# media already carries a complete, working SakuraOS -- it is what booted
+# this installer -- so rebuilding the same system by fetching 1.7 GB of
+# packages is downloading a copy of something already on the disc. Copying
+# it works with no network at all and takes a fraction of the time.
+#
+# Online stays because an old ISO installs an old system: with a network
+# and a small disk, pacstrap gets current packages without a 3 GB download
+# of things that are then immediately replaced.
+METHOD="${METHOD:-copy}"
+
+if [[ "$METHOD" == "copy" ]]; then
+    step "Copying the system onto $DISK"
+    SQUASH_ROOT=/run/archiso/airootfs
+    [[ -d "$SQUASH_ROOT" ]] || die "this is not the install media -- \
+there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
+
+    # Everything except the parts that exist only because this is running
+    # from a disc. /boot is the ESP and is written later; the kernel and the
+    # UKI are generated after the copy, not carried over from the live image.
+    rsync -aAXH --info=progress2 \
+        --exclude=/proc/ --exclude=/sys/ --exclude=/dev/ --exclude=/run/ \
+        --exclude=/tmp/ --exclude=/mnt/ --exclude=/media/ \
+        --exclude=/boot/ \
+        --exclude=/var/cache/pacman/pkg/ \
+        --exclude=/var/log/ \
+        --exclude=/etc/machine-id \
+        --exclude=/etc/ssh/ssh_host_* \
+        --exclude=/home/ \
+        --exclude=/root/ \
+        "$SQUASH_ROOT"/ /mnt/ 2>&1 | tail -2
+
+    step "Making it a permanent system rather than a live one"
+    # A live filesystem carries state that a fresh install must not inherit,
+    # and this is the step the whole method stands or falls on. Three bugs
+    # in this project hid behind exactly this kind of leakage -- a machine
+    # that had been developed on had git and a populated wallet that a real
+    # user's would not, and the tests passed because of it.
+
+    # Identity is generated on first boot, not shared by every machine ever
+    # installed from this ISO.
+    rm -f /mnt/etc/machine-id /mnt/var/lib/dbus/machine-id
+    : > /mnt/etc/machine-id
+    rm -f /mnt/etc/ssh/ssh_host_*
+
+    # The live user does not exist on an installed system. Their group,
+    # home and autologin go with them.
+    arch-chroot /mnt userdel -r sakura 2>/dev/null || true
+    rm -rf /mnt/home/sakura
+    rm -f /mnt/etc/sudoers.d/g_wheel /mnt/etc/sudoers.d/sakura-live
+    rm -rf /mnt/etc/systemd/system/getty@tty1.service.d \
+           /mnt/etc/systemd/system/serial-getty@ttyS0.service.d
+
+    # The installer itself, and the thing that starts it.
+    rm -f /mnt/etc/xdg/autostart/sakura-installer.desktop
+
+    # archiso's own machinery: boot hooks that look for a squashfs, the
+    # services that only make sense on live media, and its mkinitcpio
+    # preset. Left behind, the installed system builds an initramfs that
+    # tries to find a disc that is not there.
+    arch-chroot /mnt pacman -Rns --noconfirm \
+        mkinitcpio-archiso archinstall 2>/dev/null || true
+    rm -f /mnt/etc/mkinitcpio.conf.d/archiso.conf
+    rm -f /mnt/etc/systemd/system/multi-user.target.wants/choose-mirror.service \
+          /mnt/etc/systemd/system/multi-user.target.wants/livecd-talk.service \
+          /mnt/etc/systemd/system/multi-user.target.wants/pacman-init.service
+    rm -f /mnt/etc/systemd/system/choose-mirror.service \
+          /mnt/etc/systemd/system/livecd-talk.service \
+          /mnt/etc/systemd/system/pacman-init.service
+    rm -f /mnt/root/.automated_script.sh /mnt/root/.zlogin
+
+    # Logs, caches and journals from the live session. A new machine should
+    # not boot with a record of somebody else's installer run.
+    rm -rf /mnt/var/log/journal/* /mnt/var/cache/* /mnt/var/tmp/*
+    install -d -m 755 /mnt/var/cache/pacman/pkg
+
+    # The live pacman.conf points at the repository on the media, which will
+    # not exist once the disc is out. sakura-branding ships the real one.
+    if [[ -f /mnt/etc/pacman.d/sakura-core.conf ]]; then
+        sed -i '/^\[sakura-core\]/,/^$/d; /^\[sakura-extra\]/,/^$/d' \
+            /mnt/etc/pacman.conf 2>/dev/null || true
+        grep -q 'sakura-core.conf' /mnt/etc/pacman.conf \
+            || echo 'Include = /etc/pacman.d/sakura-core.conf' >> /mnt/etc/pacman.conf
+    fi
+    rm -rf /mnt/usr/share/sakura/repo
+
+    step "Adding what this machine needs"
+    # The kernel is not carried over: the live image boots stock linux and
+    # this machine may want the tuned one. Graphics and any extras are
+    # installed the same way they always were.
+    # shellcheck disable=SC2086
+    if ! arch-chroot /mnt pacman -S --noconfirm --needed \
+            "$KERNEL" $GRAPHICS_PACKAGES $EXTRA_PACKAGES 2>&1 | tail -3; then
+        die "could not install the kernel onto the new system."
+    fi
+else
+    step "Installing packages"
+    # shellcheck disable=SC2086  # deliberate word splitting of the extras list
+    pacstrap -K /mnt "$KERNEL" sakura-desktop $GRAPHICS_PACKAGES $EXTRA_PACKAGES
+fi
 
 step "Generating fstab"
 genfstab -U /mnt >> /mnt/etc/fstab
