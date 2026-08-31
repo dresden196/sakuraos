@@ -20,8 +20,12 @@ so it always matches the machine it is shown on.
 The Linux mascot carries the customary request that Larry Ewing be credited
 as its author; that is the reason his name is written here rather than only
 in a commit message.
-  assets/credit-btrfs.svg     Ours. Btrfs's own logo is available only under a
-                              non-free "fair use" tag, which is a doctrine for
-                              quoting inside an article and not a licence to
-                              ship a mark inside an operating system, so this
-                              is a drawing of three subvolumes instead.
+  assets/credit-btrfs.svg     Btrfs, the project's own logo.
+
+                              Wikipedia files this one under a "fair use" tag,
+                              which would not cover shipping it here. That tag
+                              reflects Wikipedia's own bookkeeping rather than
+                              the project's licensing: Btrfs is open source and
+                              the mark comes with it. Recorded because the
+                              conservative reading is one click away and
+                              somebody will find it again.
