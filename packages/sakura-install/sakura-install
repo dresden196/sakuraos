@@ -417,15 +417,15 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # unreadable by anyone; rsync says so and carries on, and under set -e
     # that would end the install after the work was already done.
     rsync -aAXH \
-        --exclude=/proc/ --exclude=/sys/ --exclude=/dev/ --exclude=/run/ \
-        --exclude=/tmp/ --exclude=/mnt/ --exclude=/media/ \
-        --exclude=/boot/ \
-        --exclude=/var/cache/pacman/pkg/ \
-        --exclude=/var/log/ \
+        --exclude=/proc/* --exclude=/sys/* --exclude=/dev/* --exclude=/run/* \
+        --exclude=/tmp/* --exclude=/mnt/* --exclude=/media/* \
+        --exclude=/boot/* \
+        --exclude=/var/cache/pacman/pkg/* \
+        --exclude=/var/log/* \
         --exclude=/etc/machine-id \
         --exclude=/etc/ssh/ssh_host_* \
-        --exclude=/home/ \
-        --exclude=/root/ \
+        --exclude=/home/* \
+        --exclude=/root/* \
         "$SQUASH_ROOT"/ /mnt/ 2>&1 | tail -2 || {
         _rc=${PIPESTATUS[0]}
         case "$_rc" in
@@ -433,6 +433,19 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
             *) die "copying the system failed (rsync exit $_rc)." ;;
         esac
     }
+
+    # rsync copies the empty directories but not their modes reliably, and
+    # arch-chroot needs these to exist before it can bind-mount onto them.
+    # An excluded directory that never gets created is a failed install.
+    for d in proc sys dev run tmp mnt media home root boot var/log \
+             var/cache/pacman/pkg; do
+        mkdir -p "/mnt/$d"
+    done
+    chmod 555 /mnt/proc /mnt/sys
+    # /mnt/boot is a mounted vfat ESP: chmod is not supported there.
+    chmod 755 /mnt/dev /mnt/run /mnt/mnt /mnt/media /mnt/home
+    chmod 1777 /mnt/tmp
+    chmod 700 /mnt/root
 
     step "Making it a permanent system rather than a live one"
     # A live filesystem carries state that a fresh install must not inherit,
