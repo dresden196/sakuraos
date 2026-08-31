@@ -110,6 +110,17 @@ fi
 # virtio-gpu advertises 640x480 as its preferred mode and Plasma believes it,
 # leaving no room to judge any UI we build.
 VGA="virtio-vga,edid=on,xres=1920,yres=1080"
+
+# SAKURA_VM_OFFLINE cuts the guest off from the network while leaving the card
+# present, which is what a machine with no cable actually looks like -- a VM
+# with no NIC at all would exercise a different code path. restrict=on blocks
+# outbound traffic but still honours hostfwd, and the harness drives the guest
+# over the guest-agent socket rather than SSH, so nothing it needs is lost.
+NET_RESTRICT=""
+if [[ -n "${SAKURA_VM_OFFLINE:-}" ]]; then
+    NET_RESTRICT=",restrict=on"
+    echo ">> networking restricted: the guest has a NIC but no route out"
+fi
 display_args=(-display gtk,show-cursor=on -device "$VGA")
 (( gl ))       && display_args=(-display gtk,gl=on,show-cursor=on -device virtio-vga-gl,edid=on,xres=1920,yres=1080)
 (( headless )) && display_args=(-display none -device "$VGA")
@@ -131,7 +142,7 @@ exec qemu-system-x86_64 \
     -drive file="$DISK2",if=virtio,format=qcow2 \
     "${media_args[@]}" \
     -device qemu-xhci -device usb-tablet \
-    -netdev "user,id=net0,hostfwd=tcp::$SSH_PORT-:22" -device virtio-net,netdev=net0 \
+    -netdev "user,id=net0,hostfwd=tcp::$SSH_PORT-:22${NET_RESTRICT}" -device virtio-net,netdev=net0 \
     -qmp "unix:$QMP_SOCK,server,nowait" \
     -chardev "socket,path=$QGA_SOCK,server=on,wait=off,id=qga0" \
     -device virtio-serial \

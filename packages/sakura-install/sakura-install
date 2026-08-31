@@ -507,16 +507,6 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
         -exec rm -rf {} + 2>/dev/null || true
     find /mnt/var/cache/pacman/pkg -mindepth 1 -delete 2>/dev/null || true
 
-    # The live pacman.conf points at the repository on the media, which will
-    # not exist once the disc is out. sakura-branding ships the real one.
-    if [[ -f /mnt/etc/pacman.d/sakura-core.conf ]]; then
-        sed -i '/^\[sakura-core\]/,/^$/d; /^\[sakura-extra\]/,/^$/d' \
-/mnt/etc/pacman.conf 2>/dev/null || true
-        grep -q 'sakura-core.conf' /mnt/etc/pacman.conf \
-|| echo 'Include = /etc/pacman.d/sakura-core.conf' >> /mnt/etc/pacman.conf
-    fi
-    rm -rf /mnt/usr/share/sakura/repo
-
     step "Adding what this machine needs"
     # The kernel is not carried over: the live image boots stock linux and
     # this machine may want the tuned one. Graphics and any extras are
@@ -545,6 +535,23 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
             $GRAPHICS_PACKAGES $EXTRA_PACKAGES 2>&1 | tail -3 \
             || info "WARNING: some extra packages could not be installed; \
 the system will pick them up once it is online."
+    fi
+
+    # Only now is the on-media repo finished with. It is the file:// source
+    # the kernel installs from when there is no network, so removing it
+    # during the strip -- as this did -- made an offline install impossible
+    # while an online one carried on working.
+    rm -rf /mnt/usr/share/sakura/repo
+
+    # Only now does the repository swap from the media to the network. Doing
+    # it during the strip pointed pacman at HTTPS before the kernel was
+    # installed, so an offline install had nowhere to fetch from -- the same
+    # ordering mistake as deleting the media repo too early.
+    if [[ -f /mnt/etc/pacman.d/sakura-core.conf ]]; then
+        sed -i '/^\[sakura-core\]/,/^$/d; /^\[sakura-extra\]/,/^$/d' \
+            /mnt/etc/pacman.conf 2>/dev/null || true
+        grep -q 'sakura-core.conf' /mnt/etc/pacman.conf \
+            || echo 'Include = /etc/pacman.d/sakura-core.conf' >> /mnt/etc/pacman.conf
     fi
 else
     step "Installing packages"
