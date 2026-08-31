@@ -98,7 +98,7 @@ partname() { [[ "$DISK" =~ [0-9]$ ]] && echo "${DISK}p$1" || echo "${DISK}$1"; }
 find_existing_esp() {
     local part
     for part in $(lsblk -lnpo NAME,PARTTYPE "$DISK" 2>/dev/null \
-                  | awk 'tolower($2) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" {print $1}'); do
+      | awk 'tolower($2) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" {print $1}'); do
         printf '%s' "$part"
         return 0
     done
@@ -109,8 +109,8 @@ find_existing_esp() {
 largest_free_space() {
     parted -ms "$DISK" unit MiB print free 2>/dev/null \
         | awk -F: '$5 == "free;" {
-              gsub(/MiB/, "", $2); gsub(/MiB/, "", $3); gsub(/MiB/, "", $4)
-              if ($4 + 0 > best + 0) { best = $4; s = $2; e = $3 }
+  gsub(/MiB/, "", $2); gsub(/MiB/, "", $3); gsub(/MiB/, "", $4)
+  if ($4 + 0 > best + 0) { best = $4; s = $2; e = $3 }
           }
           END { if (best > 0) print s, e, best }'
 }
@@ -316,11 +316,11 @@ cpu_supports_v3() {
     for ld in /lib/ld-linux-x86-64.so.2 /usr/lib/ld-linux-x86-64.so.2; do
         [[ -x "$ld" ]] || continue
         if "$ld" --help 2>/dev/null | grep -q "x86-64-v3 (supported"; then
-            return 0
+return 0
         fi
         # It answered and did not list v3, which is an answer.
         if "$ld" --help 2>/dev/null | grep -q "x86-64-v2"; then
-            return 1
+return 1
         fi
     done
     local f
@@ -429,8 +429,8 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
         "$SQUASH_ROOT"/ /mnt/ 2>&1 | tail -2 || {
         _rc=${PIPESTATUS[0]}
         case "$_rc" in
-            0|23|24) : ;;
-            *) die "copying the system failed (rsync exit $_rc)." ;;
+0|23|24) : ;;
+*) die "copying the system failed (rsync exit $_rc)." ;;
         esac
     }
 
@@ -438,7 +438,7 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # arch-chroot needs these to exist before it can bind-mount onto them.
     # An excluded directory that never gets created is a failed install.
     for d in proc sys dev run tmp mnt media home root boot var/log \
-             var/cache/pacman/pkg; do
+ var/cache/pacman/pkg; do
         mkdir -p "/mnt/$d"
     done
     chmod 555 /mnt/proc /mnt/sys
@@ -475,9 +475,18 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # services that only make sense on live media, and its mkinitcpio
     # preset. Left behind, the installed system builds an initramfs that
     # tries to find a disc that is not there.
+    # Order matters: removing mkinitcpio-archiso fires a hook that rebuilds
+    # the initramfs, and it reads whatever preset is on disk. With the live
+    # preset still there the hook fails on "'/boot/vmlinuz-linux' must be
+    # readable" -- /boot is the ESP here, not the live media. Clear the
+    # config first, then remove the package.
+    rm -f /mnt/etc/mkinitcpio.conf.d/archiso.conf
+    if [[ -f /mnt/etc/mkinitcpio.d/linux.preset ]] \
+       && grep -q archiso /mnt/etc/mkinitcpio.d/linux.preset 2>/dev/null; then
+        rm -f /mnt/etc/mkinitcpio.d/linux.preset
+    fi
     arch-chroot /mnt pacman -Rns --noconfirm \
         mkinitcpio-archiso archinstall 2>/dev/null || true
-    rm -f /mnt/etc/mkinitcpio.conf.d/archiso.conf
     rm -f /mnt/etc/systemd/system/multi-user.target.wants/choose-mirror.service \
           /mnt/etc/systemd/system/multi-user.target.wants/livecd-talk.service \
           /mnt/etc/systemd/system/multi-user.target.wants/pacman-init.service
@@ -502,9 +511,9 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # not exist once the disc is out. sakura-branding ships the real one.
     if [[ -f /mnt/etc/pacman.d/sakura-core.conf ]]; then
         sed -i '/^\[sakura-core\]/,/^$/d; /^\[sakura-extra\]/,/^$/d' \
-            /mnt/etc/pacman.conf 2>/dev/null || true
+/mnt/etc/pacman.conf 2>/dev/null || true
         grep -q 'sakura-core.conf' /mnt/etc/pacman.conf \
-            || echo 'Include = /etc/pacman.d/sakura-core.conf' >> /mnt/etc/pacman.conf
+|| echo 'Include = /etc/pacman.d/sakura-core.conf' >> /mnt/etc/pacman.conf
     fi
     rm -rf /mnt/usr/share/sakura/repo
 
@@ -512,10 +521,30 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # The kernel is not carried over: the live image boots stock linux and
     # this machine may want the tuned one. Graphics and any extras are
     # installed the same way they always were.
-    # shellcheck disable=SC2086
-    if ! arch-chroot /mnt pacman -S --noconfirm --needed \
-            "$KERNEL" $GRAPHICS_PACKAGES $EXTRA_PACKAGES 2>&1 | tail -3; then
+    # A copied filesystem has no package databases -- archiso ships none --
+    # so every target reads as "not found" until they are fetched. Offline
+    # this still succeeds for the on-media repo, which is a file:// path
+    # rsync copied onto the new system; the network repos just fail, and
+    # that is not fatal because the tuned kernel ships on the media.
+    arch-chroot /mnt pacman -Sy --noconfirm >/dev/null 2>&1 || true
+
+    # The kernel is the one thing a copy install genuinely cannot do without:
+    # the live image boots stock linux and this machine may want the tuned
+    # one. It comes from the media, so this works with the network unplugged.
+    if ! arch-chroot /mnt pacman -S --noconfirm --needed "$KERNEL" 2>&1 | tail -3; then
         die "could not install the kernel onto the new system."
+    fi
+
+    # Graphics and extras are best-effort by comparison. Offline they may not
+    # resolve, and an install that otherwise succeeded should not be thrown
+    # away over them -- the live image already carries the open drivers, and
+    # the first update after the machine is online will fill in the rest.
+    # shellcheck disable=SC2086
+    if [[ -n "${GRAPHICS_PACKAGES}${EXTRA_PACKAGES}" ]]; then
+        arch-chroot /mnt pacman -S --noconfirm --needed \
+            $GRAPHICS_PACKAGES $EXTRA_PACKAGES 2>&1 | tail -3 \
+            || info "WARNING: some extra packages could not be installed; \
+the system will pick them up once it is online."
     fi
 else
     step "Installing packages"
@@ -680,7 +709,7 @@ for line in p.read_text().splitlines():
     if stripped.startswith("["):
         in_block = stripped == "[sakura-core]"
     if in_block or stripped == INCLUDE or stripped == MARKER:
-        continue                      # rebuilt below, exactly once
+        continue          # rebuilt below, exactly once
     out.append(line)
 
 try:
@@ -791,10 +820,10 @@ chmod 440 /etc/sudoers.d/10-wheel
 # one service, and it is exactly what happened when the published repository
 # was a version behind and three units were not in the target yet.
 for unit in sddm NetworkManager sakura-updates.timer bluetooth.service \
-            cups.socket snapd.socket sakura-store-updates.timer \
-            sakura-boot-success.service sakura-aur-campaign-check.timer \
-            sakura-kernel-sync.service snapper-cleanup.timer \
-            sakura-mirrors.timer; do
+cups.socket snapd.socket sakura-store-updates.timer \
+sakura-boot-success.service sakura-aur-campaign-check.timer \
+sakura-kernel-sync.service snapper-cleanup.timer \
+sakura-mirrors.timer; do
     if ! systemctl enable "\$unit" >/dev/null 2>&1; then
         echo "[sakura-install] warning: could not enable \$unit"
     fi

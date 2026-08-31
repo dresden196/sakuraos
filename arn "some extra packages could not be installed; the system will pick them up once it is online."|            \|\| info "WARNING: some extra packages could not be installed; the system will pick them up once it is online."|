@@ -1,0 +1,17 @@
+      | awk 'tolower($2) == "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" {print $1}'); do
+  gsub(/MiB/, "", $2); gsub(/MiB/, "", $3); gsub(/MiB/, "", $4)
+  if ($4 + 0 > best + 0) { best = $4; s = $2; e = $3 }
+return 0
+return 1
+0|23|24) : ;;
+*) die "copying the system failed (rsync exit $_rc)." ;;
+ var/cache/pacman/pkg; do
+/mnt/etc/pacman.conf 2>/dev/null || true
+|| echo 'Include = /etc/pacman.d/sakura-core.conf' >> /mnt/etc/pacman.conf
+$GRAPHICS_PACKAGES $EXTRA_PACKAGES 2>&1 | tail -3 \
+|| warn "some extra packages could not be installed; the system will pick them up once it is online."
+        continue          # rebuilt below, exactly once
+cups.socket snapd.socket sakura-store-updates.timer \
+sakura-boot-success.service sakura-aur-campaign-check.timer \
+sakura-kernel-sync.service snapper-cleanup.timer \
+sakura-mirrors.timer; do
