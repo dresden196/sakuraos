@@ -68,17 +68,42 @@
 
 <h2>Applications update too</h2>
 <p>
-  Flatpaks and Snaps are updated alongside the system packages, so keeping
-  current is one thing rather than three. Packages installed from the AUR are
-  the exception, and are covered in <a href="/docs/aur">The AUR</a>.
+  After the system packages are done, Flatpaks and Snaps are updated as well,
+  so keeping current is one thing rather than three. Neither is treated as
+  fatal: a machine whose Flatpak remote is unreachable has still had a
+  successful system update, and calling that a failed run would be wrong.
+</p>
+<p>
+  Packages installed from the AUR are deliberately excluded. Updating one means
+  running a build script written by somebody else, and doing that unattended at
+  three in the morning is exactly what the AUR being off by default exists to
+  prevent. They are reported for your review instead, and covered in
+  <a href="/docs/aur">The AUR</a>.
 </p>
 
+<h2>Evidence from our own machines</h2>
+<p>
+  A machine of ours installs every pending update, reboots, and re-runs the
+  same checks a fresh install has to pass. When that machine does not survive,
+  the packages in that transaction are published as an advisory and held back
+  on yours.
+</p>
+<p>
+  The hold covers everything in the failed transaction rather than one package,
+  because the canary knows the update broke a machine, not which package did
+  it. Narrowing that down is a bisect, and a bisect is a person's job rather
+  than a nightly timer's.
+</p>
 <div class="note">
   <p>
-    <strong>Planned, not present.</strong> A canary fleet that installs and
-    reboots every Arch update before it reaches anyone else, so that a broken
-    update can be held for everybody rather than caught per machine, is
-    designed and not yet built. The setting exists in System Settings and does
-    not gate anything today. When it works, this page will say so.
+    <strong>It fails open.</strong> If the advisory feed cannot be reached,
+    nothing is held. A machine that cannot reach us must still get its security
+    updates; holding everything back because a web request failed would strand
+    exactly the machines least able to recover. The same is true of the Arch
+    news feed.
   </p>
 </div>
+<p>
+  This is the <code>RequireCanaryEvidence</code> setting, on by default. Turning
+  it off means updates reach you without waiting on our test machine.
+</p>

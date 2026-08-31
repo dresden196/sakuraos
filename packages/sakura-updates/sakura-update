@@ -18,6 +18,7 @@ import fcntl
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.request
@@ -27,6 +28,7 @@ from pathlib import Path
 CONFIG = Path(os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf"))
 STATE = Path(os.environ.get("SAKURA_STATE", "/var/lib/sakura/updates"))
 NEWS_URL = "https://archlinux.org/feeds/news/"
+ADVISORY_URL = "https://repo.sakuraos.org/advisories.json"
 
 # A package whose upgrade means the running system no longer matches what is
 # on disk. Nothing here can take effect until a restart, so saying so is the
@@ -158,9 +160,46 @@ def _mentions(title: str, pkg: str) -> bool:
     return len(stem) > 3 and stem in words
 
 
+def canary_broken() -> tuple[list[str], str]:
+    """Packages a canary machine could not survive.
+
+    A machine of ours installs every pending update, reboots and re-runs the
+    install checks. When that fails, everything in the transaction is listed
+    here: the canary knows the update broke a machine, not which package did
+    it, and pretending to more precision than that would hold back the wrong
+    things.
+
+    Fails open, deliberately and in the same direction as the news feed. A
+    machine that cannot reach us must still get its security updates; holding
+    everything back because a web request failed would strand exactly the
+    machines least able to recover.
+    """
+    try:
+        with urllib.request.urlopen(ADVISORY_URL, timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:
+        return [], ""
+    if not isinstance(data, dict):
+        return [], ""
+    broken = [p for p in data.get("broken", []) if isinstance(p, str)]
+    return broken, str(data.get("reason", ""))
+
+
 def apply_holds(ups: list[Update], cfg: dict) -> list[tuple[str, str]]:
     """Hold only the packages a notice is actually about."""
     holds = []
+
+    # Evidence from our own machines, when the setting asks for it.
+    if cfg.get("RequireCanaryEvidence", "true").lower() == "true":
+        broken, reason = canary_broken()
+        if broken:
+            matched = [u for u in ups if u.name in broken]
+            for u in matched:
+                u.held = "This update broke a test machine of ours."
+            if matched:
+                holds.append((reason or "Held after a failed test install",
+                              ", ".join(u.name for u in matched)))
+
     for title in news_items():
         matched = [u for u in ups if _mentions(title, u.name)]
         if not matched:
@@ -354,9 +393,45 @@ def cmd_apply(args) -> int:
     if r.returncode != 0:
         return r.returncode
 
+    update_bundled_apps()
+
     if any(u.restart for u in ready):
         print("\nA restart is needed to finish.")
     return 0
+
+
+def update_bundled_apps() -> None:
+    """Update Flatpaks and Snaps as well.
+
+    Without this the promise is only two thirds true: the system keeps itself
+    current and the applications quietly do not, which is the worse half to
+    get wrong because a browser is the thing actually facing the internet.
+
+    Neither is fatal. A machine whose Flatpak remote is unreachable has still
+    had a successful system update, and reporting that as a failed update run
+    would be wrong.
+
+    The AUR is deliberately absent. Updating an AUR package means running a
+    build script written by somebody else, and doing that unattended at three
+    in the morning is exactly what the AUR being off by default exists to
+    prevent. Those are reported for review instead.
+    """
+    for tool, args, label in (
+        ("flatpak", ["flatpak", "update", "-y", "--noninteractive"], "Flatpak"),
+        ("snap", ["snap", "refresh"], "Snap"),
+    ):
+        if not shutil.which(tool):
+            continue
+        try:
+            r = subprocess.run(args, capture_output=True, text=True, timeout=1800)
+            if r.returncode != 0:
+                print(f"{label} updates did not finish: "
+                      f"{(r.stderr or '').strip().splitlines()[-1:] or ['no detail']}",
+                      file=sys.stderr)
+        except subprocess.TimeoutExpired:
+            print(f"{label} updates timed out", file=sys.stderr)
+        except OSError as e:
+            print(f"{label} updates could not run: {e}", file=sys.stderr)
 
 
 def cmd_status(args) -> int:
