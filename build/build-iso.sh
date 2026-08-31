@@ -71,7 +71,16 @@ docker run --rm --privileged \
         # one just built -- and would fail signature verification outright if
         # the signing key has been rotated since. Upstream packages are left
         # cached; they are versioned properly and are the slow part to fetch.
-        rm -f /var/cache/pacman/pkg/sakura-*.pkg.tar.zst*
+        #
+        # Match on what is actually in our repo rather than on a sakura-*
+        # glob. The rebuilt AUR packages -- snapd, the limine hooks -- carry
+        # upstream names, so the glob never covered them: a stale snapd sat in
+        # the cache across builds and failed every ISO with "invalid or
+        # corrupted package", which reads as a bad download and is not one.
+        for _ours in /build/repo/*/os/*/*.pkg.tar.zst; do
+            [ -e "$_ours" ] || continue
+            rm -f "/var/cache/pacman/pkg/$(basename "$_ours")"*
+        done
 
         rm -rf /tmp/work
         mkarchiso -v -w /tmp/work -o /build/out /build/iso
