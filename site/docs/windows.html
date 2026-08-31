@@ -1,0 +1,62 @@
+<h1>Windows applications</h1>
+<p class="lede">
+  Windows software runs through Wine. SakuraOS installs it the first time you
+  actually need it, rather than putting a gigabyte on every machine on the
+  chance that somebody might, and it can take that gigabyte back off again.
+</p>
+
+<h2>It is a switch that behaves like an operation</h2>
+<p>
+  Turning Windows application support on installs about a gigabyte, so it does
+  not pretend to be an instant toggle. It reports progress, it can fail, and
+  the interface shows both.
+</p>
+<p>
+  Enabling installs Wine plus the two runtimes almost everything needs: Mono
+  for .NET applications, and Gecko for anything that embeds a browser. Skipping
+  those is the usual reason a program that "should work in Wine" does not.
+</p>
+
+<h2>Turning it off actually removes it</h2>
+<p>
+  Disabling removes Wine and its runtimes again.
+</p>
+<p>
+  That is the half other distributions leave out, and it is why people end up
+  carrying a gigabyte of Wine they stopped using two years ago. Offering only
+  the installing half of a decision is not offering a choice.
+</p>
+
+<h2>Opening a Windows program asks first</h2>
+<p>
+  Windows executables are pointed at a guard rather than run directly. Opening
+  one asks a question instead of silently executing it.
+</p>
+<p>
+  A <code>.exe</code> that arrived in a download folder or an email attachment
+  is the single most common way a desktop gets compromised, and the fact that
+  the machine is running Linux does not make running the file a good idea.
+  Wine will execute it perfectly well.
+</p>
+
+<h2>What works</h2>
+<p>
+  The same things that work under Wine anywhere, which is a great deal of
+  software and not all of it. SakuraOS carries a small database of known
+  applications so that the common cases can be recognised rather than left to
+  you to work out.
+</p>
+<p>
+  Nothing here changes what Wine can and cannot run. It changes when it gets
+  installed, whether it can be removed, and whether opening an executable is a
+  decision or an accident.
+</p>
+
+<div class="note">
+  <p>
+    <strong>Games.</strong> For games specifically, Steam's own Proton is
+    usually the better route and is available from the
+    <a href="/docs/store">App Store</a> like anything else. This page is about
+    ordinary Windows applications.
+  </p>
+</div>

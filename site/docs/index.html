@@ -1,0 +1,51 @@
+<h1>Documentation</h1>
+<p class="lede">
+  SakuraOS is Arch Linux with the parts that usually take a weekend already
+  decided, and a set of applications built so that deciding differently later
+  does not require a terminal. This is what each part actually does.
+</p>
+
+<div class="cards">
+  <a href="/docs/install"><strong>Installing</strong><span>What the installer asks, what it writes to the disk, and the subvolume layout it creates.</span></a>
+  <a href="/docs/recovery"><strong>Recovery</strong><span>Restore points, the boot menu, the failed-boot counter, and how a rollback actually works.</span></a>
+  <a href="/docs/updates"><strong>Updates</strong><span>When they run, what is held back, and the restore point taken first.</span></a>
+  <a href="/docs/store"><strong>App Store</strong><span>Four sources in one place, and what installing from each one means.</span></a>
+  <a href="/docs/aur"><strong>The AUR</strong><span>Off by default, checked against known attack campaigns, reviewed before it builds.</span></a>
+  <a href="/docs/terminal"><strong>Terminal Assist</strong><span>The check inside pacman, the layer in your shell, and how to override both.</span></a>
+  <a href="/docs/kernel"><strong>Kernel</strong><span>The CachyOS build, the processor check, and what older machines get instead.</span></a>
+  <a href="/docs/tuning"><strong>Tuning</strong><span>The sysctl values, the per-drive I/O scheduler, and compressed swap.</span></a>
+  <a href="/docs/windows"><strong>Windows apps</strong><span>Wine installed the first time you need it, and removed again when you do not.</span></a>
+</div>
+
+<h2>What SakuraOS is</h2>
+<p>
+  Arch underneath, KDE Plasma on top, BTRFS with automatic restore points, and
+  a boot chain built out of limine and unified kernel images. Every one of
+  those is a choice somebody normally has to make during an Arch install, and
+  making them is most of what an opinionated distribution is for.
+</p>
+<p>
+  The parts that are ours are the ones that were missing: an installer that
+  asks in plain language, a store that covers four packaging systems at once,
+  an update engine that takes a restore point before it touches anything, and
+  a guard that sits inside pacman rather than beside it.
+</p>
+
+<h2>What it is not</h2>
+<p>
+  It is not a locked-down system. Every guard here names its own override, the
+  AUR is one checkbox away, and nothing stops you replacing any of it. The
+  defaults are opinions, not restrictions.
+</p>
+<p>
+  It is also not finished. This documentation describes what is built and
+  working today. Where something is planned rather than present, it says so
+  rather than describing it in the present tense.
+</p>
+
+<h2>Getting help</h2>
+<p>
+  Every page here is written from the code that ships. If something on this
+  site does not match what your machine does, the machine is right and the
+  page is a bug worth reporting.
+</p>

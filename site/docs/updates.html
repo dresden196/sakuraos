@@ -1,0 +1,84 @@
+<h1>How updates work</h1>
+<p class="lede">
+  SakuraOS updates itself overnight, behind a restore point, and holds back
+  anything Arch has published a manual step for. Falling months behind on a
+  rolling release is more dangerous than updating often.
+</p>
+
+<h2>When it runs</h2>
+<p>
+  A systemd timer checks nightly at <strong>03:00</strong>, with up to twenty
+  minutes of jitter so that every SakuraOS machine in the world does not hit
+  the mirrors in the same second. The timer is persistent: a machine that was
+  asleep at three in the morning runs the check when it next wakes rather than
+  skipping the day.
+</p>
+<p>
+  The time is a setting, along with whether updates apply automatically at all,
+  whether the machine must be on mains power first, and whether it may reboot
+  itself afterwards.
+</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>AutoApply</code></td><td>true</td><td>Install what is ready, rather than only telling you about it.</td></tr>
+    <tr><td><code>Window</code></td><td>03:00</td><td>When the nightly check runs.</td></tr>
+    <tr><td><code>RequireACPower</code></td><td>true</td><td>Do not update a laptop running on its battery.</td></tr>
+    <tr><td><code>AutoReboot</code></td><td>false</td><td>Never restart the machine on its own. You are told when a restart is needed.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>The restore point comes first</h2>
+<p>
+  Nothing is installed until a snapshot exists. That is the whole reason
+  automatic updates are defensible on a rolling release: the worst case is a
+  reboot and a menu entry, not an afternoon.
+</p>
+<p>
+  See <a href="/docs/recovery">Recovery</a> for what happens when you use it.
+</p>
+
+<h2>What gets held back</h2>
+<p>
+  Arch publishes a news item when an update needs a human to do something
+  first. The update engine reads that feed, matches the notices against the
+  packages actually queued for your machine, and holds only those packages
+  back, with the reason attached.
+</p>
+<p>
+  The matching is deliberately narrow. Only the leading component of a package
+  name is tried, because a notice about <code>linux</code> would otherwise
+  match every <code>linux-</code> package on the system and hold back an entire
+  update for no reason.
+</p>
+<p>
+  Held updates are not hidden. They are listed with the notice that caused the
+  hold, so the decision is yours rather than the engine's.
+</p>
+
+<h2>What an update tells you</h2>
+<p>
+  Nobody knows what <code>libjxl</code> is. The list says what a package is for
+  and what on your system depends on it, so that agreeing to an update is
+  something you can actually do knowingly rather than by reflex.
+</p>
+
+<h2>Applications update too</h2>
+<p>
+  Flatpaks and Snaps are updated alongside the system packages, so keeping
+  current is one thing rather than three. Packages installed from the AUR are
+  the exception, and are covered in <a href="/docs/aur">The AUR</a>.
+</p>
+
+<div class="note">
+  <p>
+    <strong>Planned, not present.</strong> A canary fleet that installs and
+    reboots every Arch update before it reaches anyone else, so that a broken
+    update can be held for everybody rather than caught per machine, is
+    designed and not yet built. The setting exists in System Settings and does
+    not gate anything today. When it works, this page will say so.
+  </p>
+</div>

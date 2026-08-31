@@ -1,0 +1,95 @@
+<h1>Installing SakuraOS</h1>
+<p class="lede">
+  Fourteen steps, each one saying what it will do rather than naming the thing
+  it configures. Nothing is written to the disk until the summary screen, and
+  the summary says so.
+</p>
+
+<h2>What it asks</h2>
+<p>
+  Language, keyboard, network, time, appearance, disk, encryption, your
+  account, a browser, how updates should behave, which SakuraOS features you
+  want, and privacy. Then a summary, then the install.
+</p>
+<p>
+  The network step is optional. SakuraOS installs from the disc, so a machine
+  with no cable and no wifi still gets a complete system. Connecting during the
+  install means the machine arrives up to date with the right graphics driver
+  already on it, rather than doing that on first boot.
+</p>
+
+<h2>The disk layout</h2>
+<p>
+  One EFI system partition and one BTRFS partition, with five subvolumes.
+</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Subvolume</th><th>Mounted at</th><th>Why it is separate</th></tr></thead>
+  <tbody>
+    <tr><td><code>@</code></td><td><code>/</code></td><td>The system. This is what a restore point restores and what a rollback replaces.</td></tr>
+    <tr><td><code>@home</code></td><td><code>/home</code></td><td>Your files. Never part of a system restore point, so rolling back the system never touches your documents.</td></tr>
+    <tr><td><code>@log</code></td><td><code>/var/log</code></td><td>Logs survive a rollback. The record of what went wrong is the thing you need after going back, and it would otherwise be rolled back along with the fault.</td></tr>
+    <tr><td><code>@pkg</code></td><td><code>/var/cache/pacman/pkg</code></td><td>The package cache is large and worthless to snapshot. Keeping it out means snapshots stay cheap.</td></tr>
+    <tr><td><code>@snapshots</code></td><td><code>/.snapshots</code></td><td>Where the restore points live. A subvolume cannot usefully contain its own snapshots.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  The EFI system partition is <strong>1 GiB</strong>. That is larger than the
+  usual advice, and deliberately: a unified kernel image is the kernel plus the
+  entire initramfs in one file, there are two of them here (the normal one and
+  the recovery one), and a machine that cannot write a new boot image because
+  the ESP filled up is a machine that cannot take a kernel update.
+</p>
+<p>
+  It is mounted with <code>fmask=0077,dmask=0077</code>. It holds the boot
+  chain and, once Secure Boot is set up, key material. No other account has
+  business reading it.
+</p>
+
+<h2>Encryption</h2>
+<p>
+  Optional, LUKS, and applied to the BTRFS partition only. The ESP stays
+  unencrypted because firmware has to be able to read it, which is true of
+  every full-disk encryption setup on every operating system.
+</p>
+<p>
+  When encryption is on, the <code>encrypt</code> hook goes into the initramfs
+  and the kernel command line carries the <code>cryptdevice</code> for both the
+  normal and the recovery boot images. The recovery path is easy to forget and
+  is exactly when you need it to work.
+</p>
+
+<h2>Secure Boot</h2>
+<p>
+  If the firmware is in setup mode, the installer generates keys on your
+  machine with <code>sbctl</code>, enrols them alongside Microsoft's, and signs
+  the boot chain.
+</p>
+<p>
+  Microsoft's keys are enrolled too because some hardware needs them for its
+  own option ROMs, and a machine whose graphics card stops initialising is a
+  worse outcome than a slightly larger trust store.
+</p>
+<p>
+  Most Arch-based distributions tell you to switch Secure Boot off in firmware.
+  That is where a lot of people quietly give up, and it is why this is part of
+  the install rather than a wiki page.
+</p>
+
+<h2>The kernel is chosen for your processor</h2>
+<p>
+  The installer checks what your CPU supports and installs the tuned kernel or
+  the standard one accordingly. You are not asked, and there is nothing to
+  undo. See <a href="/docs/kernel">Kernel</a>.
+</p>
+
+<div class="note">
+  <p>
+    <strong>Nothing is written until you press Install.</strong> The summary
+    screen lists every decision and states plainly which disk is about to be
+    erased and that other disks are not touched.
+  </p>
+</div>

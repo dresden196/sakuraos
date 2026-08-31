@@ -1,0 +1,83 @@
+<h1>The App Store</h1>
+<p class="lede">
+  Four packaging systems in one place, with the source of every application
+  stated plainly rather than buried. The same application often exists in more
+  than one of them, and which one you pick has real consequences.
+</p>
+
+<h2>The four sources</h2>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Source</th><th>What it is</th><th>Reviewed by</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Repositories</strong></td>
+      <td>Arch's own packages, plus ours. Native, smallest, best integrated with the system.</td>
+      <td>Arch package maintainers</td>
+    </tr>
+    <tr>
+      <td><strong>Flatpak</strong></td>
+      <td>Sandboxed applications from Flathub, carrying their own runtime. Newer versions, larger downloads.</td>
+      <td>Flathub, with per-application sandbox permissions</td>
+    </tr>
+    <tr>
+      <td><strong>Snap</strong></td>
+      <td>Canonical's format. Present because some software ships here and nowhere else.</td>
+      <td>Canonical, with automatic review for most publishers</td>
+    </tr>
+    <tr>
+      <td><strong>AUR</strong></td>
+      <td>Build scripts written by other users. Off by default. See <a href="/docs/aur">The AUR</a>.</td>
+      <td><strong>Nobody.</strong> That is the whole point of the page about it.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p>
+  Where an application exists in more than one source, the store matches them
+  up and shows you the choice rather than picking silently. A Flatpak of the
+  same program is usually newer and always larger; the repository version is
+  usually better integrated. Neither is right in general.
+</p>
+
+<h2>Ordering</h2>
+<p>
+  The default preference is repositories first, then Flatpak, then Snap, then
+  the AUR. That order runs from "reviewed by a distribution and integrated with
+  your system" to "arbitrary code from a stranger", which is the order most
+  people would choose if the information were in front of them.
+</p>
+
+<h2>AppImages</h2>
+<p>
+  An AppImage is a single executable file. The store can install one you have
+  already downloaded, or fetch one and integrate it so it appears in your
+  application menu like anything else.
+</p>
+<p>
+  The order of operations is deliberate: <strong>download, verify, then make
+  executable</strong>. An AppImage is an executable fetched over the network,
+  and marking it runnable before knowing it arrived intact is the one step
+  never worth skipping.
+</p>
+<p>
+  Many AppImages carry no update information at all. When that is true, the
+  store says so at install time rather than leaving you with a program that
+  silently never updates again.
+</p>
+
+<h2>Keeping things current</h2>
+<p>
+  Repository packages, Flatpaks and Snaps are all updated by the nightly update
+  run, so keeping current is one thing rather than three. AUR packages are the
+  exception and are covered in <a href="/docs/aur">The AUR</a>.
+</p>
+
+<h2>What the store will not do quietly</h2>
+<p>
+  Removals go through the same guard as everything else. If a package the
+  system depends on is about to be removed, the check inside pacman stops it no
+  matter which application asked. See <a href="/docs/terminal">Terminal Assist</a>.
+</p>

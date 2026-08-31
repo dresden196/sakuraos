@@ -1,0 +1,96 @@
+<h1>The AUR on SakuraOS</h1>
+<p class="lede">
+  The Arch User Repository is why you can install almost anything on Arch
+  without hunting for a package. It is also build scripts written by other
+  users that nobody reviews. SakuraOS ships it turned off, and gives you two
+  different things to lean on once you turn it on.
+</p>
+
+<h2>Off by default, one checkbox away</h2>
+<p>
+  A fresh install has the AUR disabled, because you have not agreed to run
+  unreviewed code from strangers yet and nobody asked you. Turning it on is one
+  checkbox in System Settings. It is not hidden behind a configuration file or
+  a wiki page, and nothing nags you about it afterwards.
+</p>
+
+<h2>Two safeguards that face opposite directions</h2>
+<p>
+  These are frequently confused, and the difference is the entire point.
+</p>
+
+<h3>The campaign check faces backwards</h3>
+<p>
+  When the AUR is used to ship malware, the affected packages, the files they
+  drop and the services they install get published afterwards. The campaign
+  check compares what you have installed against those published lists, on a
+  timer and whenever something new is installed.
+</p>
+<p>
+  It answers one question: <em>am I holding something from a campaign somebody
+  has already reported?</em> Exact matches, not guesswork.
+</p>
+
+<div class="warn">
+  <p>
+    <strong>It is not a malware scanner.</strong> It cannot say anything about
+    a package nobody has reported yet, and describing it as antivirus would be
+    a lie that gets somebody hurt. A build script is arbitrary code, and no
+    tool can prove arbitrary code is safe.
+  </p>
+</div>
+
+<h3>The review faces forwards</h3>
+<p>
+  Before a package builds, the store shows you what the script actually does:
+  the build script itself, what changed since the version you last accepted,
+  and the signals that tend to matter. A maintainer who changed last week. A
+  package adopted three days ago. A download that is not coming from the
+  project's own servers.
+</p>
+<p>
+  That is the half that can catch something nobody has reported. It needs you
+  to read it, which is why the diff is shown rather than a verdict.
+</p>
+
+<p>
+  Between them: the check catches what is known, and the review is how you
+  catch what is not yet. Anyone promising a single check that catches
+  everything is selling you something.
+</p>
+
+<h2>Where the campaign lists come from</h2>
+<p>
+  The checking tool is
+  <a href="https://github.com/lenucksi/aur-malware-check">lenucksi/aur-malware-check</a>,
+  GPL-3.0, installed unmodified so it can be diffed against upstream without
+  unpicking our packaging.
+</p>
+<p>
+  It is pinned by commit rather than by tag. At the time of packaging the
+  <code>v3.0.0</code> tag was 66 commits behind <code>master</code>, and for a
+  tool whose entire job is integrity, a moving branch is not a dependency, it
+  is a hole. Moving the pin is a deliberate act that involves reading the diff.
+</p>
+
+<h2>AUR updates</h2>
+<div class="warn">
+  <p>
+    <strong>AUR packages are not updated automatically, and this is a gap.</strong>
+    The nightly update run covers repository packages, Flatpaks and Snaps. It
+    does not rebuild anything from the AUR. A package you installed from there
+    stays at the version you built until you rebuild it yourself.
+  </p>
+  <p>
+    Surfacing those in the store as something needing your review, rather than
+    updating them silently, is the intended fix and is not built yet. Until it
+    is, treat anything you install from the AUR as yours to keep current.
+  </p>
+</div>
+
+<h2>The guard still applies</h2>
+<p>
+  An AUR helper is still pacman underneath, so the removal check inside pacman
+  applies to it exactly as it does to anything else. See
+  <a href="/docs/terminal">Terminal Assist</a>.
+</p>

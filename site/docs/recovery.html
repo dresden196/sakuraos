@@ -1,0 +1,129 @@
+<h1>Restore points and recovery</h1>
+<p class="lede">
+  A restore point is taken before anything changes the system. If a change
+  goes wrong you pick Recovery at the boot menu and go back, without a live
+  USB and without knowing what a chroot is.
+</p>
+
+<h2>When a restore point is taken</h2>
+<p>
+  Snapper is configured against the root subvolume, and <code>snap-pac</code>
+  hooks pacman, so every transaction that installs, upgrades or removes a
+  package is bracketed by a snapshot taken before it and one taken after.
+  The update engine takes its own before it starts. You can also take one by
+  hand from the Update Center before doing something risky.
+</p>
+<p>
+  Snapshots are cheap on BTRFS. They are not copies: a snapshot costs almost
+  nothing until something changes, and then costs only what changed.
+</p>
+
+<div class="note">
+  <p>
+    <strong>Your files are not in it.</strong> <code>/home</code> is a separate
+    subvolume and is never part of a system restore point. Rolling back the
+    system does not roll back your documents, and it does not delete them
+    either. A restore point is for the operating system, not for your data.
+  </p>
+</div>
+
+<h2>How rollback actually works</h2>
+<p>
+  The obvious design is one boot entry per snapshot, each with its own
+  <code>rootflags=subvol=</code> on the kernel command line. SakuraOS does not
+  do that, and the reason matters.
+</p>
+<p>
+  The system boots a unified kernel image, which embeds its own command line.
+  <code>systemd-stub(7)</code> is explicit that when Secure Boot is enabled and
+  the image carries a <code>.cmdline</code> section, any command line passed in
+  from outside is <em>ignored</em>. So the per-snapshot entry approach fails
+  silently on exactly the machines that took the trouble to enable Secure Boot:
+  the menu offers a snapshot from three days ago, you pick it, and the current
+  system boots anyway.
+</p>
+<p>
+  A rollback that quietly does nothing is worse than having no rollback at all.
+  So the command line here always says <code>subvol=@</code>, and rolling back
+  changes what <code>@</code> <em>is</em>:
+</p>
+<ol>
+  <li>The current <code>@</code> is renamed to <code>@rollback-&lt;timestamp&gt;</code>. It is kept, not deleted.</li>
+  <li>A fresh writable subvolume is created at <code>@</code> from the snapshot you chose.</li>
+  <li>The machine reboots.</li>
+</ol>
+<p>
+  Because the command line never varies, it stays embedded and signed, and the
+  same mechanism works identically with Secure Boot on or off.
+</p>
+
+<h2>Why the picker lives in the initramfs</h2>
+<p>
+  Renaming a subvolume that is currently mounted appears to succeed and then
+  fails later. So the rollback tool refuses to run while <code>@</code> is
+  mounted as <code>/</code>, and the picker lives in an initramfs instead,
+  which is the one place the root subvolume is not in use.
+</p>
+<p>
+  A rollback you ask for from the running system does not happen there. It
+  reboots into recovery and the work is done from the initramfs.
+</p>
+
+<h2>The failed-boot counter</h2>
+<p>
+  A counter on the EFI system partition is incremented early in every boot and
+  cleared once the boot has demonstrably worked. After
+  <strong>three</strong> consecutive failures the boot menu offers recovery
+  without being asked.
+</p>
+<p>
+  The threshold is three rather than one because a single failed boot is
+  usually a power cut or a held power button, and offering recovery for that
+  teaches people the warning is noise.
+</p>
+<p>
+  Deciding when a boot has "worked" is the whole problem. Clearing the counter
+  as soon as systemd finishes means a machine whose display manager crashes in
+  a loop clears its own counter every time and never offers recovery. Waiting
+  for someone to log in means a machine left running unattended never clears
+  it at all.
+</p>
+
+<h2>Kernel updates and rollback</h2>
+<p>
+  <code>/boot</code> is the EFI system partition. It is FAT, so it is not part
+  of any BTRFS snapshot, and rollback cannot touch it. The unified kernel image
+  and <code>vmlinuz</code> live there while the kernel modules live in the root
+  subvolume.
+</p>
+<p>
+  Across a kernel update those two disagree after a rollback: the ESP still
+  boots the newer kernel, and the restored root has modules only for the older
+  one. Nothing fails outright, because the initramfs is embedded in the image
+  and still reaches userspace. The machine simply comes up with no module it
+  did not already have built in, which in practice means no network and no
+  graphics.
+</p>
+<p>
+  To somebody who has just rolled back to fix a problem, that reads as a larger
+  and stranger problem than the one they started with.
+  <code>sakura-kernel-sync.service</code> closes it: on every boot it asks
+  whether the running kernel has a modules directory, and if not, rebuilds the
+  boot image and reboots once. The condition it checks is the fault itself
+  rather than "did a rollback just happen", so it also catches any other route
+  into the same state. A stamp file stops it rebooting more than once for the
+  same fault; after that the boot counter offers recovery, which is the right
+  place for a problem it does not understand.
+</p>
+<p>
+  Ordinary rollbacks are unaffected. A bad desktop update leaves the kernel
+  alone, and the boot image still matches.
+</p>
+
+<div class="note">
+  <p>
+    <strong>Nothing is thrown away.</strong> The system you rolled back from is
+    kept as <code>@rollback-&lt;timestamp&gt;</code>. If you rolled back by
+    mistake, what you left is still on the disk.
+  </p>
+</div>
