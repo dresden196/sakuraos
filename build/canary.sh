@@ -31,7 +31,12 @@ say() { printf '\n>> %s\n' "$*"; }
 # A canary that reports "everything is fine" because it never ran is worse
 # than no canary, so every early exit here is a hard failure rather than an
 # empty advisory file.
-die() { echo "canary: $*" >&2; exit 1; }
+die() {
+    echo "canary: $*" >&2
+    "$REPO_ROOT/build/canary-notify.sh" stalled "$*" "" \
+        "$REPO_ROOT/out/canary-install.log" 2>/dev/null || true
+    exit 1
+}
 
 say "installing a fresh machine to update"
 SAKURA_VM=canary METHOD=copy "$REPO_ROOT/build/test-install.sh" >"$REPO_ROOT/out/canary-install.log" 2>&1 \
@@ -81,6 +86,9 @@ if [[ -n "$REASON" ]]; then
     # bisect, and a bisect is a person's job, not a nightly timer's.
     BROKEN=$(printf '%s\n' "$PENDING" | awk '{print $1}' | paste -sd, -)
     say "FAILED: $REASON"
+    "$REPO_ROOT/build/canary-notify.sh" broke \
+        "$COUNT updates broke the test machine. $REASON" "$BROKEN" \
+        "$REPO_ROOT/out/canary-verify.log" || true
 else
     say "passed"
 fi
