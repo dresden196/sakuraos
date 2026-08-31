@@ -14,6 +14,15 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export SAKURA_VM=clean
 
+# OFFLINE=1 runs the install with no route out, which is the case the copy
+# method exists for and the one this harness could never reach before: QEMU
+# user networking always hands the guest a working DHCP lease, so every run
+# so far proved only that an online install works.
+OFFLINE="${OFFLINE:-0}"
+if [[ "$OFFLINE" == "1" ]]; then
+    export SAKURA_VM_OFFLINE=1
+fi
+
 # A failed run used to leave its 6 GiB VM running. Several dead runs then
 # starved the host, and the next run's Plasma session timed out waiting for a
 # compositor -- which reads as a product bug and is not one. The harness now
@@ -205,8 +214,16 @@ check "snapshots exist"                    "test \"\$(snapper -c root list | wc 
 # The duplicate [sakura-core] left by pacstrap made every pacman run warn.
 check "sakura-core registered exactly once" \
       "test \"\$(grep -c '^\\[sakura-core\\]' /etc/pacman.conf)\" -eq 0"
-check_pacman "the repo resolves"           "pacman -Sy --noconfirm"
-check_pacman "our own packages verify"     "pacman -Sw --noconfirm sakura-store"
+# These two are the only checks that need a route out. Offline they are not
+# failures, they are not applicable -- skipped out loud rather than silently,
+# so a 35/35 offline pass can never be mistaken for the full 37.
+if [[ "$OFFLINE" == "1" ]]; then
+    echo "-- skipped (offline): the repo resolves"
+    echo "-- skipped (offline): our own packages verify"
+else
+    check_pacman "the repo resolves"           "pacman -Sy --noconfirm"
+    check_pacman "our own packages verify"     "pacman -Sw --noconfirm sakura-store"
+fi
 check "the display manager is enabled"     "systemctl is-enabled sddm"
 check "the network manager is enabled"     "systemctl is-enabled NetworkManager"
 check "a boot entry was written"           "efibootmgr | grep -qi sakura"

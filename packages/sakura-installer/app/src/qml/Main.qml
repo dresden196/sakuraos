@@ -2741,14 +2741,121 @@ QQC2.ApplicationWindow {
     Component {
         id: installPage
         ColumnLayout {
-            spacing: 20
-            Item { Layout.preferredHeight: 48 }
+            spacing: 18
+
+            // How long each slide holds. A copy install finishes in a couple
+            // of minutes, so a slower rotation would show two slides and stop
+            // -- the deck is paced to be seen, not to fill an hour.
+            readonly property int slideHold: 9000
+
+            readonly property var slides: [
+                {
+                    t: "Nothing you type can quietly break it",
+                    d: `Terminal Assist stops the commands known to wreck an Arch \
+system and explains what they would have done. You can always override one, \
+and it tells you exactly how.`
+                },
+                {
+                    t: "Every update is reversible",
+                    d: `A snapshot is taken before anything changes. If an update \
+goes wrong, pick Recovery in the boot menu and you are back where you were. \
+No live USB, no chroot, no forum thread.`
+                },
+                {
+                    t: "Software without the guesswork",
+                    d: `The App Store shows you what a package actually is before \
+it installs, and where it came from. The AUR stays off until you turn it on, \
+and Sakura reads the build script to you when you do.`
+                },
+                {
+                    t: "Tuned for the machine you have",
+                    d: `SakuraOS checks what your processor supports and installs \
+the kernel that suits it. Older hardware gets the one that runs everywhere, \
+newer hardware gets the faster build.`
+                }
+            ]
+            property int slideIndex: 0
+
+            Item { Layout.preferredHeight: 40 }
+
             Heading {
                 title: backend.running ? "Installing SakuraOS"
                      : backend.percent === 100 ? "SakuraOS is installed"
                      : "Ready to install"
                 subtitle: backend.running ? backend.currentStep : ""
             }
+
+            // The deck. It holds the space whether or not it is showing
+            // anything, so the progress bar underneath never jumps.
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 150
+                visible: !showLog.checked
+
+                ColumnLayout {
+                    id: deck
+                    width: parent.width
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 12
+                    opacity: 1
+                    Behavior on opacity { NumberAnimation { duration: 300 } }
+
+                    QQC2.Label {
+                        text: slides[slideIndex].t
+                        color: root.text
+                        font.pixelSize: 21
+                        font.weight: Font.DemiBold
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    QQC2.Label {
+                        text: slides[slideIndex].d
+                        color: root.dim
+                        font.pixelSize: 14
+                        lineHeight: 1.35
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+            }
+
+            // Which slide you are on. Repeater delegates are siblings, so the
+            // row is the parent and each dot sizes itself.
+            RowLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 7
+                visible: !showLog.checked
+                Repeater {
+                    model: slides.length
+                    delegate: Rectangle {
+                        required property int index
+                        Layout.preferredWidth: 6
+                        Layout.preferredHeight: 6
+                        radius: 3
+                        color: index === slideIndex ? root.accent : root.card
+                        Behavior on color { ColorAnimation { duration: 250 } }
+                    }
+                }
+            }
+
+            // The log, for when something has gone wrong and the slides are
+            // no longer the interesting thing on screen.
+            QQC2.ScrollView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: 0
+                visible: showLog.checked
+                QQC2.TextArea {
+                    readOnly: true
+                    text: backend.log
+                    color: root.dim
+                    font.family: "monospace"
+                    font.pixelSize: 11
+                    background: Rectangle { color: "#1e1218"; radius: 8 }
+                }
+            }
+
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 6
@@ -2762,19 +2869,42 @@ QQC2.ApplicationWindow {
                     Behavior on width { NumberAnimation { duration: 320 } }
                 }
             }
-            QQC2.ScrollView {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                visible: backend.log !== ""
-                QQC2.TextArea {
-                    readOnly: true
-                    text: backend.log
+
+            QQC2.CheckBox {
+                id: showLog
+                text: "Show details"
+                checked: false
+                font.pixelSize: 12
+                Layout.alignment: Qt.AlignHCenter
+                contentItem: QQC2.Label {
+                    text: showLog.text
                     color: root.dim
-                    font.family: "monospace"
-                    font.pixelSize: 11
-                    background: Rectangle { color: "#1e1218"; radius: 8 }
+                    font.pixelSize: 12
+                    leftPadding: showLog.indicator.width + 6
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
+
+            Item { Layout.preferredHeight: 6 }
+
+            // Advance in two beats: fade out, swap the text while it is
+            // invisible, fade back in. Swapping and fading at once shows the
+            // next slide arriving half-written.
+            Timer {
+                interval: slideHold
+                running: backend.running && !showLog.checked
+                repeat: true
+                onTriggered: { deck.opacity = 0; swap.restart() }
+            }
+            Timer {
+                id: swap
+                interval: 320
+                onTriggered: {
+                    slideIndex = (slideIndex + 1) % slides.length
+                    deck.opacity = 1
+                }
+            }
+
             Component.onCompleted: backend.install(root.answers)
         }
     }
