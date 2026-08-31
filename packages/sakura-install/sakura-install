@@ -408,7 +408,15 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # Everything except the parts that exist only because this is running
     # from a disc. /boot is the ESP and is written later; the kernel and the
     # UKI are generated after the copy, not carried over from the live image.
-    rsync -aAXH --info=progress2 \
+    # Progress is deliberately not asked for. --info=progress2 writes a line
+    # per file to whatever is capturing this, and on 207,000 files that was a
+    # 16 MB log with the actual error buried in it.
+    #
+    # 23 and 24 are not failures here. Copying a filesystem that is currently
+    # running means files can vanish underneath the copy and a few are
+    # unreadable by anyone; rsync says so and carries on, and under set -e
+    # that would end the install after the work was already done.
+    rsync -aAXH \
         --exclude=/proc/ --exclude=/sys/ --exclude=/dev/ --exclude=/run/ \
         --exclude=/tmp/ --exclude=/mnt/ --exclude=/media/ \
         --exclude=/boot/ \
@@ -418,7 +426,13 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
         --exclude=/etc/ssh/ssh_host_* \
         --exclude=/home/ \
         --exclude=/root/ \
-        "$SQUASH_ROOT"/ /mnt/ 2>&1 | tail -2
+        "$SQUASH_ROOT"/ /mnt/ 2>&1 | tail -2 || {
+        _rc=${PIPESTATUS[0]}
+        case "$_rc" in
+            0|23|24) : ;;
+            *) die "copying the system failed (rsync exit $_rc)." ;;
+        esac
+    }
 
     step "Making it a permanent system rather than a live one"
     # A live filesystem carries state that a fresh install must not inherit,
@@ -461,8 +475,15 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
 
     # Logs, caches and journals from the live session. A new machine should
     # not boot with a record of somebody else's installer run.
-    rm -rf /mnt/var/log/journal/* /mnt/var/cache/* /mnt/var/tmp/*
-    install -d -m 755 /mnt/var/cache/pacman/pkg
+    # Contents, not the directories. /var/cache/pacman/pkg is the @pkg
+    # subvolume's mountpoint -- kept out of snapshots on purpose -- and
+    # removing a mountpoint fails with "Device or resource busy", which is
+    # exactly how this step ended the install the first time it ran.
+    find /mnt/var/log/journal -mindepth 1 -delete 2>/dev/null || true
+    find /mnt/var/tmp -mindepth 1 -delete 2>/dev/null || true
+    find /mnt/var/cache -mindepth 1 -maxdepth 1 -not -name pacman \
+        -exec rm -rf {} + 2>/dev/null || true
+    find /mnt/var/cache/pacman/pkg -mindepth 1 -delete 2>/dev/null || true
 
     # The live pacman.conf points at the repository on the media, which will
     # not exist once the disc is out. sakura-branding ships the real one.

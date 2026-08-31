@@ -18,6 +18,9 @@ USER_NAME=tester
 USER_PASS=tester
 HOSTNAME_=sakura-clean
 
+# Which way the system gets onto the disk. copy is the default the installer
+# uses; online is the pacstrap path. Both have to pass the same checks.
+METHOD="${METHOD:-copy}"
 verify_only=0
 encrypt=0
 for arg in "$@"; do
@@ -90,7 +93,7 @@ if (( ! verify_only )); then
     run "setsid bash -c 'sakura-install --disk /dev/vda --user $USER_NAME \
          --password $USER_PASS --hostname $HOSTNAME_ --timezone UTC \
          --theme dark --keymap gb $CRYPT_ARGS \
-         --extra-packages qemu-guest-agent --yes \
+         --extra-packages qemu-guest-agent --method "$METHOD" --yes \
          > /tmp/install.log 2>&1 $CRYPT_IN; echo \$? > /tmp/install.rc' &" \
         >/dev/null 2>&1 || true
 
