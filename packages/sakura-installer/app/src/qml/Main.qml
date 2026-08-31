@@ -1481,7 +1481,7 @@ QQC2.ApplicationWindow {
             Item { Layout.preferredHeight: 34 }
             Heading {
                 title: "Network"
-                subtitle: "SakuraOS downloads most of itself while it installs, so this machine needs to be online before the next step."
+                subtitle: "SakuraOS installs from the disc, so this can wait. Connect now and the machine arrives up to date, with your graphics driver already on it."
             }
 
             // ---- where things stand ---------------------------------------
@@ -2393,7 +2393,13 @@ QQC2.ApplicationWindow {
                 placeholderText: "The name you go by"
                 onTextChanged: {
                     root.answers.fullname = text; root.answersChanged()
-                    if (root.answers.username === "")
+                    // Follow the name until the username is edited by hand.
+                    // The old guard was "username is still empty", but writing
+                    // autoUser.text fires its own onTextChanged, which filled
+                    // answers.username on the very first keystroke -- so the
+                    // guard was false from the second letter on and the
+                    // username stayed stuck at "d" for anyone called Dresden.
+                    if (!autoUser.editedByHand)
                         autoUser.text = text.toLowerCase().replace(/[^a-z0-9]/g, "")
                 }
             }
@@ -2403,6 +2409,10 @@ QQC2.ApplicationWindow {
                 Layout.maximumWidth: 420
                 // Says what the field wants rather than naming a person.
                 placeholderText: "lowercase, no spaces"
+                // textEdited fires only for typing, never for a binding or an
+                // assignment, which is exactly the distinction needed here.
+                property bool editedByHand: false
+                onTextEdited: editedByHand = true
                 onTextChanged: { root.answers.username = text; root.answersChanged() }
             }
             QQC2.Label { text: "Password"; color: root.dim; font.pixelSize: 13 }
