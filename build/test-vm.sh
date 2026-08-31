@@ -77,15 +77,39 @@ if (( reset )); then rm -f "$DISK" "$DISK2" "$NVRAM"; fi
 # that is under test.
 if (( reset_nvram )); then rm -f "$NVRAM"; fi
 
+# Distributions disagree about where OVMF lives and what the files are called:
+# Arch puts them in /usr/share/edk2/x64 as OVMF_CODE.4m.fd, Debian in
+# /usr/share/OVMF as OVMF_CODE_4M.fd. The canary runs on Debian and the
+# development machine is Arch, so look rather than assume.
+pick_firmware() {
+    local want="$1" p
+    for p in "$@"; do [[ -f "$p" ]] && { printf '%s' "$p"; return 0; }; done
+    return 1
+}
+
 if (( secboot )); then
-    CODE="$OVMF_DIR/OVMF_CODE.secboot.4m.fd"
+    CODE=$(pick_firmware \
+        "$OVMF_DIR/OVMF_CODE.secboot.4m.fd" \
+        /usr/share/OVMF/OVMF_CODE_4M.secboot.fd \
+        /usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd) \
+        || { echo "no Secure Boot OVMF firmware found" >&2; exit 1; }
 else
-    CODE="$OVMF_DIR/OVMF_CODE.4m.fd"
+    CODE=$(pick_firmware \
+        "$OVMF_DIR/OVMF_CODE.4m.fd" \
+        /usr/share/OVMF/OVMF_CODE_4M.fd \
+        /usr/share/edk2/x64/OVMF_CODE.4m.fd) \
+        || { echo "no OVMF firmware found" >&2; exit 1; }
 fi
+
+VARS_TEMPLATE=$(pick_firmware \
+    "$OVMF_DIR/OVMF_VARS.4m.fd" \
+    /usr/share/OVMF/OVMF_VARS_4M.fd \
+    /usr/share/edk2/x64/OVMF_VARS.4m.fd) \
+    || { echo "no OVMF variable template found" >&2; exit 1; }
 
 # Each VM needs a private, writable copy of the NVRAM vars — the shared one in
 # /usr/share is read-only and holds no per-machine Secure Boot state.
-[[ -f "$NVRAM" ]] || cp "$OVMF_DIR/OVMF_VARS.4m.fd" "$NVRAM"
+[[ -f "$NVRAM" ]] || cp "$VARS_TEMPLATE" "$NVRAM"
 [[ -f "$DISK" ]]  || qemu-img create -f qcow2 "$DISK" 60G >/dev/null
 # A second disk, so disk selection is exercised rather than assumed:
 # with one disk the picker looks right whether or not it enumerates.
