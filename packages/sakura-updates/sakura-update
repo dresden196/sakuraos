@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
@@ -28,6 +29,9 @@ CONFIG = Path(os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf"))
 STATE = Path(os.environ.get("SAKURA_STATE", "/var/lib/sakura/updates"))
 NEWS_URL = "https://archlinux.org/feeds/news/"
 ADVISORY_URL = "https://repo.sakuraos.org/advisories.json"
+# Long enough that a real hold survives a weekend, short enough that a dead
+# canary cannot freeze anybody's machine indefinitely.
+ADVISORY_MAX_AGE_DAYS = 7
 
 # A package whose upgrade means the running system no longer matches what is
 # on disk. Nothing here can take effect until a restart, so saying so is the
@@ -180,6 +184,21 @@ def canary_broken() -> tuple[list[str], str]:
         return [], ""
     if not isinstance(data, dict):
         return [], ""
+
+    # An advisory that stopped being refreshed must stop being obeyed.
+    # Otherwise one failed canary run followed by the canary itself dying
+    # holds those packages on every machine forever, and nobody finds out --
+    # which is the silent freeze this whole design exists to avoid, with the
+    # added insult that no human decided it.
+    stamp = str(data.get("generated", ""))
+    try:
+        age = datetime.now(timezone.utc) - datetime.fromisoformat(
+            stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return [], ""
+    if age > timedelta(days=ADVISORY_MAX_AGE_DAYS):
+        return [], ""
+
     broken = [p for p in data.get("broken", []) if isinstance(p, str)]
     return broken, str(data.get("reason", ""))
 
