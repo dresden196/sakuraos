@@ -4,7 +4,7 @@
 # over this. Changing an existing user's look on an update reads as a bug, so
 # nothing here is ever pushed onto a configured account.
 [General]
-AccentColor=216,27,96
+AccentColor=224,100,140
 accentColorFromWallpaper=false
 ColorScheme=SakuraLight
 widgetStyle=Breeze
