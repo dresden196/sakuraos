@@ -66,12 +66,26 @@
   something you can actually do knowingly rather than by reflex.
 </p>
 
-<h2>Applications update too</h2>
+<h2>Two timers, one promise</h2>
 <p>
-  After the system packages are done, Flatpaks and Snaps are updated as well,
-  so keeping current is one thing rather than three. Neither is treated as
-  fatal: a machine whose Flatpak remote is unreachable has still had a
-  successful system update, and calling that a failed run would be wrong.
+  Repository packages and everything else are updated by different components
+  on purpose.
+</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Timer</th><th>Runs</th><th>Covers</th></tr></thead>
+  <tbody>
+    <tr><td><code>sakura-updates</code></td><td><code>sakura-update apply</code></td><td>Repository packages, behind a restore point.</td></tr>
+    <tr><td><code>sakura-store-updates</code></td><td><code>sakura-store update</code></td><td>System Flatpaks and Snaps.</td></tr>
+    <tr><td><code>sakura-store-updates-user</code></td><td><code>sakura-store update</code></td><td>Per-user Flatpaks and AppImages, which live in a home directory and need no root.</td></tr>
+  </tbody>
+</table>
+</div>
+<p>
+  The store deliberately skips repository packages: the update engine already
+  runs a full <code>-Syu</code> nightly behind a snapshot, and doing it in both
+  places would be the same work twice and, worse, the second time without that
+  snapshot.
 </p>
 <p>
   Packages installed from the AUR are deliberately excluded. Updating one means

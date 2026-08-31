@@ -18,7 +18,6 @@ import fcntl
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import urllib.request
@@ -393,45 +392,9 @@ def cmd_apply(args) -> int:
     if r.returncode != 0:
         return r.returncode
 
-    update_bundled_apps()
-
     if any(u.restart for u in ready):
         print("\nA restart is needed to finish.")
     return 0
-
-
-def update_bundled_apps() -> None:
-    """Update Flatpaks and Snaps as well.
-
-    Without this the promise is only two thirds true: the system keeps itself
-    current and the applications quietly do not, which is the worse half to
-    get wrong because a browser is the thing actually facing the internet.
-
-    Neither is fatal. A machine whose Flatpak remote is unreachable has still
-    had a successful system update, and reporting that as a failed update run
-    would be wrong.
-
-    The AUR is deliberately absent. Updating an AUR package means running a
-    build script written by somebody else, and doing that unattended at three
-    in the morning is exactly what the AUR being off by default exists to
-    prevent. Those are reported for review instead.
-    """
-    for tool, args, label in (
-        ("flatpak", ["flatpak", "update", "-y", "--noninteractive"], "Flatpak"),
-        ("snap", ["snap", "refresh"], "Snap"),
-    ):
-        if not shutil.which(tool):
-            continue
-        try:
-            r = subprocess.run(args, capture_output=True, text=True, timeout=1800)
-            if r.returncode != 0:
-                print(f"{label} updates did not finish: "
-                      f"{(r.stderr or '').strip().splitlines()[-1:] or ['no detail']}",
-                      file=sys.stderr)
-        except subprocess.TimeoutExpired:
-            print(f"{label} updates timed out", file=sys.stderr)
-        except OSError as e:
-            print(f"{label} updates could not run: {e}", file=sys.stderr)
 
 
 def cmd_status(args) -> int:
