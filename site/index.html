@@ -299,9 +299,10 @@ code{
     <span class="badge">1.0 · Cherry Blossom</span>
     <p class="tagline">A distro with no nonsense in it.</p>
     <p class="lede" style="max-width:47ch">
-      KDE Plasma and Arch — the two things the community already agreed on.
-      No twenty desktop environments to pick between, no bootloader quiz, no
-      filesystem you've never heard of. It manages the hard parts for you.
+      Arch underneath for the software, KDE Plasma on top for the desktop,
+      and a kernel tuned for the hardware you actually own. No desktop to
+      pick, no bootloader quiz, no filesystem you have never heard of. The
+      parts that usually cost you a weekend are done before you boot.
     </p>
     <div style="display:flex;gap:.8rem;flex-wrap:wrap;justify-content:center;margin-top:.6rem">
       <a class="btn" href="#get">Download</a>
@@ -328,7 +329,7 @@ code{
         </p>
         <p class="dim">
           The cost is that a bad update, a half-finished command, or an
-          unreviewed build script can leave you at a black screen — and the
+          unreviewed build script can leave you at a black screen, and the
           fix is written for people who already know how to chroot from a live
           USB. That is the whole barrier. It was never that Arch is hard.
         </p>
@@ -354,7 +355,7 @@ code{
       <div class="cols two">
         <div class="card">
           <h3>Terminal Assist</h3>
-          <p class="dim">Reads what you're about to run and stops the commands that break Arch systems — partial upgrades, removing the last kernel, force-removing glibc. Every check can be overridden; you just have to read the message first.</p>
+          <p class="dim">Reads what you're about to run and stops the commands that break Arch systems: partial upgrades, removing the last kernel, force-removing glibc. Every check can be overridden; you just have to read the message first.</p>
         </div>
         <div class="card">
           <h3>Installer</h3>
@@ -362,7 +363,7 @@ code{
         </div>
         <div class="card">
           <h3>Update Manager</h3>
-          <p class="dim">Updates handled for you, on a schedule you set, with a restore point taken first — and a plain-English list of what's actually changing.</p>
+          <p class="dim">Updates handled for you, on a schedule you set, with a restore point taken first, and a plain-English list of what's actually changing.</p>
         </div>
         <div class="card">
           <h3>App Store</h3>
@@ -382,7 +383,7 @@ code{
         <h2>Break it on purpose.</h2>
         <p class="lede" style="max-width:56ch">
           Every distribution says it is stable. Here is what actually happens
-          on SakuraOS when an update goes wrong — no terminal, no live USB, no
+          on SakuraOS when an update goes wrong. No terminal, no live USB, no
           reinstall. This is the real recovery flow, not a mockup.
         </p>
       </div>
@@ -392,7 +393,7 @@ code{
         <div class="stack g-4">
           <ol class="steps" id="steps">
             <li data-s="0"><span class="n">1</span><span>A working system. BTRFS takes a restore point before every change, automatically.</span></li>
-            <li data-s="1"><span class="n">2</span><span>Something lands badly — a driver, a config, a half-finished upgrade.</span></li>
+            <li data-s="1"><span class="n">2</span><span>Something lands badly: a driver, a config, a half-finished upgrade.</span></li>
             <li data-s="2"><span class="n">3</span><span>It will not boot. This is where most people reinstall.</span></li>
             <li data-s="3"><span class="n">4</span><span>Pick <em>Recovery</em> from the boot menu.</span></li>
             <li data-s="4"><span class="n">5</span><span>Choose a point to go back to, in plain language.</span></li>
@@ -416,7 +417,7 @@ code{
         <p class="eyebrow">Terminal Assist</p>
         <h2>In case you do need the terminal.</h2>
         <p class="lede" style="max-width:58ch">
-          Not a locked-down system — you keep the key. It just won't let you
+          Not a locked-down system. You keep the key. It just won't let you
           turn it the wrong way without telling you what's on the other side.
         </p>
       </div>
@@ -456,14 +457,14 @@ code{
         <h2>Handled for you, with a way back.</h2>
         <p class="lede" style="max-width:58ch">
           Falling months behind on a rolling release is more dangerous than
-          updating often — one enormous transaction, unread manual steps, and
+          updating often: one enormous transaction, unread manual steps, and
           known holes left open the whole time. So SakuraOS updates itself.
         </p>
       </div>
 
       <p class="dim" style="max-width:var(--measure)">
         Everything from mainline Arch waits twenty-four hours before it reaches
-        you. That window isn't a delay for its own sake — it's the time we use
+        you. That window isn't a delay for its own sake. It's the time we use
         to install and restart every update on our own machines. Anything that
         breaks a boot gets pulled in that window instead of breaking yours.
       </p>
@@ -478,11 +479,11 @@ code{
       <div class="cols two">
         <div class="card">
           <h3>You can see what it is</h3>
-          <p class="dim">Nobody knows what <code>libjxl</code> is. So the list says: <em>JPEG XL image support — needed by Dolphin, Gwenview, Firefox.</em> An update you can actually consent to.</p>
+          <p class="dim">Nobody knows what <code>libjxl</code> is. So the list says: <em>JPEG XL image support, needed by Dolphin, Gwenview, Firefox.</em> An update you can actually consent to.</p>
         </div>
         <div class="card">
           <h3>And if one still gets through</h3>
-          <p class="dim">BTRFS took a restore point before it ran. Pick Recovery at the boot menu and you're back — by someone who has never heard of a chroot.</p>
+          <p class="dim">BTRFS took a restore point before it ran. Pick Recovery at the boot menu and you're back. It can be done by someone who has never heard of a chroot.</p>
         </div>
       </div>
     </div>
@@ -506,7 +507,7 @@ code{
         <p class="dim">
           It's off on a fresh install, because it's build scripts written by
           other users that nobody reviews, and you haven't agreed to that yet.
-          Turning it on is one checkbox in Settings — right there, no ceremony.
+          Turning it on is one checkbox in Settings. Right there, no ceremony.
         </p>
       </div>
       <p class="pull">Off by default. One click away. Never hidden.</p>
@@ -528,7 +529,7 @@ code{
             A scanner only knows about attacks somebody already reported, so
             it can't be the only thing standing there. Before a package builds
             you see what the script does, what changed since the version you
-            last accepted, and the signals that matter — a maintainer who
+            last accepted, and the signals that matter: a maintainer who
             changed last week, a package adopted three days ago, a download
             that isn't coming from the project.
           </p>
@@ -537,7 +538,7 @@ code{
       <p class="dim" style="max-width:var(--measure);font-size:.95rem">
         Between them: the scan catches what is known, and the review is how you
         catch what isn't yet. Anyone promising a single check that catches
-        everything is selling you something — a build script is arbitrary code,
+        everything is selling you something. A build script is arbitrary code,
         and no tool can prove arbitrary code is safe.
       </p>
     </div>
@@ -553,7 +554,7 @@ code{
         <h2>Tuned for the machine you own.</h2>
       </div>
       <p class="dim">
-        SakuraOS uses the same kernel scheduling work as CachyOS — the tuning
+        SakuraOS uses the same kernel scheduling work as CachyOS, the tuning
         that made them the fastest Arch derivative on modern hardware. On a
         recent CPU you get every bit of it.
       </p>
@@ -583,7 +584,7 @@ code{
           <tbody>
             <tr>
               <td>Graphics</td>
-              <td>Your card is detected during install and the right driver goes on — <code>nvidia-open</code> for RTX and GTX 16-series and newer, and for older GeForce cards the last driver NVIDIA ever shipped for them, which we rebuild and maintain ourselves because NVIDIA no longer will. AMD and Intel work out of the box.</td>
+              <td>Your card is detected during install and the right driver goes on: <code>nvidia-open</code> for RTX and GTX 16-series and newer, and for older GeForce cards the last driver NVIDIA ever shipped for them, which we rebuild and maintain ourselves because NVIDIA no longer will. AMD and Intel work out of the box.</td>
             </tr>
             <tr>
               <td>Secure Boot</td>
@@ -621,7 +622,7 @@ code{
         <li>No usage data, no hardware inventory, no crash reports going to us.</li>
         <li>No account to create, and nothing to sign in to.</li>
         <li>No identifier assigned to your machine at install or at any point after.</li>
-        <li>Nothing leaves your computer unless you asked for it — an update you scheduled, or software you chose to install.</li>
+        <li>Nothing leaves your computer unless you asked for it: an update you scheduled, or software you chose to install.</li>
       </ul>
 
       <p class="pull">Your machine, your data, your business.</p>
@@ -630,7 +631,7 @@ code{
         <div class="card">
           <h3>The one exception, and it isn't ours</h3>
           <p class="dim">
-            Plasma — the desktop SakuraOS uses — is made by KDE, and they can
+            Plasma, the desktop SakuraOS uses, is made by KDE, and they can
             accept anonymous information about your hardware and which
             features you use, which is how they find bugs. The installer offers
             it, <strong>off by default</strong>, on a screen that says plainly
@@ -640,7 +641,7 @@ code{
         <div class="card">
           <h3>Freedom, not just privacy</h3>
           <p class="dim">
-            Free and open source throughout — every package we build, the
+            Free and open source throughout: every package we build, the
             installer, and the whole build pipeline. Nothing here is locked
             down to keep you safe from yourself. You can read it, change it,
             or take it apart.
@@ -665,7 +666,7 @@ code{
       </div>
       <div style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:center">
         <a class="btn" href="#">Download · x86_64</a>
-        <span class="dim" style="font-size:.9rem">2.2 GB · verify the signature</span>
+        <span class="dim" style="font-size:.9rem">3.3 GB · verify the signature</span>
       </div>
       <p class="dim" style="font-size:.92rem;max-width:var(--measure)">
         SakuraOS is being built in the open. Nothing above is a promise about
@@ -748,7 +749,7 @@ code{
       + '</div></div>'; },
     function(){ return '<div class="wall" style="background-image:url(' + wall + ')"></div>'
       + '<div class="inner" style="position:relative"><p class="restored">Restored.</p>'
-      + '<p style="color:#cbbfd3;font-size:.78rem;margin-top:.5rem">Nothing was deleted &mdash; the state you replaced was kept.</p></div>'; }
+      + '<p style="color:#cbbfd3;font-size:.78rem;margin-top:.5rem">Nothing was deleted. The state you replaced was kept.</p></div>'; }
   ];
 
   var at = 0;
