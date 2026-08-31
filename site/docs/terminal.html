@@ -1,0 +1,91 @@
+<h1>Terminal Assist</h1>
+<p class="lede">
+  Using a terminal for the first time is daunting, and one command can take a
+  whole system with it. Terminal Assist recognises the commands that do real
+  damage, stops them, and says what to run instead. Every check names its own
+  override.
+</p>
+
+<h2>Two layers, and only one of them matters</h2>
+<p>
+  There are two places a check can live, and they are not equally trustworthy.
+</p>
+
+<h3>The check inside pacman</h3>
+<p>
+  The real guard is an ALPM hook. It runs as a
+  <code>PreTransaction</code> action on every package removal, is marked
+  <code>AbortOnFail</code>, and a non-zero exit stops the transaction dead.
+</p>
+<p>
+  Because it lives inside pacman itself, it applies no matter how the
+  transaction was started: from your shell, from a script, from an AUR helper,
+  or from the App Store. There is no way to route around it that does not
+  involve removing the hook.
+</p>
+
+<h3>The layer in your shell</h3>
+<p>
+  A shell function checks the command line before it runs and warns about
+  things pacman never sees, such as a partial upgrade or a destructive
+  <code>rm</code>. This layer is a courtesy, not a guard. It is trivially
+  bypassed, and it is meant to be: it is there to catch a typo and explain it,
+  not to stand between you and your own machine.
+</p>
+
+<h2>What it stops</h2>
+<p>
+  The removal guard knows which packages a system does not survive losing, and
+  says why rather than simply refusing:
+</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Package</th><th>Why it is guarded</th></tr></thead>
+  <tbody>
+    <tr><td><code>systemd</code></td><td>the init system, the machine will not boot without it</td></tr>
+    <tr><td><code>glibc</code></td><td>the C library, essentially every program depends on it</td></tr>
+    <tr><td><code>pacman</code></td><td>the package manager, you could not install anything back</td></tr>
+    <tr><td><code>bash</code></td><td>the system shell, install scripts and boot units need it</td></tr>
+    <tr><td><code>coreutils</code></td><td>core utilities like ls, cp and rm</td></tr>
+    <tr><td><code>filesystem</code></td><td>the base directory layout</td></tr>
+    <tr><td><code>sudo</code></td><td>how you become root, you may lock yourself out</td></tr>
+    <tr><td><code>linux-firmware</code></td><td>hardware firmware, wifi and graphics may stop working</td></tr>
+    <tr><td><code>mkinitcpio</code></td><td>builds the boot image, future kernel updates would not boot</td></tr>
+    <tr><td><code>limine</code></td><td>the bootloader, the machine will not boot</td></tr>
+    <tr><td><code>sakura-snapshot-boot</code></td><td>snapshot rollback, you would lose the undo button</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The shell layer additionally recognises:</p>
+<ul>
+  <li><strong>Partial upgrades.</strong> <code>pacman -Sy something</code> refreshes the package list without upgrading the system, and that mismatch is the most common way an Arch install breaks. It tells you to use <code>-Syu</code>.</li>
+  <li><strong>Removing the running kernel</strong>, which leaves nothing to boot.</li>
+  <li><strong>Destructive filesystem commands</strong> aimed at a path that would take the system with it.</li>
+</ul>
+
+<h2>Overriding a check</h2>
+<p>
+  Every message ends with the exact command that gets past it. Nothing here is
+  a wall; it is a speed bump with a sign on it.
+</p>
+<pre><code><span class="c"># the message tells you which rule fired, and you name it</span>
+sudo SAKURA_ASSIST_OVERRIDE=<span class="k">glibc</span> pacman -R glibc</code></pre>
+<p>
+  The override names the specific rule. It is deliberately not a universal
+  skeleton key: setting it to bypass one check does not silently disable the
+  other ten, and a habit of pasting one override does not turn into a habit of
+  disabling the system. More than one rule can be named at once, separated by
+  commas.
+</p>
+
+<div class="note">
+  <p>
+    <strong>It is not a nanny.</strong> Around thirty rules: eleven packages the
+    removal guard will not let go quietly, and about twenty patterns the
+    shell layer recognises. It is not a filter on what you are allowed to
+    learn, and it never refuses without telling you both why and how to
+    proceed anyway.
+  </p>
+</div>
