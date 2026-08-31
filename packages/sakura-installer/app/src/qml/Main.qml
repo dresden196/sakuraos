@@ -1543,6 +1543,7 @@ QQC2.ApplicationWindow {
             }
 
             QQC2.ScrollView {
+                id: wifiScroll
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(200, netCol.networks.length * 46 + 4)
                 visible: backend.hasWifiHardware() && netCol.networks.length > 0
@@ -1550,7 +1551,13 @@ QQC2.ApplicationWindow {
                 contentWidth: availableWidth
 
                 ColumnLayout {
-                    width: parent.parent.availableWidth
+                    // Named, not walked to. parent.parent from inside a
+                    // ScrollView is the Flickable's content item rather than
+                    // the ScrollView, so availableWidth came back undefined,
+                    // the column had no width, and every fillWidth item in the
+                    // row collapsed to nothing -- which is why the tick sat on
+                    // top of the network's name instead of beside it.
+                    width: wifiScroll.availableWidth
                     spacing: 2
                     Repeater {
                         model: netCol.networks
