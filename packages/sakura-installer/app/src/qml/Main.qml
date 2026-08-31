@@ -2795,7 +2795,11 @@ newer hardware gets the faster build.`
 
                 ColumnLayout {
                     id: deck
-                    width: parent.width
+                    // Capped rather than full-bleed: a line of body text that
+                    // runs the whole width of a 1080p screen is measurably
+                    // harder to read, and this is a screen people sit and
+                    // stare at with nothing else to do.
+                    width: Math.min(parent.width, 760)
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 12
                     opacity: 1
