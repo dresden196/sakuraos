@@ -477,6 +477,45 @@ class AurSource(Source):
         return {k: v for k, v in self.installed().items()
                 if not k.endswith("-debug")}
 
+    def updates(self) -> list[dict]:
+        """AUR packages with a newer version published.
+
+        These are reported so they can be shown, never so they can be applied
+        unattended. Updating an AUR package means running a build script
+        written by somebody else, and doing that overnight without being asked
+        would undo the entire point of the AUR being off by default. The
+        update engine treats anything from this source as needing review.
+        """
+        have = self.installed_apps()
+        if not have:
+            return []
+
+        # One request for everything rather than one per package: the info
+        # endpoint takes repeated arg[] parameters, and a machine with forty
+        # AUR packages should not make forty round trips.
+        found = []
+        names = sorted(have)
+        for chunk in (names[i:i + 100] for i in range(0, len(names), 100)):
+            query = "&".join(f"arg[]={urllib.parse.quote(n)}" for n in chunk)
+            data = fetch(f"{AUR_RPC}/info?{query}", {}, tag="AUR")
+            results = data.get("results", []) if isinstance(data, dict) else []
+            for r in results:
+                name = r.get("Name")
+                latest = r.get("Version")
+                if not name or not latest or name not in have:
+                    continue
+                current = have[name]
+                # vercmp rather than string comparison: 1.10 is newer than
+                # 1.9, and no amount of careful sorting gets that right.
+                cmp = run(["vercmp", latest, current])
+                if cmp is None or not cmp.strip().lstrip("-").isdigit():
+                    continue
+                if int(cmp.strip()) > 0:
+                    found.append({"id": name, "name": name,
+                                  "current": current, "available": latest,
+                                  "needs_review": True})
+        return found
+
     def search(self, query: str) -> list[App]:
         data = fetch(f"{AUR_RPC}/search/{urllib.parse.quote(query)}", {}, tag="AUR")
         results = data.get("results", []) if isinstance(data, dict) else []

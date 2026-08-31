@@ -471,17 +471,17 @@ code{
       </div>
 
       <p class="dim" style="max-width:var(--measure)">
-        Everything from mainline Arch waits twenty-four hours before it reaches
-        you. That window isn't a delay for its own sake. It's the time we use
-        to install and restart every update on our own machines. Anything that
-        breaks a boot gets pulled in that window instead of breaking yours.
+        Updates are tested on our machines before they reach yours. One of
+        ours installs everything pending, reboots, and re-runs the same checks
+        a fresh install has to pass. When it does not survive, that update is
+        held back on your machine instead of breaking it.
       </p>
       <p class="dim" style="max-width:var(--measure)">
-        A day is deliberately short. Hold packages back for weeks and you get
-        the other problem: the AUR builds against current Arch, your system
-        isn't current Arch, and everything you install from it starts failing.
-        Twenty-four hours is long enough to catch a broken boot and short
-        enough that the rest of Arch still fits together.
+        Nothing is held on a schedule. Delay packages for weeks and you get the
+        other problem: the AUR builds against current Arch, your system isn't
+        current Arch, and everything you install from it starts failing. A hold
+        here needs evidence, so it lasts exactly as long as the problem does
+        and not a day longer.
       </p>
 
       <div class="cols two">

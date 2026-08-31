@@ -76,15 +76,16 @@
 <h2>AUR updates</h2>
 <div class="warn">
   <p>
-    <strong>AUR packages are not updated automatically, and this is a gap.</strong>
+    <strong>AUR packages are never updated automatically.</strong>
     The nightly update run covers repository packages, Flatpaks and Snaps. It
     does not rebuild anything from the AUR. A package you installed from there
     stays at the version you built until you rebuild it yourself.
   </p>
   <p>
-    Surfacing those in the store as something needing your review, rather than
-    updating them silently, is the intended fix and is not built yet. Until it
-    is, treat anything you install from the AUR as yours to keep current.
+    They are now <em>reported</em>: the store checks the AUR for newer versions
+    of what you have and lists them for review, alongside the build script diff
+    since the version you last accepted. Applying one is still your decision and
+    always will be, because it means running somebody else's code.
   </p>
 </div>
 
