@@ -14,6 +14,16 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export SAKURA_VM=clean
 
+# A failed run used to leave its 6 GiB VM running. Several dead runs then
+# starved the host, and the next run's Plasma session timed out waiting for a
+# compositor -- which reads as a product bug and is not one. The harness now
+# always takes its own VM down, whether it passed, failed or was interrupted.
+# The bracket in the pattern keeps pkill from matching this script itself.
+cleanup_vm() {
+    pkill -f "[s]akura-${SAKURA_VM}\\.qcow2" 2>/dev/null || true
+}
+trap cleanup_vm EXIT INT TERM
+
 USER_NAME=tester
 USER_PASS=tester
 HOSTNAME_=sakura-clean
