@@ -30,8 +30,19 @@ QQC2.ApplicationWindow {
     // do: the blossom pink measures 1.60:1 on a light background, well under
     // the 3.0:1 controls need, but 10.24:1 on a dark one.
     readonly property bool  dark:   answers.dark
-    readonly property color accent: dark ? "#ffb7c5" : "#d81b60"
-    readonly property color accentText: dark ? "#3a2731" : "#ffffff"
+    // Light mode used #d81b60, which is legible and is not the colour this
+    // operating system is named after -- it reads as magenta beside a page of
+    // blossom pink. The constraint behind it is real, though: the literal
+    // #ffb7c5 manages 1.64:1 against a light background, far under the 3:1 a
+    // border or a focus ring needs to be seen at all.
+    //
+    // #e0648c is the pinkest colour that clears it -- 3.30:1 on white -- and
+    // it takes dark ink at 4.21:1. That last number is knowingly short of the
+    // 4.5:1 wanted for normal-size text, and is the reason this comment
+    // exists rather than being a thing to discover later: the alternative was
+    // 2.80:1, or a brand colour that is not the brand.
+    readonly property color accent: dark ? "#ffb7c5" : "#e0648c"
+    readonly property color accentText: "#3a2731"
     readonly property color bg:     dark ? "#26161e" : "#faf6f8"
     readonly property color panel:  dark ? "#2f1f28" : "#f1e7ec"
     readonly property color card:   dark ? "#3a2731" : "#ffffff"
@@ -1556,7 +1567,21 @@ QQC2.ApplicationWindow {
                                 anchors.rightMargin: 12
                                 spacing: 10
                                 QQC2.Label {
-                                    text: modelData.active ? "\u2713" : (modelData.secure ? "\u1F512" : "")
+                                    // Fixed width, so the row keeps its
+                                    // columns whether or not there is a glyph
+                                    // to put here.
+                                    Layout.preferredWidth: 16
+                                    horizontalAlignment: Text.AlignHCenter
+                                    // A padlock is U+1F512, which is outside
+                                    // the BMP: "\u1F512" is not that
+                                    // character, it is \u1F51 followed by a
+                                    // literal 2, because \u takes exactly
+                                    // four digits. That rendered as a stray
+                                    // box that ate the gap and sat on top of
+                                    // the network name. U+00B7 is a dot, is
+                                    // in the BMP, and cannot do this.
+                                    text: modelData.active ? "\u2713"
+                                        : modelData.secure ? "\u00B7" : ""
                                     color: modelData.active ? root.accent : root.dim
                                     font.pixelSize: 13
                                 }

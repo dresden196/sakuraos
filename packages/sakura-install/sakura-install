@@ -117,6 +117,41 @@ largest_free_space() {
 swapoff -a 2>/dev/null || true
 umount -R /mnt 2>/dev/null || true
 
+step "Checking this machine can reach the package repositories"
+# Before anything is written to the disk, and that ordering is the point.
+#
+# Only 25 packages ride on the install media; everything else -- base,
+# systemd, the whole of Plasma, the fonts, the codecs -- is fetched from
+# Arch's mirrors while installing. There is no offline install and no way to
+# resume one: pacstrap either completes or it does not.
+#
+# Partitioning used to happen first. On a machine with no network that meant
+# the disk was erased, formatted, possibly encrypted, and only then did the
+# download fail -- leaving somebody with no operating system and none of
+# what used to be on the drive either. The check costs a second and it
+# happens while the disk is still untouched.
+_reachable() {
+    curl -sS -o /dev/null --max-time 15 "$1" 2>/dev/null
+}
+if ! _reachable "https://repo.sakuraos.org/sakura-core/os/x86_64/sakura-core.db" \
+   && ! _reachable "http://173.233.87.167/sakura-core/os/x86_64/sakura-core.db"; then
+    die "this machine cannot reach the SakuraOS repository.
+
+SakuraOS downloads most of itself while installing, so it needs a working
+connection before anything is written to the disk. Nothing has been changed.
+
+Go back to the Network step, connect, and try again."
+fi
+if ! _reachable "https://geo.mirror.pkgbuild.com/core/os/x86_64/core.db" \
+   && ! _reachable "https://mirror.rackspace.com/archlinux/core/os/x86_64/core.db"; then
+    die "this machine cannot reach the Arch Linux mirrors.
+
+Most of SakuraOS comes from them, so the install would stop part way through
+with the disk already erased. Nothing has been changed.
+
+Check the connection on the Network step and try again."
+fi
+
 if [[ "$MODE" == "alongside" ]]; then
     step "Making room on $DISK without disturbing what is there"
 
