@@ -191,6 +191,13 @@ sakura-theme
 sakura-wallpapers
 sakura-updates
 sakura-update-center
+# The metapackage itself, not only the things it pulls in. A copy install
+# takes what is on the live image, so without this the installed system has
+# every component of sakura-desktop and not the package that names them, and
+# "sakura-desktop is installed" fails on a machine that is in fact complete.
+# Listing it here also stops this file drifting from the metapackage: anything
+# sakura-desktop gains arrives on the live image automatically.
+sakura-desktop
 sakura-store
 sakura-store-ui
 sddm-kcm
