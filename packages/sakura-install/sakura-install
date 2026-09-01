@@ -495,6 +495,32 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
           /mnt/etc/systemd/system/pacman-init.service
     rm -f /mnt/root/.automated_script.sh /mnt/root/.zlogin
 
+    # archiso mounts a tmpfs over /etc/pacman.d/gnupg so the live session can
+    # build a keyring in RAM. Left behind, that mount unit runs on the
+    # installed system too and hides the real keyring underneath an empty
+    # tmpfs at every boot: the keyring is present on disk and in the
+    # snapshots, and pacman still reports "keyring is not writable" and
+    # refuses every signature. Removing pacman-init.service was not enough,
+    # because it is the mount rather than the init that does the damage.
+    rm -f /mnt/etc/systemd/system/etc-pacman.d-gnupg.mount
+    rm -f /mnt/etc/systemd/system/*.target.wants/etc-pacman.d-gnupg.mount
+
+    # The live user's own service goes with the live user.
+    rm -f /mnt/etc/systemd/system/sakura-live-user.service
+    rm -f /mnt/etc/systemd/system/*.target.wants/sakura-live-user.service
+
+    # Anything else archiso left in /etc/systemd/system that belongs to the
+    # live image. Named units above are the ones known to cause damage; this
+    # catches the rest rather than waiting for each to be discovered by a
+    # failed install.
+    for _u in /mnt/etc/systemd/system/*.mount; do
+        [ -e "$_u" ] || continue
+        if grep -q "archiso\|Temporary" "$_u" 2>/dev/null; then
+            info "removing live-media mount unit $(basename "$_u")"
+            rm -f "$_u"
+        fi
+    done
+
     # Logs, caches and journals from the live session. A new machine should
     # not boot with a record of somebody else's installer run.
     # Contents, not the directories. /var/cache/pacman/pkg is the @pkg
@@ -546,6 +572,25 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # one. It comes from the media, so this works with the network unplugged.
     if ! arch-chroot /mnt pacman -S --noconfirm --needed "$KERNEL" 2>&1 | tail -3; then
         die "could not install the kernel onto the new system."
+    fi
+
+    # The live image boots stock linux, so a copy install arrives with it
+    # already present and then installs the tuned one beside it. Two kernels
+    # is not merely untidy: every kernel update builds both, the boot image
+    # is generated for one of them, and "exactly one kernel is installed" is
+    # a check this project has precisely because that ambiguity is where
+    # boot problems come from.
+    #
+    # Only when the tuned kernel is the one that was wanted. A machine whose
+    # CPU cannot run it keeps stock linux, and removing that would leave it
+    # with nothing to boot.
+    if [[ "$KERNEL" != "linux" ]] && arch-chroot /mnt pacman -Q "$KERNEL" >/dev/null 2>&1; then
+        if arch-chroot /mnt pacman -Q linux >/dev/null 2>&1; then
+            info "removing the stock kernel the live image was carrying"
+            arch-chroot /mnt pacman -Rns --noconfirm linux linux-headers 2>/dev/null \
+                || arch-chroot /mnt pacman -Rdd --noconfirm linux >/dev/null 2>&1 \
+                || info "WARNING: could not remove the stock kernel; two kernels are installed"
+        fi
     fi
 
     # Graphics and extras are best-effort by comparison. Offline they may not
