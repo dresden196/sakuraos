@@ -8,12 +8,19 @@ bcachefs-tools
 bind
 bolt
 brltty
-# broadcom-wl was dropped from the Arch repositories. The replacement is
-# broadcom-wl-dkms, which builds the module at install time and so needs
-# headers and a compiler on the live image; that is a different trade and
-# has not been tested here. Broadcom wifi is unsupported on the live media
-# until it is. An offline install no longer depends on wifi working, which
-# is what made this urgent before.
+# broadcom-wl was dropped from the Arch repositories: an out-of-tree module
+# built against one kernel ABI broke on every kernel update.
+#
+# This does NOT mean Broadcom wifi is unsupported. linux-firmware depends on
+# linux-firmware-broadcom, and b43-fwcutter is above, so everything served by
+# the open brcmfmac and b43 drivers works. broadcom-wl is the proprietary STA
+# driver, needed only for the older BCM43xx parts those handle badly, which
+# in practice means some MacBooks of a certain age.
+#
+# The replacement is broadcom-wl-dkms, which compiles at install time. That is
+# fine here, where the kernel is fixed when the image is built, and wrong on a
+# user's machine, where it would mean shipping a compiler and losing wifi to a
+# failed build after a kernel update.
 btrfs-progs
 clonezilla
 cloud-init
