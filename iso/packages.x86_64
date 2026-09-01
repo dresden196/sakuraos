@@ -8,7 +8,12 @@ bcachefs-tools
 bind
 bolt
 brltty
-broadcom-wl
+# broadcom-wl was dropped from the Arch repositories. The replacement is
+# broadcom-wl-dkms, which builds the module at install time and so needs
+# headers and a compiler on the live image; that is a different trade and
+# has not been tested here. Broadcom wifi is unsupported on the live media
+# until it is. An offline install no longer depends on wifi working, which
+# is what made this urgent before.
 btrfs-progs
 clonezilla
 cloud-init
