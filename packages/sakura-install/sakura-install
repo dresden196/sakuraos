@@ -511,6 +511,29 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # The kernel is not carried over: the live image boots stock linux and
     # this machine may want the tuned one. Graphics and any extras are
     # installed the same way they always were.
+    # The squashfs carries an empty keyring. archiso initialises it at boot
+    # into the live overlay, and we copy from the pristine image rather than
+    # from the overlay on purpose, so the new system arrives with nothing in
+    # /etc/pacman.d/gnupg and every signature check fails with "keyring is
+    # not writable". pacstrap does this for the online path; the copy path
+    # has to do it for itself.
+    arch-chroot /mnt pacman-key --init >/dev/null 2>&1 \
+        || die "could not create the package keyring on the new system."
+    # Populate whichever keyrings are actually installed rather than a fixed
+    # list: sakura-keyring ships ours, archlinux-keyring ships Arch's, and a
+    # name that is not present makes pacman-key fail the whole run.
+    _keyrings=""
+    for _k in /mnt/usr/share/pacman/keyrings/*.gpg; do
+        [ -e "$_k" ] || continue
+        _keyrings="$_keyrings $(basename "$_k" .gpg)"
+    done
+    # shellcheck disable=SC2086
+    if [[ -n "$_keyrings" ]]; then
+        arch-chroot /mnt pacman-key --populate $_keyrings >/dev/null 2>&1 \
+            || die "could not populate the package keyring on the new system."
+        info "keyring initialised:$_keyrings"
+    fi
+
     # A copied filesystem has no package databases -- archiso ships none --
     # so every target reads as "not found" until they are fetched. Offline
     # this still succeeds for the on-media repo, which is a file:// path
