@@ -333,6 +333,17 @@ return 1
 # The kernel is decided here rather than named in sakura-desktop, because it
 # depends on the machine in front of us. The meta package deliberately names
 # no kernel at all, the way Arch's own base does not.
+# Whether this machine has a route out, asked once and remembered. An offline
+# install is a supported case now, and the steps below differ enough that
+# discovering it separately in each of them means each one discovers it the
+# slow way: pacman works through every mirror in the list, timing out on each.
+HAVE_NET=no
+if _reachable "https://geo.mirror.pkgbuild.com/core/os/x86_64/core.db" \
+   || _reachable "https://repo.sakuraos.org/sakura-core/os/x86_64/sakura-core.db"; then
+    HAVE_NET=yes
+fi
+[[ "$HAVE_NET" == "yes" ]] || info "no network: installing from the disc alone"
+
 KERNEL="linux"
 # pacman -Si reads the sync databases, and on a freshly booted live image
 # those have not been loaded yet -- so the query returns nothing, the tuned
@@ -340,7 +351,16 @@ KERNEL="linux"
 # exactly what happened on the first real install: the CPU reported v3 and
 # stock was installed anyway. Cheap on file:// media, and it has to happen
 # before pacstrap regardless.
-pacman -Sy >/dev/null 2>&1 || true
+# Bounded when there is no network. The mirrorlist is mostly network mirrors,
+# and pacman tries each in turn: offline this took over twelve minutes and
+# blew the installer's own deadline, having achieved nothing. The file://
+# repository on the media syncs in well under a second, so the short bound
+# still gets what this check actually needs.
+if [[ "$HAVE_NET" == "yes" ]]; then
+    pacman -Sy >/dev/null 2>&1 || true
+else
+    timeout 30 pacman -Sy >/dev/null 2>&1 || true
+fi
 if cpu_supports_v3; then
     if pacman -Si linux-cachyos >/dev/null 2>&1; then
         KERNEL="linux-cachyos"
@@ -565,7 +585,11 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # this still succeeds for the on-media repo, which is a file:// path
     # rsync copied onto the new system; the network repos just fail, and
     # that is not fatal because the tuned kernel ships on the media.
-    arch-chroot /mnt pacman -Sy --noconfirm >/dev/null 2>&1 || true
+    if [[ "$HAVE_NET" == "yes" ]]; then
+        arch-chroot /mnt pacman -Sy --noconfirm >/dev/null 2>&1 || true
+    else
+        timeout 30 arch-chroot /mnt pacman -Sy --noconfirm >/dev/null 2>&1 || true
+    fi
 
     # The kernel is the one thing a copy install genuinely cannot do without:
     # the live image boots stock linux and this machine may want the tuned
@@ -598,7 +622,10 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # away over them -- the live image already carries the open drivers, and
     # the first update after the machine is online will fill in the rest.
     # shellcheck disable=SC2086
-    if [[ -n "${GRAPHICS_PACKAGES}${EXTRA_PACKAGES}" ]]; then
+    if [[ "$HAVE_NET" != "yes" ]]; then
+        info "no network: skipping graphics and extra packages"
+        info "the open drivers are already on this system; the first update will fill in the rest"
+    elif [[ -n "${GRAPHICS_PACKAGES}${EXTRA_PACKAGES}" ]]; then
         arch-chroot /mnt pacman -S --noconfirm --needed \
             $GRAPHICS_PACKAGES $EXTRA_PACKAGES 2>&1 | tail -3 \
             || info "WARNING: some extra packages could not be installed; \
