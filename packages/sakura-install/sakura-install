@@ -360,6 +360,10 @@ if [[ "$HAVE_NET" == "yes" ]]; then
     pacman -Sy >/dev/null 2>&1 || true
 else
     timeout 30 pacman -Sy >/dev/null 2>&1 || true
+    # timeout kills pacman mid-transaction and pacman leaves its lock behind,
+    # so the next pacman call fails with "could not lock database". Nothing
+    # else is using it here: we started it and we killed it.
+    rm -f /var/lib/pacman/db.lck
 fi
 if cpu_supports_v3; then
     if pacman -Si linux-cachyos >/dev/null 2>&1; then
@@ -589,6 +593,10 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
         arch-chroot /mnt pacman -Sy --noconfirm >/dev/null 2>&1 || true
     else
         timeout 30 arch-chroot /mnt pacman -Sy --noconfirm >/dev/null 2>&1 || true
+        # Same again inside the target: a killed sync leaves a lock that the
+        # kernel install then cannot take, which is exactly how the first
+        # offline install failed after the mirror-list fix.
+        rm -f /mnt/var/lib/pacman/db.lck
     fi
 
     # The kernel is the one thing a copy install genuinely cannot do without:
