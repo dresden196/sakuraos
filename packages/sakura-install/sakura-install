@@ -601,8 +601,16 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
 
     # The kernel is the one thing a copy install genuinely cannot do without:
     # the live image boots stock linux and this machine may want the tuned
-    # one. It comes from the media, so this works with the network unplugged.
-    if ! arch-chroot /mnt pacman -S --noconfirm --needed "$KERNEL" 2>&1 | tail -3; then
+    # one, which is on the media and so installs with the network unplugged.
+    #
+    # Stock linux is a different case. It is already here, because the copy
+    # brought it, and it lives in [core] rather than on the media -- so on a
+    # machine with no network, asking for it produced "target not found:
+    # linux" and failed an install that already had a working kernel sitting
+    # on the disk. Ask what is installed rather than assuming the answer.
+    if arch-chroot /mnt pacman -Q "$KERNEL" >/dev/null 2>&1; then
+        info "$KERNEL is already installed; the copy brought it"
+    elif ! arch-chroot /mnt pacman -S --noconfirm --needed "$KERNEL" 2>&1 | tail -3; then
         die "could not install the kernel onto the new system."
     fi
 
