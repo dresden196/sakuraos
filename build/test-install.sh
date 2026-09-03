@@ -125,6 +125,17 @@ if (( ! verify_only )); then
     done
     echo
     rc=$(run "cat /tmp/install.rc" 2>/dev/null | tr -dc '0-9')
+
+    # Keep the whole install log, not the last fifteen lines of it. The VM is
+    # destroyed on exit, and every interesting decision the installer makes --
+    # which kernel it picked and why, which keyrings it populated, what it
+    # skipped for lack of a network -- is announced well before the end. Three
+    # separate diagnoses in this project stalled on a log that no longer
+    # existed by the time anyone wanted to read it.
+    run "cat /tmp/install.log" > "$REPO_ROOT/out/install-guest.log" 2>/dev/null || true
+    if [[ -s "$REPO_ROOT/out/install-guest.log" ]]; then
+        echo ">> full installer log saved to out/install-guest.log ($(wc -l < "$REPO_ROOT/out/install-guest.log") lines)"
+    fi
     run "tail -15 /tmp/install.log" || true
     [[ "$rc" == "0" ]] || { echo "installer exited $rc" >&2; exit 1; }
 
