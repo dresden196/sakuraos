@@ -79,8 +79,9 @@ fi
 LIVE_SRC=$(findmnt -no SOURCE / 2>/dev/null || true)
 if [[ -n "$LIVE_SRC" ]]; then
     LIVE_DISK=$(lsblk -no PKNAME "$LIVE_SRC" 2>/dev/null | head -1 || true)
-    [[ -n "$LIVE_DISK" && "/dev/$LIVE_DISK" == "$DISK" ]] && \
+    if [[ -n "$LIVE_DISK" && "/dev/$LIVE_DISK" == "$DISK" ]]; then
         die "$DISK is the disk this system is running from"
+    fi
 fi
 
 if (( ! ASSUME_YES )); then
@@ -381,7 +382,9 @@ else
 fi
 
 GRAPHICS="${GRAPHICS:-auto}"
-[[ "$GRAPHICS" == "auto" ]] && GRAPHICS=$(detect_graphics)
+if [[ "$GRAPHICS" == "auto" ]]; then
+    GRAPHICS=$(detect_graphics)
+fi
 
 GRAPHICS_PACKAGES=""
 case "$GRAPHICS" in
@@ -615,8 +618,12 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # vmlinuz-linux at all, and mkinitcpio then fails with "'/boot/vmlinuz-
     # linux' must be readable" after the installer has reported success --
     # which is how a customer VM produced an unbootable disk and said nothing.
+    # No "[[ ... ]] && x=y" here: as a standalone statement that returns 1
+    # when the test is false, and under set -e it takes the whole installer
+    # with it. It did exactly that -- the log ended at "keyring initialised"
+    # with exit 1 and not a word about why. The line was redundant anyway,
+    # since for the stock kernel the expansion already gives the same path.
     _kernel_image="/mnt/boot/vmlinuz-${KERNEL}"
-    [[ "$KERNEL" == "linux" ]] && _kernel_image="/mnt/boot/vmlinuz-linux"
 
     # Arch installs the kernel image to /usr/lib/modules/<version>/vmlinuz and
     # a hook copies it to /boot. The copy brings the modules directory and
