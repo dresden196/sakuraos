@@ -2788,11 +2788,23 @@ newer hardware gets the faster build.`
 
             Item { Layout.preferredHeight: 40 }
 
+            // The backend reports a failure by leaving running false with the
+            // step set to "Failed". Testing only running and percent meant a
+            // failed install fell through to "Ready to install" -- the screen
+            // a customer sees BEFORE starting -- over a stale progress bar,
+            // with no error anywhere. That happened on a real machine and the
+            // machine was left unbootable.
+            readonly property bool failed: !backend.running
+                                           && backend.currentStep === "Failed"
+
             Heading {
                 title: backend.running ? "Installing SakuraOS"
+                     : failed ? "The install did not finish"
                      : backend.percent === 100 ? "SakuraOS is installed"
                      : "Ready to install"
-                subtitle: backend.running ? backend.currentStep : ""
+                subtitle: backend.running ? backend.currentStep
+                        : failed ? "Nothing was written that cannot be written again. The details below say what happened."
+                        : ""
             }
 
             // The deck. It holds the space whether or not it is showing
@@ -2858,7 +2870,12 @@ newer hardware gets the faster build.`
             QQC2.ScrollView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredHeight: 0
+                // A ScrollView takes its implicit height from its content, so
+                // without a floor it collapsed to nothing the moment the deck
+                // beside it was hidden: the log was there and none of it was
+                // on screen, which is how a failed install showed an empty
+                // details pane.
+                Layout.minimumHeight: 220
                 visible: showLog.checked
                 QQC2.TextArea {
                     readOnly: true
@@ -2887,7 +2904,17 @@ newer hardware gets the faster build.`
             QQC2.CheckBox {
                 id: showLog
                 text: "Show details"
+                // Opened automatically when the install fails. Asking somebody
+                // to go looking for the error is asking them to guess that
+                // there is one.
                 checked: false
+                Connections {
+                    target: backend
+                    function onRunningChanged() {
+                        if (!backend.running && backend.currentStep === "Failed")
+                            showLog.checked = true
+                    }
+                }
                 font.pixelSize: 12
                 Layout.alignment: Qt.AlignHCenter
                 contentItem: QQC2.Label {
