@@ -618,6 +618,21 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     _kernel_image="/mnt/boot/vmlinuz-${KERNEL}"
     [[ "$KERNEL" == "linux" ]] && _kernel_image="/mnt/boot/vmlinuz-linux"
 
+    # Arch installs the kernel image to /usr/lib/modules/<version>/vmlinuz and
+    # a hook copies it to /boot. The copy brings the modules directory and
+    # excludes /boot, so the image is on the new system, just not where the
+    # preset looks for it. Putting it back costs nothing and works with no
+    # network, which is the case that otherwise has no kernel at all: stock
+    # linux lives in [core] and is not on the media.
+    if [[ ! -r "$_kernel_image" ]]; then
+        _owned=$(arch-chroot /mnt pacman -Ql "$KERNEL" 2>/dev/null \
+                 | awk '$2 ~ /\/vmlinuz$/ {print $2; exit}')
+        if [[ -n "$_owned" && -r "/mnt$_owned" ]]; then
+            info "restoring the kernel image the copy left in /usr/lib/modules"
+            install -Dm644 "/mnt$_owned" "$_kernel_image"
+        fi
+    fi
+
     if [[ -r "$_kernel_image" ]]; then
         info "$KERNEL is already in place"
     elif arch-chroot /mnt pacman -S --noconfirm "$KERNEL" 2>&1 | tail -3; then
