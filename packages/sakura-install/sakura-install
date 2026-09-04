@@ -608,11 +608,33 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # machine with no network, asking for it produced "target not found:
     # linux" and failed an install that already had a working kernel sitting
     # on the disk. Ask what is installed rather than assuming the answer.
-    if arch-chroot /mnt pacman -Q "$KERNEL" >/dev/null 2>&1; then
-        info "$KERNEL is already installed; the copy brought it"
-    elif ! arch-chroot /mnt pacman -S --noconfirm --needed "$KERNEL" 2>&1 | tail -3; then
-        die "could not install the kernel onto the new system."
+    # Ask whether the kernel IMAGE is there, not whether the package database
+    # says the package is. Those disagree here by design: the copy brings the
+    # database, and /boot is excluded from it because /boot is the ESP
+    # mountpoint. So pacman -Q linux succeeds on a system that has no
+    # vmlinuz-linux at all, and mkinitcpio then fails with "'/boot/vmlinuz-
+    # linux' must be readable" after the installer has reported success --
+    # which is how a customer VM produced an unbootable disk and said nothing.
+    _kernel_image="/mnt/boot/vmlinuz-${KERNEL}"
+    [[ "$KERNEL" == "linux" ]] && _kernel_image="/mnt/boot/vmlinuz-linux"
+
+    if [[ -r "$_kernel_image" ]]; then
+        info "$KERNEL is already in place"
+    elif arch-chroot /mnt pacman -S --noconfirm "$KERNEL" 2>&1 | tail -3; then
+        info "installed $KERNEL"
+    else
+        die "could not install the kernel onto the new system.
+
+The package database says $KERNEL is present but its image is not in /boot,
+and it could not be fetched. On a machine with no network this happens when
+the tuned kernel is unavailable and the stock one is not on the media."
     fi
+
+    # Whatever route was taken, there must be an image now. Reporting success
+    # and leaving an unbootable disk is the worst outcome available here.
+    [[ -r "$_kernel_image" ]] \
+        || die "no kernel image at ${_kernel_image#/mnt} after installing $KERNEL.
+The disk would not boot, so the install has been stopped instead."
 
     # The live image boots stock linux, so a copy install arrives with it
     # already present and then installs the tuned one beside it. Two kernels
