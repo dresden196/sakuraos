@@ -1055,10 +1055,24 @@ def aur_meta(name: str) -> dict:
 
 def aur_review(name: str) -> dict:
     """The PKGBUILD, and what changed since this user last accepted one."""
+    # A distinct tag: "there is no such package" and "the AUR is unreachable"
+    # are different answers and the caller has to be able to tell them apart.
+    # Sharing the "AUR" tag with the metadata lookups loses whichever failed
+    # second.
+    tag = f"AUR PKGBUILD {name}"
     text = fetch_text(f"{AUR_BASE}/cgit/aur.git/plain/PKGBUILD?h={name}",
-                      tag="AUR")
+                      tag=tag)
     if not text:
-        return {"error": f"The build script for {name} could not be fetched."}
+        why = FAILURES.get(tag, "")
+        if why.startswith("HTTP 404"):
+            return {"name": name, "reason": "missing",
+                    "error": f"There is no AUR package called {name}."}
+        return {"name": name, "reason": "unreachable",
+                "error": f"The build script for {name} could not be fetched: "
+                         f"{why or 'the AUR did not answer'}.",
+                # Worth saying out loud: nothing is wrong with the package,
+                # and trying again later is the whole remedy.
+                "retryable": True}
 
     digest = hashlib.sha256(text.encode()).hexdigest()
     prev = aur_accepted().get(name) or {}
@@ -1088,8 +1102,11 @@ def aur_review(name: str) -> dict:
 
 
 def cmd_aur_review(args) -> int:
-    print(json.dumps(aur_review(args.name), indent=2))
-    return 0
+    r = aur_review(args.name)
+    print(json.dumps(r, indent=2))
+    # A failed review exits non-zero so a script can tell, while still
+    # printing the JSON that says which kind of failure it was.
+    return 1 if r.get("error") else 0
 
 
 def cmd_aur_accept(args) -> int:
