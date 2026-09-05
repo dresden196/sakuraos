@@ -2447,13 +2447,27 @@ QQC2.ApplicationWindow {
                     // each vendor's brand pack under their own terms -- not
                     // scraped off their site. Drop real icons in here once
                     // that is checked; the layout does not change.
+                    // Every package name here is installed by pacstrap during
+                    // the install, so each one has to resolve from a
+                    // repository the target can reach. Three of the original
+                    // four did not: zen-browser-bin, brave and google-chrome
+                    // are AUR-only, and "brave" is not even the AUR name (it
+                    // is brave-bin). Picking the default browser would have
+                    // failed the install. They are rebuilt into sakura-extra
+                    // now -- see packages/aur/manifest.txt -- and
+                    // build/check-browsers.sh fails the build if any name
+                    // here stops resolving.
                     model: [
                         { pkg: "zen-browser-bin", name: "Zen", icon: "zen",
                           detail: "SakuraOS default. Firefox-based, built around tabs you actually keep." },
                         { pkg: "firefox",         name: "Firefox", icon: "firefox",
                           detail: "Independent engine. Strong privacy defaults." },
-                        { pkg: "brave",           name: "Brave", icon: "brave",
+                        { pkg: "brave-bin",       name: "Brave", icon: "brave",
                           detail: "Chromium-based. Blocks ads and trackers by default." },
+                        { pkg: "vivaldi",         name: "Vivaldi", icon: "vivaldi",
+                          detail: "Chromium-based. Heavily customisable, with tab tiling and stacking." },
+                        { pkg: "helium-browser-bin", name: "Helium", icon: "helium",
+                          detail: "Chromium-based, stripped of the tracking. Minimal by design." },
                         // Named in full: "Chrome" alone reads as Chromium to
                         // exactly the audience most likely to confuse them.
                         { pkg: "google-chrome",   name: "Google Chrome", icon: "chrome",

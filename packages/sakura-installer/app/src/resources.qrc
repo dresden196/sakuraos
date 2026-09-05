@@ -6,6 +6,8 @@
     <file>assets/browser-firefox.png</file>
     <file>assets/browser-brave.png</file>
     <file>assets/browser-chrome.png</file>
+    <file>assets/browser-vivaldi.png</file>
+    <file>assets/browser-helium.png</file>
     <!-- Bundled because they are not on the machine: KDE's own logo from
          kde.org's brand assets, and Limine's from its repository. Arch's is
          absent on purpose; it ships in the filesystem package, so it is read
