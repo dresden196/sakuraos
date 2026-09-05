@@ -178,7 +178,23 @@ if (( ! verify_only )); then
 
     echo ">> rebooting into the installed system"
     run "systemctl poweroff" >/dev/null 2>&1 || true
-    sleep 8
+
+    # Wait for the VM to actually let go of the disk, rather than assuming a
+    # fixed pause is enough. Asking a guest to power off is not the same as
+    # qemu having exited, and the next VM cannot open an image the previous
+    # one still holds: it fails with "Failed to get write lock" and exits, so
+    # the symptom is the installed system never coming up, twenty minutes
+    # later, in a different log. Eight seconds was usually enough, which is
+    # the worst kind of usually.
+    for _i in $(seq 1 60); do
+        fuser "$REPO_ROOT/out/sakura-clean.qcow2" >/dev/null 2>&1 || break
+        [[ $_i -eq 1 ]] && echo ">> waiting for the install VM to release the disk"
+        sleep 2
+    done
+    if fuser "$REPO_ROOT/out/sakura-clean.qcow2" >/dev/null 2>&1; then
+        echo "test-install: the install VM is still holding the disk" >&2
+        exit 1
+    fi
     # --installed leaves the ISO out entirely, so a firmware that prefers
     # optical cannot quietly boot the live environment and pass these checks
     # against the wrong system.
