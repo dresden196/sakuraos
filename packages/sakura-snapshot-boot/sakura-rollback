@@ -91,4 +91,13 @@ fi
 mkdir -p "$ROOT/var/lib/sakura"
 printf 'rolled back to snapshot %s\n' "$NUM" > "$ROOT/var/lib/sakura/boot-image-stale"
 
+# A "pre" snapshot is taken by snap-pac while pacman is holding its lock, so
+# restoring one restores the lock with it. Nothing is running in a subvolume
+# that was created a moment ago, so the file is stale by definition -- but
+# pacman does not know that and refuses every transaction until somebody
+# deletes a file they have never heard of. Measured after a real rollback:
+# enabling Windows support failed with "unable to lock database" on a machine
+# where no package manager had run since boot.
+rm -f "$ROOT/var/lib/pacman/db.lck"
+
 echo "rollback complete"
