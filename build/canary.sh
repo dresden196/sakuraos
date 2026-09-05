@@ -86,6 +86,15 @@ wait_for_agent() {
     local deadline=$(( SECONDS + 900 ))
     until SAKURA_VM=clean "$REPO_ROOT/build/guest-run.sh" true >/dev/null 2>&1; do
         (( SECONDS < deadline )) || return 1
+        # A VM that is gone is never going to answer, and spending the
+        # remaining fifteen minutes proving that produces a verdict of
+        # "broken" for a machine that was never running. The distinction
+        # matters more here than anywhere else in this script: this is the
+        # judgement that holds packages back for every user.
+        if ! pgrep -f "[q]emu-system-x86_64.*sakura-clean" >/dev/null 2>&1; then
+            say "the VM is no longer running"
+            return 2
+        fi
         sleep 10
     done
     return 0
@@ -117,8 +126,16 @@ sleep 20
 
 BROKEN=""
 REASON=""
-if ! wait_for_agent; then
-    REASON="the machine did not reach a desktop after the update"
+wait_for_agent; agent_rc=$?
+if (( agent_rc == 2 )); then
+    # qemu itself died. That says nothing about the update, and publishing an
+    # advisory on the strength of it would hold packages that were never shown
+    # to be at fault. Fail the run instead, loudly, as an infrastructure
+    # problem -- which is what "stalled" is for.
+    die "the VM disappeared after the update, so nothing was proved either way. \
+See out/console-clean.log"
+elif (( agent_rc != 0 )); then
+    REASON="the machine did not come back after the update"
 else
     say "re-running the checks"
     if ! SAKURA_VM=clean verify_only=1 "$REPO_ROOT/build/test-install.sh" --verify-only \

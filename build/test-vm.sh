@@ -171,6 +171,12 @@ if port_taken "$SSH_PORT"; then
     fi
 fi
 
+# Capture the guest's serial console to out/console-$VM.log. Without it the
+# only record of a boot is qemu's own stderr, which says nothing about what
+# the guest did: establishing that a machine the canary called broken in fact
+# booted to a login prompt took booting its disk by hand under a separate
+# qemu. The guest already runs a serial getty, so this only redirects output
+# that was being thrown away.
 if (( installed )); then
     echo ">> booting the installed system as \"$VM\" (ssh port $SSH_PORT)"
 else
@@ -191,6 +197,7 @@ exec qemu-system-x86_64 \
     -netdev "user,id=net0,hostfwd=tcp::$SSH_PORT-:22${NET_RESTRICT}" -device virtio-net,netdev=net0 \
     -qmp "unix:$QMP_SOCK,server,nowait" \
     -chardev "socket,path=$QGA_SOCK,server=on,wait=off,id=qga0" \
+    -serial "file:$REPO_ROOT/out/console-$VM.log" \
     -device virtio-serial \
     -device virtserialport,chardev=qga0,name=org.qemu.guest_agent.0 \
     "${display_args[@]}"
