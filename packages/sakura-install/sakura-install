@@ -367,6 +367,29 @@ KERNEL="linux"
 # exactly what happened on the first real install: the CPU reported v3 and
 # stock was installed anyway. Cheap on file:// media, and it has to happen
 # before pacstrap regardless.
+# Wait for the live keyring before asking pacman anything.
+#
+# archiso builds /etc/pacman.d/gnupg at boot with pacman-init.service, and it
+# takes about a minute. Until it finishes, our repository fails signature
+# verification -- "key is unknown", "database is not valid" -- and every query
+# against it fails. The kernel availability check below is such a query, so an
+# installer started promptly concluded the tuned kernel was missing and fell
+# back to stock, with nothing worse than a warning in the log.
+#
+# That made the kernel a machine got depend on how long the user spent reading
+# the welcome screen. Measured on one VM: failing at 45 seconds of uptime,
+# succeeding at 115.
+if [[ -d /run/archiso ]]; then
+    for _i in $(seq 1 60); do
+        if pacman-key --list-keys >/dev/null 2>&1 \
+           && [[ $(ls /etc/pacman.d/gnupg 2>/dev/null | wc -l) -gt 4 ]]; then
+            break
+        fi
+        [[ $_i -eq 1 ]] && info "waiting for the live keyring to finish building"
+        sleep 2
+    done
+fi
+
 # Bounded when there is no network. The mirrorlist is mostly network mirrors,
 # and pacman tries each in turn: offline this took over twelve minutes and
 # blew the installer's own deadline, having achieved nothing. The file://
