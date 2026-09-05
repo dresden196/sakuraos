@@ -28,4 +28,8 @@ file_permissions=(
   ["/usr/local/bin/livecd-sound"]="0:0:755"
   # sudo refuses to read a drop-in that is group- or world-writable
   ["/etc/sudoers.d/10-sakura-live"]="0:0:440"
+  # polkit ignores a rules file it does not trust the ownership of, and does
+  # so quietly -- the rule simply never applies and the password dialog comes
+  # back with no explanation.
+  ["/etc/polkit-1/rules.d/49-sakura-live-install.rules"]="0:0:644"
 )

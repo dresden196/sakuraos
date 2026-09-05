@@ -594,6 +594,19 @@ QStringList Backend::avatars() const
     return out;
 }
 
+void Backend::reboot()
+{
+    // No pkexec. Restarting is one of the few things logind lets an active
+    // local session do on its own authority, so asking for a password here
+    // would be a prompt with nothing behind it.
+    //
+    // Detached, because this process is about to be killed by the reboot it
+    // just asked for and a synchronous wait would be waiting for its own
+    // death.
+    QProcess::startDetached(QStringLiteral("systemctl"),
+                            {QStringLiteral("reboot")});
+}
+
 void Backend::appendLog(const QString &text)
 {
     m_log += text;

@@ -1066,6 +1066,32 @@ QQC2.ApplicationWindow {
                     }
                 }
                 Item { Layout.fillWidth: true }
+                // The end of the job. The install page had no action at all
+                // when it finished -- it said "SakuraOS is installed" and left
+                // the person sitting in front of a window with nothing to
+                // press, which is a strange way to end an installation.
+                QQC2.Button {
+                    id: rebootButton
+                    text: "Restart now"
+                    visible: root.step >= 13 && !backend.running
+                             && backend.percent === 100
+                             && backend.currentStep !== "Failed"
+                    padding: 11
+                    leftPadding: 26
+                    rightPadding: 26
+                    onClicked: backend.reboot()
+                    contentItem: QQC2.Label {
+                        text: parent.text
+                        color: root.accentText
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                    background: Rectangle {
+                        radius: 8
+                        color: parent.down ? Qt.darker(root.accent, 1.15) : root.accent
+                    }
+                }
                 QQC2.Button {
                     // Ten screens now that language leads: 0..9, with the
                     // install itself at 10.
@@ -2923,11 +2949,13 @@ newer hardware gets the faster build.`
             Heading {
                 title: backend.running ? "Installing SakuraOS"
                      : failed ? "The install did not finish"
-                     : backend.percent === 100 ? "SakuraOS is installed"
+                     : backend.percent === 100 ? "You are all set"
                      : "Ready to install"
                 subtitle: backend.running ? backend.currentStep
                         : failed ? "Nothing was written that cannot be written again. The details below say what happened."
-                        : ""
+                        : backend.percent === 100
+                          ? "SakuraOS is installed on this machine. Restart to use it, and take the installation media out when the screen goes black."
+                          : ""
             }
 
             // The deck. It holds the space whether or not it is showing

@@ -1,0 +1,22 @@
+// Let the live user run the installer without being asked for a password.
+//
+// This file ships on the installation media only. It is not installed onto
+// the target: on a real machine, escalating to root should still authenticate.
+//
+// The live session gives its user passwordless sudo, but pkexec does not read
+// sudoers -- it asks polkit, and polkit's default for pkexec is to demand an
+// administrator password. The live account has no password anybody knows, so
+// the dialog that appeared when you pressed Install was not merely annoying,
+// it was unanswerable: the only way past it was to guess a password that does
+// not exist.
+//
+// Scoped to the one program. A blanket rule for org.freedesktop.policykit.exec
+// would let anything at all run as root without asking, and a live session
+// with a browser in it is not the place for that.
+polkit.addRule(function (action, subject) {
+    if (action.id === "org.freedesktop.policykit.exec" &&
+        action.lookup("program") === "/usr/bin/sakura-install" &&
+        subject.user === "sakura") {
+        return polkit.Result.YES;
+    }
+});
