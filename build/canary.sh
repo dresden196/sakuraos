@@ -44,7 +44,24 @@ SAKURA_VM=canary METHOD=copy "$REPO_ROOT/build/test-install.sh" >"$REPO_ROOT/out
 
 say "booting the installed machine"
 SAKURA_VM=canary "$REPO_ROOT/build/test-vm.sh" --installed --headless >/dev/null 2>&1 &
-SAKURA_VM_USER=tester SAKURA_VM_TIMEOUT=900 "$REPO_ROOT/build/vm-ready.sh" \
+
+# Wait for the guest agent, not for a desktop session.
+#
+# vm-ready.sh waits for a logged-in user, which is right for the live media
+# because it autologins. An installed system stops at the greeter and waits
+# for a password, so that session never arrives and the canary timed out
+# every time -- after a clean 37/37 install, which made it look as though
+# something had gone wrong with the machine rather than with this script.
+wait_for_agent() {
+    local deadline=$(( SECONDS + 900 ))
+    until SAKURA_VM=canary "$REPO_ROOT/build/guest-run.sh" true >/dev/null 2>&1; do
+        (( SECONDS < deadline )) || return 1
+        sleep 10
+    done
+    return 0
+}
+
+wait_for_agent \
     || die "the installed machine did not come up before any updates were applied"
 
 guest() { SAKURA_VM=canary "$REPO_ROOT/build/guest-run.sh" "$1"; }
@@ -70,7 +87,7 @@ sleep 20
 
 BROKEN=""
 REASON=""
-if ! SAKURA_VM_USER=tester SAKURA_VM_TIMEOUT=900 "$REPO_ROOT/build/vm-ready.sh"; then
+if ! wait_for_agent; then
     REASON="the machine did not reach a desktop after the update"
 else
     say "re-running the checks"
