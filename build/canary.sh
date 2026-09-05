@@ -16,7 +16,13 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export SAKURA_VM=canary
+# The same name test-install.sh uses. It exports SAKURA_VM=clean itself, so
+# the base install always lands on sakura-clean.qcow2 -- and this script then
+# booted sakura-canary.qcow2, a disk nothing had ever installed to. An empty
+# disk has no guest agent, so the wait timed out and the canary reported that
+# the installed machine had not come up. It had; this was looking at the
+# wrong one.
+export SAKURA_VM=clean
 OUT="$REPO_ROOT/out/advisories.json"
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 REPO_HOST="${REPO_HOST:-root@173.233.87.167}"
@@ -39,11 +45,11 @@ die() {
 }
 
 say "installing a fresh machine to update"
-SAKURA_VM=canary METHOD=copy "$REPO_ROOT/build/test-install.sh" >"$REPO_ROOT/out/canary-install.log" 2>&1 \
+SAKURA_VM=clean METHOD=copy "$REPO_ROOT/build/test-install.sh" >"$REPO_ROOT/out/canary-install.log" 2>&1 \
     || die "the base install failed, so there is nothing to update. See out/canary-install.log"
 
 say "booting the installed machine"
-SAKURA_VM=canary "$REPO_ROOT/build/test-vm.sh" --installed --headless >/dev/null 2>&1 &
+SAKURA_VM=clean "$REPO_ROOT/build/test-vm.sh" --installed --headless >/dev/null 2>&1 &
 
 # Wait for the guest agent, not for a desktop session.
 #
@@ -54,7 +60,7 @@ SAKURA_VM=canary "$REPO_ROOT/build/test-vm.sh" --installed --headless >/dev/null
 # something had gone wrong with the machine rather than with this script.
 wait_for_agent() {
     local deadline=$(( SECONDS + 900 ))
-    until SAKURA_VM=canary "$REPO_ROOT/build/guest-run.sh" true >/dev/null 2>&1; do
+    until SAKURA_VM=clean "$REPO_ROOT/build/guest-run.sh" true >/dev/null 2>&1; do
         (( SECONDS < deadline )) || return 1
         sleep 10
     done
@@ -64,7 +70,7 @@ wait_for_agent() {
 wait_for_agent \
     || die "the installed machine did not come up before any updates were applied"
 
-guest() { SAKURA_VM=canary "$REPO_ROOT/build/guest-run.sh" "$1"; }
+guest() { SAKURA_VM=clean "$REPO_ROOT/build/guest-run.sh" "$1"; }
 
 say "what is pending"
 PENDING=$(guest "checkupdates 2>/dev/null || true" || true)
@@ -91,7 +97,7 @@ if ! wait_for_agent; then
     REASON="the machine did not reach a desktop after the update"
 else
     say "re-running the checks"
-    if ! SAKURA_VM=canary verify_only=1 "$REPO_ROOT/build/test-install.sh" --verify-only \
+    if ! SAKURA_VM=clean verify_only=1 "$REPO_ROOT/build/test-install.sh" --verify-only \
             >"$REPO_ROOT/out/canary-verify.log" 2>&1; then
         REASON="checks failed after the update. See out/canary-verify.log"
     fi
