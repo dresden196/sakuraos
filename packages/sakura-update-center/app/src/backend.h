@@ -19,6 +19,10 @@ class Backend : public QObject
     Q_PROPERTY(bool applying READ applying NOTIFY stateChanged)
     Q_PROPERTY(QString error READ error NOTIFY stateChanged)
     Q_PROPERTY(QString lastChecked READ lastChecked NOTIFY stateChanged)
+    // Whether this machine writes 14:30 or 2:30 PM. Read from the locale, so
+    // it follows the clock the user chose during the install rather than a
+    // second, separate setting that could disagree with it.
+    Q_PROPERTY(bool uses24Hour READ uses24Hour CONSTANT)
     Q_PROPERTY(bool restartRequired READ restartRequired NOTIFY dataChanged)
     Q_PROPERTY(QVariantList updates READ updates NOTIFY dataChanged)
     Q_PROPERTY(QVariantList holds READ holds NOTIFY dataChanged)
@@ -32,6 +36,7 @@ public:
     bool applying() const { return m_applying; }
     QString error() const { return m_error; }
     QString lastChecked() const { return m_lastChecked; }
+    bool uses24Hour() const;
     bool restartRequired() const { return m_restart; }
     QVariantList updates() const { return m_updates; }
     QVariantList holds() const { return m_holds; }

@@ -13,6 +13,45 @@ QQC2.ApplicationWindow {
     palette.windowText: text
     color: bg
 
+    // The update window is stored as 24-hour "HH:MM" -- that is what goes into
+    // sakura.conf and what the timer reads -- and only its presentation
+    // follows this machine's clock. Keeping one canonical form means a machine
+    // set to a 12-hour clock does not end up with a differently-shaped config
+    // file from one set to 24.
+    function displayTime(stored) {
+        var parts = ("" + (stored || "03:00")).split(":")
+        var h = parseInt(parts[0], 10)
+        var m = parts[1] || "00"
+        if (isNaN(h)) { h = 3; m = "00" }
+        if (backend.uses24Hour)
+            return (h < 10 ? "0" + h : "" + h) + ":" + m
+        var h12 = h % 12
+        if (h12 === 0) h12 = 12
+        return h12 + ":" + m
+    }
+
+    function meridiemOf(stored) {
+        var h = parseInt(("" + (stored || "03:00")).split(":")[0], 10)
+        return (isNaN(h) || h < 12) ? "AM" : "PM"
+    }
+
+    // Anything unreadable falls back to 03:00 rather than to midnight: a
+    // silent 00:00 is a schedule change nobody asked for.
+    function storedTime(shown, meridiemLabel) {
+        var parts = ("" + shown).split(":")
+        var h = parseInt(parts[0], 10)
+        var m = parseInt(parts[1], 10)
+        if (isNaN(h) || isNaN(m) || m < 0 || m > 59) return "03:00"
+        if (!backend.uses24Hour) {
+            if (h < 1 || h > 12) return "03:00"
+            h = h % 12
+            if (meridiemLabel === "PM") h += 12
+        } else if (h < 0 || h > 23) {
+            return "03:00"
+        }
+        return (h < 10 ? "0" + h : "" + h) + ":" + (m < 10 ? "0" + m : "" + m)
+    }
+
     // The restore point awaiting confirmation, or null. Rolling back replaces
     // the whole system with an earlier copy of itself, so it is never one
     // click away.
@@ -688,22 +727,38 @@ QQC2.ApplicationWindow {
                     id: timeField
                     enabled: autoBox.checked
                     Layout.preferredWidth: 90
-                    inputMask: "99:99"
+                    // Follows this machine's clock. It was fixed at 24-hour,
+                    // so somebody who chose a 12-hour clock during the install
+                    // was asked for the update time in the other format, with
+                    // no AM or PM to pick.
+                    inputMask: backend.uses24Hour ? "99:99" : "x9:99"
                     color: root.text
-                    Component.onCompleted: text = parent.parent.s.window
+                    // The stored value is always 24-hour "HH:MM": it goes into
+                    // sakura.conf and is read by a timer, so only the display
+                    // changes.
+                    Component.onCompleted: text = root.displayTime(parent.parent.s.window)
                     background: Rectangle {
                         radius: 7; color: root.card
                         border.width: 1; border.color: parent.activeFocus ? root.accent : root.line
                     }
                 }
+                QQC2.Button {
+                    id: meridiem
+                    property string label: root.meridiemOf(timeField.parent.parent.s.window)
+                    visible: !backend.uses24Hour
+                    enabled: autoBox.checked
+                    text: label
+                    implicitWidth: 54
+                    onClicked: label = (label === "AM") ? "PM" : "AM"
+                }
             }
             QQC2.Label {
                 Layout.maximumWidth: 520
                 wrapMode: Text.WordWrap
-                text: "Not built yet. When it is, SakuraOS will install each update on its "
-                    + "own machines and restart them before offering it to yours, and hold "
-                    + "back anything that breaks. Until then, updates are held back only "
-                    + "when Arch publishes a notice about them."
+                text: "SakuraOS installs each update on its own machines and restarts "
+                    + "them before offering it to yours, and holds back anything that "
+                    + "breaks. Updates are also held back when Arch publishes a notice "
+                    + "about them."
                 color: root.dim; font.pixelSize: 12
             }
             Btn {
@@ -713,7 +768,7 @@ QQC2.ApplicationWindow {
                     "autoApply": autoBox.checked,
                     "canary": canaryBox.checked,
                     "acOnly": acBox.checked,
-                    "window": timeField.text
+                    "window": root.storedTime(timeField.text, meridiem.label)
                 })
             }
             Item { Layout.fillHeight: true }
