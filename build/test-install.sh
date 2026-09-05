@@ -280,6 +280,14 @@ check "snapshots exist"                    "test \"\$(snapper -c root list | wc 
 # The duplicate [sakura-core] left by pacstrap made every pacman run warn.
 check "sakura-core registered exactly once" \
       "test \"\$(grep -c '^\\[sakura-core\\]' /etc/pacman.conf)\" -eq 0"
+# Precedence, not just presence. pacman resolves a name from the first repo in
+# file order, so our repository has to be included before [core] or an Arch
+# package sharing a name would win. The installer refuses to finish if it
+# lands the other way round, but nothing re-checked it afterwards, and this
+# file is exactly the kind that a pacnew merge quietly reorders. The canary
+# runs these checks again after every update, which is where it matters.
+check "sakura-core is included before [core]" \
+      "test \"\$(grep -n '^Include = /etc/pacman.d/sakura-core.conf' /etc/pacman.conf | cut -d: -f1)\" -lt \"\$(grep -n '^\\[core\\]' /etc/pacman.conf | cut -d: -f1)\""
 # These two are the only checks that need a route out. Offline they are not
 # failures, they are not applicable -- skipped out loud rather than silently,
 # so a 35/35 offline pass can never be mistaken for the full 37.
