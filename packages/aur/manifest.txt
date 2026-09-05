@@ -49,3 +49,22 @@ cpr --nocheck
 # update URL is https, so the packaged tool cannot update anything. zsync2 is
 # the maintained rewrite that speaks it.
 zsync2
+
+# Browsers offered by the installer.
+#
+# The installer installs the chosen browser with pacstrap during the install,
+# so the name has to resolve from a repository the target can reach. Three of
+# the four originally offered did not: these are AUR-only, and the list even
+# said "brave", which is not the AUR name either. Choosing the default browser
+# would have failed the install, and nothing tested it.
+#
+# Vivaldi is deliberately absent: it is in Arch's extra, so rebuilding it here
+# would shadow a perfectly good packaged copy for no reason.
+#
+# All -bin packages: these repackage an upstream binary rather than compiling
+# a browser from source, which is the only reason carrying four of them is
+# affordable.
+zen-browser-bin
+brave-bin
+google-chrome
+helium-browser-bin

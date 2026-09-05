@@ -571,10 +571,16 @@ QStringList Backend::avatars() const
     // avatar picker. Plasma's are deliberately not offered alongside them --
     // mixing two art styles in one ring looks like neither was chosen.
     //
-    // /usr/share/sddm/faces is a different thing entirely: per-user login
-    // pictures, and on a fresh system it holds only root.face.icon.
-    for (const QString &dir : {QStringLiteral("/usr/share/sakura/avatars"),
-                               QStringLiteral("/usr/share/sddm/faces")}) {
+    // /usr/share/sddm/faces is deliberately not read. It is a different thing
+    // entirely -- per-user login pictures -- and on a fresh system it holds
+    // exactly one file, root.face.icon, which is the generic outline of a
+    // person that desktops use when they know nothing about you. It appeared
+    // at the end of the ring as an anonymous grey figure among photographs,
+    // looking like a bug because it was one.
+    //
+    // There is already a right answer for "no picture chosen": the initials
+    // tile, which is the first thing in the ring and is selected by default.
+    for (const QString &dir : {QStringLiteral("/usr/share/sakura/avatars")}) {
         QDir d(dir);
         const auto files = d.entryList({QStringLiteral("*.jpg"), QStringLiteral("*.png"),
                                         QStringLiteral("*.face.icon")},

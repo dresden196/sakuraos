@@ -48,6 +48,11 @@ stale_packages() {
     echo "$found"
 }
 
+# The installer's browser list is only as good as the names in it, and a bad
+# name is not visible until an install fails at the very end. Cheap to check,
+# so it is checked before three gigabytes are written.
+"$REPO_ROOT/build/check-browsers.sh" || exit 1
+
 STALE="$(stale_packages)"
 if [[ -n "$STALE" ]]; then
     echo >&2

@@ -251,6 +251,11 @@ docker run --rm \
             case "$base" in
                 *-debug-*) continue ;;
                 nvidia-580xx-*|opencl-nvidia-580xx-*) dest="$EXTRA" ;;
+                # Browsers: a few hundred megabytes each, and an install uses
+                # exactly one of them. Putting four on every ISO to ship three
+                # nobody chose is the definition of what sakura-extra is for.
+                # They are fetched over the network when the installer asks.
+                zen-browser-bin-*|brave-bin-*|google-chrome-*|helium-browser-bin-*) dest="$EXTRA" ;;
                 *) dest="$CORE" ;;
             esac
             cp -f "$pkg" "$dest/"
