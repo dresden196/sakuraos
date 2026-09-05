@@ -44,8 +44,19 @@ verify_only=0
 encrypt=0
 for arg in "$@"; do
     case "$arg" in
-        --verify)  verify_only=1 ;;
+        --verify|--verify-only)  verify_only=1 ;;
         --encrypt) encrypt=1 ;;
+        # Anything else is a mistake, and silence about it is expensive. The
+        # canary asked for --verify-only, which this did not accept and
+        # ignored without a word, so instead of re-checking the machine it
+        # had just updated it wiped the disk and started a fresh install --
+        # then reported the update as broken when that install timed out.
+        # Every green run was published as a failure holding 24 packages.
+        *)
+            echo "test-install: unknown argument: $arg" >&2
+            echo "usage: test-install.sh [--verify|--verify-only] [--encrypt]" >&2
+            exit 2
+            ;;
     esac
 done
 CRYPTPASS=diskpass
