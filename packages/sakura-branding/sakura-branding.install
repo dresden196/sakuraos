@@ -13,6 +13,14 @@ _activate_repos() {
     # config file nothing includes is inert, and the previous version shipped
     # a working repository definition that pacman never read.
     grep -q 'sakura-core.conf' etc/pacman.conf 2>/dev/null && return 0
+    # Also stop if the repository is already defined some other way. The live
+    # ISO declares [sakura-core] inline, pointing at the copy on the media,
+    # and that does not contain the string above -- so this used to add a
+    # second definition of the same repository. pacman then refuses with
+    # "database already registered" and exits non-zero, which made
+    # "pacman -Si linux-cachyos" fail during installation and every machine
+    # quietly get the stock kernel instead of the tuned one.
+    grep -q '^\[sakura-core\]' etc/pacman.conf 2>/dev/null && return 0
     sed -i '/^\[core\]/i Include = /etc/pacman.d/sakura-core.conf\n' etc/pacman.conf
 }
 
