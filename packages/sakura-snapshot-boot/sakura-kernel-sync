@@ -27,10 +27,38 @@ RUNNING=$(uname -r)
 
 log() { echo "sakura-kernel-sync: $*"; }
 
+# A rollback says outright that the boot image was built against a different
+# root, so there is nothing to detect. This is checked before the module test
+# because the module test passes whenever the rollback did not cross a kernel
+# change -- and the initramfs still disagrees with the root about everything
+# else it carries. A machine rolled back across a sakura-plymouth update hung
+# at "Terminate Plymouth Boot Screen" with modules matching perfectly.
+STALE=/var/lib/sakura/boot-image-stale
+
+if [ -e "$STALE" ] && [ ! -e "$STAMP" ]; then
+    log "the root was rolled back; the boot image was built against a different system"
+    if ! mountpoint -q /boot; then
+        log "/boot is not mounted; cannot rebuild the boot image"
+        exit 0
+    fi
+    mkdir -p "$(dirname "$STAMP")"
+    : > "$STAMP"
+    if mkinitcpio -P; then
+        rm -f "$STALE"
+        log "boot image rebuilt for the restored root; restarting"
+        sync
+        systemctl reboot
+        exit 0
+    fi
+    log "mkinitcpio failed; leaving the system as it is"
+    exit 0
+fi
+
 if [ -d "/usr/lib/modules/$RUNNING" ]; then
     # The boot image and the root agree. Clear any earlier attempt so a
     # future mismatch is treated as new rather than as a loop.
     rm -f "$STAMP"
+    rm -f "$STALE"
     exit 0
 fi
 

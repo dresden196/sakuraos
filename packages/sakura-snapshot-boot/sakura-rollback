@@ -74,4 +74,21 @@ if ! btrfs subvolume snapshot "$SNAP" "$ROOT"; then
     exit 1
 fi
 
+# Tell the next boot that the boot image no longer matches this root.
+#
+# The ESP is not in any snapshot, so the UKI still holds the initramfs built
+# by whatever update is being rolled back past. sakura-kernel-sync was meant
+# to cover that and only asks whether the running kernel has its modules --
+# which is true whenever the rollback did not cross a kernel change, so it
+# stays silent while the initramfs and the root disagree about everything
+# else they share. Measured on a real machine: rolling back across an update
+# that changed sakura-plymouth left a boot that hung at "Terminate Plymouth
+# Boot Screen" and never reached a desktop.
+#
+# A rollback replaces the root wholesale, so the honest statement is that the
+# boot image was built against a different system and has to be rebuilt. No
+# detection required.
+mkdir -p "$ROOT/var/lib/sakura"
+printf 'rolled back to snapshot %s\n' "$NUM" > "$ROOT/var/lib/sakura/boot-image-stale"
+
 echo "rollback complete"
