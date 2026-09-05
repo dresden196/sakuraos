@@ -28,6 +28,9 @@ STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 REPO_HOST="${REPO_HOST:-root@173.233.87.167}"
 REPO_PORT="${REPO_PORT:-37156}"
 REPO_PATH="${REPO_PATH:-/srv/sakura/repo/advisories.json}"
+# The destination lives in the forced command on the repo host now; this key
+# is the whole of the canary's access there.
+ADVISORY_KEY="${ADVISORY_KEY:-/root/.ssh/id_ed25519_advisory}"
 
 cleanup() { pkill -f "[s]akura-${SAKURA_VM}\.qcow2" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
@@ -172,6 +175,21 @@ cat "$OUT"
 
 if [[ "${PUBLISH:-0}" == "1" ]]; then
     say "publishing"
-    scp -P "$REPO_PORT" "$OUT" "$REPO_HOST:$REPO_PATH"
-    say "published to $REPO_PATH"
+    # Piped to a forced command, not scp'd to a path. The key this uses can
+    # run exactly one program on the repo host and cannot pick a destination,
+    # so a canary that is compromised or simply wrong can replace one
+    # advisory file and nothing else. The receiving end validates the JSON
+    # before it replaces anything, because this file decides what every
+    # SakuraOS machine holds back.
+    if ssh -p "$REPO_PORT" -i "$ADVISORY_KEY" \
+           -o BatchMode=yes -o ConnectTimeout=15 \
+           "$REPO_HOST" < "$OUT"; then
+        say "published"
+    else
+        # Not fatal to the run: the advisory is written locally either way,
+        # and a failed upload must not turn a correct verdict into a lost one.
+        say "WARNING: could not publish the advisory"
+        "$REPO_ROOT/build/canary-notify.sh" stalled \
+            "the canary ran but could not publish its advisory" "" "" || true
+    fi
 fi
