@@ -49,7 +49,11 @@ SAKURA_VM=clean METHOD=copy "$REPO_ROOT/build/test-install.sh" >"$REPO_ROOT/out/
     || die "the base install failed, so there is nothing to update. See out/canary-install.log"
 
 say "booting the installed machine"
-SAKURA_VM=clean "$REPO_ROOT/build/test-vm.sh" --installed --headless >/dev/null 2>&1 &
+# Keep the boot output. Discarding it cost several rounds of debugging: the
+# VM failed to start and the only symptom was a wait that timed out fifteen
+# minutes later, with nothing anywhere saying why.
+SAKURA_VM=clean "$REPO_ROOT/build/test-vm.sh" --installed --headless \
+    > "$REPO_ROOT/out/installed-boot.log" 2>&1 &
 
 # Wait for the guest agent, not for a desktop session.
 #
