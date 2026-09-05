@@ -295,7 +295,14 @@ detect_graphics() {
     local best=0
     for id in $ids; do
         local n=$((16#$id))
-        (( n > best )) && best=$n
+        # Not "(( ... )) && best=$n": that returns 1 when the test is false,
+        # and under set -e it ends the installer. It only bites a machine with
+        # more than one NVIDIA card whose second card has the lower device id,
+        # which is rare enough to have survived unnoticed and awkward enough
+        # to debug if it ever fired.
+        if (( n > best )); then
+            best=$n
+        fi
     done
 
     # 0x1E00 is the first Turing part; anything at or above it is supported by
