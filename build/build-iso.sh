@@ -31,6 +31,38 @@ LIVE_PACMAN_CONF="$REPO_ROOT/iso/airootfs/etc/pacman.conf"
 cleanup_staging() { rm -rf "$STAGED_REPO" "$LIVE_PACMAN_CONF"; }
 trap cleanup_staging EXIT
 
+# An ISO build stages already-built packages; it does not build them. So
+# editing packages/sakura-install and rebuilding the ISO produces an ISO with
+# the *old* installer in it, silently, and the next twenty minutes are spent
+# testing code that was replaced hours ago. That happened. Compare source
+# mtimes against the built packages and say so.
+stale_packages() {
+    local newest_src pkg base found=""
+    for dir in "$REPO_ROOT"/packages/*/; do
+        base="$(basename "$dir")"
+        pkg="$(ls -t "$REPO_ROOT"/repo/*/os/*/"$base"-*.pkg.tar.zst 2>/dev/null | head -1)"
+        [[ -n "$pkg" ]] || continue
+        newest_src="$(find "$dir" -type f -newer "$pkg" -print -quit 2>/dev/null)"
+        [[ -n "$newest_src" ]] && found="$found $base"
+    done
+    echo "$found"
+}
+
+STALE="$(stale_packages)"
+if [[ -n "$STALE" ]]; then
+    echo >&2
+    echo "!! These packages have source newer than the built package:" >&2
+    for p in $STALE; do echo "     $p" >&2; done
+    echo "   The ISO stages what is in repo/, so those edits will NOT be in it." >&2
+    echo "   Run ./build/build-packages.sh --skip-aur first." >&2
+    if [[ "${SAKURA_ALLOW_STALE:-0}" != "1" ]]; then
+        echo "   Set SAKURA_ALLOW_STALE=1 to build anyway." >&2
+        exit 1
+    fi
+    echo "   SAKURA_ALLOW_STALE=1 set, continuing." >&2
+    echo >&2
+fi
+
 if [[ -d "$REPO_ROOT/repo" ]]; then
     mkdir -p "$STAGED_REPO"
     # Only sakura-core goes on the media. sakura-extra holds things that are
