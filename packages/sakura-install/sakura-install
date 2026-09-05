@@ -367,25 +367,31 @@ KERNEL="linux"
 # exactly what happened on the first real install: the CPU reported v3 and
 # stock was installed anyway. Cheap on file:// media, and it has to happen
 # before pacstrap regardless.
-# Wait for the live keyring before asking pacman anything.
+# Wait until pacman can actually answer questions about our repository.
 #
-# archiso builds /etc/pacman.d/gnupg at boot with pacman-init.service, and it
-# takes about a minute. Until it finishes, our repository fails signature
-# verification -- "key is unknown", "database is not valid" -- and every query
-# against it fails. The kernel availability check below is such a query, so an
-# installer started promptly concluded the tuned kernel was missing and fell
-# back to stock, with nothing worse than a warning in the log.
+# archiso builds /etc/pacman.d/gnupg at boot with pacman-init.service, which
+# takes about a minute. Until our signing key is trusted, queries against
+# sakura-core fail with "key is unknown" and "database is not valid" -- so the
+# kernel availability check below failed, and an installer started promptly
+# concluded the tuned kernel was missing and quietly used the stock one. Which
+# kernel a machine ended up with therefore depended on how long its owner
+# spent reading the welcome screen.
 #
-# That made the kernel a machine got depend on how long the user spent reading
-# the welcome screen. Measured on one VM: failing at 45 seconds of uptime,
-# succeeding at 115.
+# The first attempt at this waited for pacman-key to answer and for the
+# keyring directory to have files in it. Both become true before the key is
+# trusted, so it waited and then failed anyway. Wait for the actual question
+# to have an actual answer instead of for something that correlates with it.
 if [[ -d /run/archiso ]]; then
-    for _i in $(seq 1 60); do
-        if pacman-key --list-keys >/dev/null 2>&1 \
-           && [[ $(ls /etc/pacman.d/gnupg 2>/dev/null | wc -l) -gt 4 ]]; then
+    _said=0
+    for _i in $(seq 1 45); do
+        pacman -Sy >/dev/null 2>&1 || true
+        if pacman -Si linux-cachyos >/dev/null 2>&1; then
             break
         fi
-        [[ $_i -eq 1 ]] && info "waiting for the live keyring to finish building"
+        if [[ $_said -eq 0 ]]; then
+            info "waiting for the live keyring before choosing a kernel"
+            _said=1
+        fi
         sleep 2
     done
 fi
