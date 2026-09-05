@@ -1749,7 +1749,30 @@ def cmd_search(args) -> int:
     apps = merge(groups)
     attach_ratings(apps)
 
-    apps.sort(key=lambda a: (a.rating_count, a.popularity.get("installs", 0)), reverse=True)
+    # How well it matches what was typed comes before how popular it is.
+    # Sorting on ratings alone put Flathub's "Calculator" above "KCalc" for
+    # the query "kcalc": a more popular app that merely mentions the word beat
+    # the one actually named it. Somebody typing an exact name has told you
+    # precisely what they want, and no rating count outranks that.
+    q = args.query.strip().lower()
+
+    def rank(a):
+        name = (a.name or "").lower()
+        ident = (a.source_id or a.id or "").lower()
+        if name == q or ident == q:
+            tier = 0                        # exactly what was asked for
+        elif name.startswith(q) or ident.startswith(q):
+            tier = 1                        # the name begins with it
+        elif q in name or q in ident:
+            tier = 2                        # the name contains it
+        else:
+            tier = 3                        # matched on description alone
+        return (tier,
+                -(a.rating_count or 0),
+                -(a.popularity.get("installs", 0) or 0),
+                name)
+
+    apps.sort(key=rank)
 
     if args.json:
         print(json.dumps({"apps": [asdict(a) for a in apps],
