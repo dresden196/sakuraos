@@ -149,6 +149,28 @@ display_args=(-display gtk,show-cursor=on -device "$VGA")
 (( gl ))       && display_args=(-display gtk,gl=on,show-cursor=on -device virtio-vga-gl,edid=on,xres=1920,yres=1080)
 (( headless )) && display_args=(-display none -device "$VGA")
 
+# A previous run's qemu can still hold the forward for a few seconds after it
+# is killed. qemu does not wait and does not retry: it prints "Could not set
+# up host forwarding rule" and exits, which a caller watching for the guest to
+# come up reads as a slow boot rather than as a dead VM. Waiting here turns
+# the common case into a pause instead of a failure, and the uncommon case
+# into a sentence that says what is wrong.
+port_taken() { timeout 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/$1" 2>/dev/null; }
+if port_taken "$SSH_PORT"; then
+    echo ">> ssh port $SSH_PORT is still held, waiting for it to free up"
+    for _i in $(seq 1 30); do
+        sleep 1
+        port_taken "$SSH_PORT" || break
+    done
+    if port_taken "$SSH_PORT"; then
+        echo "test-vm: ssh port $SSH_PORT is still in use after 30s." >&2
+        echo "         Something else is holding it -- an earlier VM that did" >&2
+        echo "         not exit, or another instance of this harness. Set" >&2
+        echo "         SAKURA_VM_SSH_PORT to pick a different one." >&2
+        exit 1
+    fi
+fi
+
 if (( installed )); then
     echo ">> booting the installed system as \"$VM\" (ssh port $SSH_PORT)"
 else
