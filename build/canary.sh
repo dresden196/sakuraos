@@ -48,6 +48,21 @@ say "installing a fresh machine to update"
 SAKURA_VM=clean METHOD=copy "$REPO_ROOT/build/test-install.sh" >"$REPO_ROOT/out/canary-install.log" 2>&1 \
     || die "the base install failed, so there is nothing to update. See out/canary-install.log"
 
+# Wait for the install VM to actually let go of the disk.
+#
+# test-install.sh signals its VM and returns; qemu takes a moment to exit and
+# release the image lock. Starting the next VM straight away fails with "Is
+# another process using the image", which then presents as the installed
+# machine never coming up. Signalling a process is not the same as it having
+# gone.
+for _i in $(seq 1 30); do
+    if ! fuser "$REPO_ROOT/out/sakura-clean.qcow2" >/dev/null 2>&1; then
+        break
+    fi
+    [[ $_i -eq 1 ]] && say "waiting for the install VM to release the disk"
+    sleep 2
+done
+
 say "booting the installed machine"
 # Keep the boot output. Discarding it cost several rounds of debugging: the
 # VM failed to start and the only symptom was a wait that timed out fifteen
