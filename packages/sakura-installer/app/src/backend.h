@@ -60,6 +60,8 @@ public:
     // where the installer happens to be running.
     Q_INVOKABLE int utcOffset(const QString &timezone) const;
     Q_INVOKABLE void install(const QVariantMap &answers);
+    // Restart into the machine that was just installed.
+    Q_INVOKABLE void reboot();
 
     QString currentStep() const { return m_step; }
     int percent() const { return m_percent; }
