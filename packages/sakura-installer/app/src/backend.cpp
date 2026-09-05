@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QLocale>
 #include <QDateTime>
+#include <QTimer>
 #include <QSet>
 #include <algorithm>
 
@@ -610,7 +611,21 @@ void Backend::reboot()
 void Backend::appendLog(const QString &text)
 {
     m_log += text;
-    Q_EMIT logChanged();
+
+    // Coalesced rather than emitted per chunk. pacman draws progress bars with
+    // carriage returns, so the installer produces many chunks a second, and
+    // signalling each one made the interface spend the whole install rebuilding
+    // a text document instead of drawing. Four updates a second is faster than
+    // anyone reads and leaves the event loop time to do its other work.
+    if (!m_logFlush) {
+        m_logFlush = new QTimer(this);
+        m_logFlush->setSingleShot(true);
+        m_logFlush->setInterval(250);
+        connect(m_logFlush, &QTimer::timeout, this, [this] { Q_EMIT logChanged(); });
+    }
+    if (!m_logFlush->isActive()) {
+        m_logFlush->start();
+    }
 }
 
 void Backend::install(const QVariantMap &answers)

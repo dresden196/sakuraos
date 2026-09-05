@@ -3030,7 +3030,15 @@ newer hardware gets the faster build.`
                 visible: showLog.checked
                 QQC2.TextArea {
                     readOnly: true
-                    text: backend.log
+                    // Only bound while the pane is open. A binding keeps being
+                    // re-evaluated when its item is invisible -- visibility is
+                    // not laziness -- so this was rebuilding the whole text
+                    // document of an ever-growing log on every chunk of
+                    // installer output, hidden, for the entire install.
+                    // pacman's progress bars emit many chunks a second, which
+                    // left no time for anything else and froze the slideshow
+                    // in place.
+                    text: showLog.checked ? backend.log : ""
                     color: root.dim
                     font.family: "monospace"
                     font.pixelSize: 11

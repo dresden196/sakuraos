@@ -752,6 +752,33 @@ The disk would not boot, so the install has been stopped instead."
     # Graphics and extras are best-effort by comparison. Offline they may not
     # resolve, and an install that otherwise succeeded should not be thrown
     # away over them -- the live image already carries the open drivers, and
+    # Drop extras that cannot be resolved, rather than letting one of them
+    # take the install down.
+    #
+    # The browser is an extra package, and a browser choice must never be able
+    # to fail an installation -- it is the least important decision on any of
+    # these screens. pacstrap is all-or-nothing: one unresolvable name and the
+    # whole transaction fails, at the end, on a disk that has already been
+    # written. The chroot pacman below is all-or-nothing in the other
+    # direction, dropping the graphics driver too because a browser was
+    # missing.
+    #
+    # Checked against the target's own repositories, so a package that exists
+    # only in sakura-extra still counts.
+    # shellcheck disable=SC2086
+    if [[ -n "$EXTRA_PACKAGES" ]]; then
+        _keep=""
+        for _pkg in $EXTRA_PACKAGES; do
+            if arch-chroot /mnt pacman -Si "$_pkg" >/dev/null 2>&1; then
+                _keep="$_keep $_pkg"
+            else
+                info "WARNING: $_pkg is not available in any repository; skipping it"
+                info "the rest of the install carries on without it"
+            fi
+        done
+        EXTRA_PACKAGES="${_keep# }"
+    fi
+
     # the first update after the machine is online will fill in the rest.
     # shellcheck disable=SC2086
     if [[ "$HAVE_NET" != "yes" ]]; then
@@ -782,6 +809,22 @@ the system will pick them up once it is online."
     fi
 else
     step "Installing packages"
+    # Same protection as the copy path, for the same reason: pacstrap is
+    # all-or-nothing, so one unresolvable extra -- a browser, most likely --
+    # would fail the whole install rather than simply not being installed.
+    # Here the check runs against the live environment's repositories, which
+    # are configured identically to the target's at this point.
+    if [[ -n "$EXTRA_PACKAGES" ]]; then
+        _keep=""
+        for _pkg in $EXTRA_PACKAGES; do
+            if pacman -Si "$_pkg" >/dev/null 2>&1; then
+                _keep="$_keep $_pkg"
+            else
+                info "WARNING: $_pkg is not available in any repository; skipping it"
+            fi
+        done
+        EXTRA_PACKAGES="${_keep# }"
+    fi
     # shellcheck disable=SC2086  # deliberate word splitting of the extras list
     pacstrap -K /mnt "$KERNEL" sakura-desktop $GRAPHICS_PACKAGES $EXTRA_PACKAGES
 fi

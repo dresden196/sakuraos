@@ -1,6 +1,10 @@
 #pragma once
 
 #include <QObject>
+
+QT_BEGIN_NAMESPACE
+class QTimer;
+QT_END_NAMESPACE
 #include <QProcess>
 #include <QVariantList>
 #include <QVariantMap>
@@ -80,6 +84,8 @@ private:
     QProcess *m_proc = nullptr;
     QString m_step;
     QString m_log;
+    // Coalesces logChanged so a chatty install cannot starve the interface.
+    QTimer *m_logFlush = nullptr;
     int m_percent = 0;
     bool m_running = false;
 };
