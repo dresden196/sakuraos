@@ -52,7 +52,12 @@ say "booting the installed machine"
 # Keep the boot output. Discarding it cost several rounds of debugging: the
 # VM failed to start and the only symptom was a wait that timed out fifteen
 # minutes later, with nothing anywhere saying why.
-SAKURA_VM=clean "$REPO_ROOT/build/test-vm.sh" --installed --headless \
+# setsid, not a plain background job. Launched as an ordinary child the VM
+# shares this session, and when the session that started the canary is torn
+# down -- which pct exec does -- qemu takes a SIGTERM and dies while the
+# canary carries on waiting for an agent that is never coming back. Observed
+# directly: "qemu-system-x86_64: terminating on signal 15".
+SAKURA_VM=clean setsid "$REPO_ROOT/build/test-vm.sh" --installed --headless \
     > "$REPO_ROOT/out/installed-boot.log" 2>&1 &
 
 # Wait for the guest agent, not for a desktop session.
