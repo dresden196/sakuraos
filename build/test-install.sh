@@ -88,7 +88,13 @@ if (( ! verify_only )); then
     rm -f "$REPO_ROOT/out/sakura-clean.qcow2" \
           "$REPO_ROOT/out/sakura-clean-2.qcow2" \
           "$REPO_ROOT/out/OVMF_VARS-clean.fd"
-    "$REPO_ROOT/build/test-vm.sh" --headless >/dev/null 2>&1 &
+    # setsid, and keep the output. A plain background job shares this
+    # session, so qemu takes a SIGTERM whenever whatever started the harness
+    # tears its session down -- which pct exec does. The symptom is a live
+    # session that never appears, fifteen minutes later, with the reason
+    # discarded into /dev/null.
+    setsid "$REPO_ROOT/build/test-vm.sh" --headless \
+        > "$REPO_ROOT/out/live-boot.log" 2>&1 &
     "$REPO_ROOT/build/vm-ready.sh"
 
     echo ">> installing to /dev/vda"
@@ -145,7 +151,8 @@ if (( ! verify_only )); then
     # --installed leaves the ISO out entirely, so a firmware that prefers
     # optical cannot quietly boot the live environment and pass these checks
     # against the wrong system.
-    "$REPO_ROOT/build/test-vm.sh" --installed --headless >/dev/null 2>&1 &
+    setsid "$REPO_ROOT/build/test-vm.sh" --installed --headless \
+        > "$REPO_ROOT/out/installed-boot.log" 2>&1 &
 
     # Wait for the guest agent, not for a desktop session. An installed system
     # does not autologin -- correctly -- so there is no session until somebody
