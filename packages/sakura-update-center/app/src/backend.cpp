@@ -1,6 +1,7 @@
 #include "backend.h"
 
 #include <QDateTime>
+#include <QLocale>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -23,6 +24,16 @@ QString capture(const QString &prog, const QStringList &args, int ms = 60000)
 } // namespace
 
 Backend::Backend(QObject *parent) : QObject(parent) {}
+
+bool Backend::uses24Hour() const
+{
+    // Qt spells a 12-hour format with AP or ap in the pattern. Asking the
+    // locale is the only way to stay in step with the clock chosen at install
+    // time, which is stored as LC_TIME rather than as a boolean anybody could
+    // read directly.
+    const QString fmt = QLocale().timeFormat(QLocale::ShortFormat);
+    return !fmt.contains(QLatin1String("AP"), Qt::CaseInsensitive);
+}
 
 void Backend::setBusy(bool b)
 {
@@ -78,7 +89,12 @@ void Backend::check()
             });
         }
 
-        m_lastChecked = QDateTime::currentDateTime().toString(QStringLiteral("d MMM, HH:mm"));
+        // Written the way this machine writes times. It was hardcoded to
+        // HH:mm, so a machine set up with a 12-hour clock -- which the
+        // installer asks about explicitly -- was still shown 14:30 here.
+        m_lastChecked = QLocale().toString(QDateTime::currentDateTime(),
+                                           QStringLiteral("d MMM, ")
+                                           + QLocale().timeFormat(QLocale::ShortFormat));
         setBusy(false);
         Q_EMIT dataChanged();
     });
