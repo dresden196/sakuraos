@@ -83,6 +83,31 @@ check_pacman() {
     check_slow "$1" "$2"
 }
 
+# qemu can fail before it ever runs a guest instruction -- a held ssh forward,
+# a missing image, a busy disk -- and it says so on stderr and exits in about a
+# second. Nothing downstream noticed: the harness went straight into "waiting
+# for the live session" and printed progress dots for the full thirty minutes
+# against a VM that was never running. Every "stalled" alert this canary has
+# ever sent was this, and the log said only that the session never appeared.
+#
+# So: after a launch, prove there is a qemu to wait for before waiting for it.
+vm_running() { pgrep -f "[q]emu-system-x86_64.*sakura-$1" >/dev/null 2>&1; }
+
+vm_must_be_running() {
+    local vm="$1" log="$2" i
+    for i in $(seq 1 20); do
+        vm_running "$vm" && return 0
+        # Exited already, or never started. Either way the answer is in the log.
+        sleep 1
+    done
+    echo >&2
+    echo "test-install: the $vm VM is not running." >&2
+    echo "              qemu exited at startup; it did not fail to boot." >&2
+    echo "--- $log ---" >&2
+    tail -n 15 "$log" >&2 2>/dev/null || echo "(no log)" >&2
+    exit 1
+}
+
 if (( ! verify_only )); then
     echo ">> booting the installer media on a blank disk"
     rm -f "$REPO_ROOT/out/sakura-clean.qcow2" \
@@ -95,6 +120,7 @@ if (( ! verify_only )); then
     # discarded into /dev/null.
     setsid "$REPO_ROOT/build/test-vm.sh" --headless \
         > "$REPO_ROOT/out/live-boot.log" 2>&1 &
+    vm_must_be_running clean "$REPO_ROOT/out/live-boot.log"
     "$REPO_ROOT/build/vm-ready.sh"
 
     echo ">> installing to /dev/vda"
@@ -126,6 +152,11 @@ if (( ! verify_only )); then
     deadline=$(( SECONDS + 1800 ))
     until run "test -f /tmp/install.rc" >/dev/null 2>&1; do
         (( SECONDS < deadline )) || { echo; echo "install did not finish" >&2; exit 1; }
+        # A VM that died halfway through an install is not going to produce
+        # the file being waited on, and waiting the remaining twenty-odd
+        # minutes to say so helps nobody.
+        vm_running clean || { echo; echo "the VM stopped during the install" >&2
+            tail -n 15 "$REPO_ROOT/out/live-boot.log" >&2 2>/dev/null || true; exit 1; }
         echo -n .
         sleep 15
     done
@@ -153,6 +184,7 @@ if (( ! verify_only )); then
     # against the wrong system.
     setsid "$REPO_ROOT/build/test-vm.sh" --installed --headless \
         > "$REPO_ROOT/out/installed-boot.log" 2>&1 &
+    vm_must_be_running clean "$REPO_ROOT/out/installed-boot.log"
 
     # Wait for the guest agent, not for a desktop session. An installed system
     # does not autologin -- correctly -- so there is no session until somebody
