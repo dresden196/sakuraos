@@ -142,6 +142,78 @@ QQC2.ApplicationWindow {
     // One or two letters from whatever has been typed so far. Two words give
     // two initials, one word gives one; nothing typed gives nothing, and the
     // caller draws a plain circle rather than a letter that is not there.
+    // Whether the clock question has been answered by hand. Until it has, the
+    // answer follows the time zone: somebody in Chicago expects 2:30 PM and
+    // somebody in Berlin expects 14:30, and making them both correct it is a
+    // question that did not need asking.
+    property bool hour24Touched: false
+
+    // Zones whose country writes the time on a 12-hour clock. A list rather
+    // than a rule, because there is no rule: Brazil and Argentina are in the
+    // Americas and write 24-hour, India and the Philippines are in Asia and
+    // write 12-hour. Everything not named here defaults to 24-hour, which is
+    // what most of the world uses.
+    readonly property var twelveHourZones: [
+        "America/New_York", "America/Detroit", "America/Chicago", "America/Denver",
+        "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "America/Adak",
+        "America/Boise", "America/Juneau", "America/Sitka", "America/Nome",
+        "America/Menominee", "America/Puerto_Rico", "Pacific/Honolulu",
+        "America/Toronto", "America/Vancouver", "America/Edmonton",
+        "America/Winnipeg", "America/Halifax", "America/St_Johns", "America/Regina",
+        "America/Mexico_City", "America/Tijuana", "America/Monterrey", "America/Cancun",
+        "America/Bogota", "Asia/Manila", "Asia/Kolkata", "Asia/Karachi",
+        "Asia/Dhaka", "Asia/Kuala_Lumpur", "Africa/Cairo", "Pacific/Auckland"
+    ]
+
+    function zoneUsesTwelveHour(tz) {
+        if (twelveHourZones.indexOf(tz) >= 0)
+            return true
+        // The US and Australian zones have a lot of members; matching the
+        // prefix catches Indiana/* and Kentucky/* without listing all of them.
+        return tz.indexOf("America/Indiana/") === 0
+            || tz.indexOf("America/Kentucky/") === 0
+            || tz.indexOf("America/North_Dakota/") === 0
+            || tz.indexOf("Australia/") === 0
+    }
+
+    // The stored update time is always 24-hour "HH:MM", because that is what
+    // the installer writes into the config and what the timer reads. Only the
+    // presentation changes, so a machine set to a 12-hour clock does not end
+    // up with a differently-shaped config file.
+    function updateTimeDisplay() {
+        var parts = (answers.updateTime || "03:00").split(":")
+        var h = parseInt(parts[0], 10); var m = parts[1] || "00"
+        if (isNaN(h)) { h = 3; m = "00" }
+        if (answers.hour24)
+            return (h < 10 ? "0" + h : "" + h) + ":" + m
+        var h12 = h % 12; if (h12 === 0) h12 = 12
+        return h12 + ":" + m
+    }
+
+    function updateTimeMeridiem() {
+        var h = parseInt((answers.updateTime || "03:00").split(":")[0], 10)
+        return (isNaN(h) || h < 12) ? "AM" : "PM"
+    }
+
+    // Parse whatever was typed back into 24-hour form. Anything unreadable
+    // leaves the stored value alone rather than silently becoming midnight.
+    function setUpdateTimeFrom(text, meridiem) {
+        var parts = ("" + text).split(":")
+        var h = parseInt(parts[0], 10)
+        var m = parseInt(parts[1], 10)
+        if (isNaN(h) || isNaN(m) || m < 0 || m > 59)
+            return
+        if (!answers.hour24) {
+            if (h < 1 || h > 12) return
+            h = h % 12
+            if (meridiem === "PM") h += 12
+        } else if (h < 0 || h > 23) {
+            return
+        }
+        answers.updateTime = (h < 10 ? "0" + h : "" + h) + ":" + (m < 10 ? "0" + m : "" + m)
+        answersChanged()
+    }
+
     function initialsFor(name) {
         var parts = (name || "").trim().split(/\s+/).filter(function (w) {
             return w.length > 0
@@ -1730,6 +1802,10 @@ QQC2.ApplicationWindow {
                 Component.onCompleted: {
                     var guess = backend.guessTimezone()
                     root.answers.timezone = guess === "" ? "UTC" : guess
+                    // Same rule as picking one by hand: the detected zone
+                    // decides the clock until the user overrides it.
+                    if (!root.hour24Touched)
+                        root.answers.hour24 = !root.zoneUsesTwelveHour(root.answers.timezone)
                     root.answersChanged()
                 }
             }
@@ -1763,6 +1839,12 @@ QQC2.ApplicationWindow {
                             TapHandler {
                                 onTapped: {
                                     root.answers.timezone = modelData.id
+                                    // Follow the region until somebody says
+                                    // otherwise. Picking Chicago and then
+                                    // being shown 14:30 is a small thing that
+                                    // reads as the installer not listening.
+                                    if (!root.hour24Touched)
+                                        root.answers.hour24 = !root.zoneUsesTwelveHour(modelData.id)
                                     root.answersChanged()
                                 }
                             }
@@ -1929,7 +2011,7 @@ QQC2.ApplicationWindow {
                 detail: (clock.hours < 10 ? "0" : "") + clock.hours + ":"
                       + (clock.minutes < 10 ? "0" : "") + clock.minutes
                 selected: root.answers.hour24
-                onPicked: { root.answers.hour24 = true; root.answersChanged() }
+                onPicked: { root.answers.hour24 = true; root.hour24Touched = true; root.answersChanged() }
             }
             Choice {
                 heading: "12-hour"
@@ -1937,7 +2019,7 @@ QQC2.ApplicationWindow {
                       + (clock.minutes < 10 ? "0" : "") + clock.minutes
                       + (clock.hours < 12 ? " AM" : " PM")
                 selected: !root.answers.hour24
-                onPicked: { root.answers.hour24 = false; root.answersChanged() }
+                onPicked: { root.answers.hour24 = false; root.hour24Touched = true; root.answersChanged() }
             }
             }
             Item { Layout.fillHeight: true }
@@ -2550,14 +2632,41 @@ QQC2.ApplicationWindow {
                 spacing: 12
                 QQC2.Label { text: "Install at"; color: root.dim; font.pixelSize: 13 }
                 Field {
+                    id: updateTimeField
                     Layout.maximumWidth: 92
-                    inputMask: "99:99"
+                    // The mask follows the clock the user chose. It was always
+                    // "99:99", so a machine set to a 12-hour clock still asked
+                    // for the update time in 24-hour and offered no AM or PM --
+                    // the one place in the installer that contradicted an
+                    // answer the user had just given.
+                    inputMask: root.answers.hour24 ? "99:99" : "x9:99"
                     // Set once rather than bound: binding text to the answer
                     // while writing that answer back on every keystroke makes
-                    // the binding re-evaluate itself. Nothing validates this
-                    // field, so committing on edit-finished is enough.
-                    Component.onCompleted: text = root.answers.updateTime
-                    onEditingFinished: root.answers.updateTime = text
+                    // the binding re-evaluate itself.
+                    Component.onCompleted: text = root.updateTimeDisplay()
+                    onEditingFinished: root.setUpdateTimeFrom(text, meridiem.label)
+                    // Re-render when the clock format changes on the earlier
+                    // screen, so going back and switching to 12-hour does not
+                    // leave "15:00" sitting in the box.
+                    Connections {
+                        target: root
+                        function onAnswersChanged() {
+                            if (!updateTimeField.activeFocus)
+                                updateTimeField.text = root.updateTimeDisplay()
+                        }
+                    }
+                }
+                // AM/PM, and only when it means something.
+                QQC2.Button {
+                    id: meridiem
+                    property string label: root.updateTimeMeridiem()
+                    visible: !root.answers.hour24
+                    text: label
+                    implicitWidth: 54
+                    onClicked: {
+                        label = (label === "AM") ? "PM" : "AM"
+                        root.setUpdateTimeFrom(updateTimeField.text, label)
+                    }
                 }
                 QQC2.Label { text: "and only when plugged in"; color: root.dim; font.pixelSize: 13 }
             }

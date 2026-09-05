@@ -35,6 +35,21 @@ SECUREBOOT="auto"
 THEME="dark"
 EXTRA_PACKAGES=""
 ASSUME_YES=0
+# Answers the graphical installer collects on its own screens. Every one of
+# these was being gathered and then dropped: the installer asked for a full
+# name, a picture, an accent colour, a clock format and an update schedule,
+# passed none of them here, and the installed machine came up with defaults.
+# The colour question was the visible one -- people picked a colour and the
+# desktop stayed pink.
+FULLNAME=""
+AVATAR=""
+ACCENT=""
+CLOCK=""            # 12 | 24 | "" to follow the locale
+BROWSER=""          # package name, for pinning it to the task bar
+AUTO_UPDATE="on"
+CANARY_ONLY="on"
+UPDATE_TIME="03:00"
+AC_ONLY="on"
 
 die() { printf '\n[sakura-install] %s\n\n' "$*" >&2; exit 1; }
 step() { printf '\n[sakura-install] == %s ==\n' "$*"; }
@@ -62,6 +77,15 @@ while [[ $# -gt 0 ]]; do
         --method) METHOD="$2"; shift 2 ;;
         --graphics) GRAPHICS="$2"; shift 2 ;;
         --theme) THEME="$2"; shift 2 ;;         # dark | light   # auto | nvidia-open | nvidia-580xx | nouveau | none
+        --fullname)   FULLNAME="$2"; shift 2 ;;
+        --avatar)     AVATAR="$2"; shift 2 ;;
+        --accent)     ACCENT="$2"; shift 2 ;;     # #rrggbb
+        --clock)      CLOCK="$2"; shift 2 ;;      # 12 | 24
+        --browser)    BROWSER="$2"; shift 2 ;;    # package name, pinned to the task bar
+        --auto-update)  AUTO_UPDATE="$2"; shift 2 ;;   # on | off
+        --canary-only)  CANARY_ONLY="$2"; shift 2 ;;   # on | off
+        --update-time)  UPDATE_TIME="$2"; shift 2 ;;   # HH:MM, 24-hour
+        --ac-only)      AC_ONLY="$2"; shift 2 ;;       # on | off
         --yes)        ASSUME_YES=1; shift ;;
         *) die "unknown option: $1" ;;
     esac
@@ -774,9 +798,17 @@ echo "$HOSTNAME_" > /mnt/etc/hostname
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /mnt/etc/localtime
 # en_US.UTF-8 stays alongside the chosen one: a great deal of software
 # assumes it exists, and generating a second locale costs almost nothing.
+#
+# en_GB.UTF-8 is here for the clock. KDE takes 12- or 24-hour from LC_TIME
+# rather than from a boolean, so "24-hour" is expressed as a locale that
+# writes 14:30 -- and pointing LC_TIME at a locale that was never generated
+# fails silently, leaving the clock at whatever the language implied. Asking
+# for a 24-hour clock and getting a 12-hour one is exactly the sort of quiet
+# wrong answer that is hard to trace back to the installer.
 {
     echo "$LOCALE UTF-8"
     [ "$LOCALE" = "en_US.UTF-8" ] || echo "en_US.UTF-8 UTF-8"
+    [ "$LOCALE" = "en_GB.UTF-8" ] || echo "en_GB.UTF-8 UTF-8"
 } > /mnt/etc/locale.gen
 echo "LANG=$LOCALE" > /mnt/etc/locale.conf
 
@@ -962,6 +994,37 @@ PYCONF
 # the very last step, after everything has been downloaded and written.
 LANG_CODE="${LOCALE%%.*}"
 
+# KDE stores the accent as "r,g,b"; the installer hands it over as #rrggbb.
+# Converted here for the same reason as LANG_CODE: the chroot has no ACCENT to
+# convert, so doing this on the far side of the heredoc quietly produced an
+# empty colour and no accent at all.
+ACCENT_RGB=""
+if [[ -n "$ACCENT" ]]; then
+    _hex="${ACCENT#\#}"
+    if [[ "$_hex" =~ ^[0-9A-Fa-f]{6}$ ]]; then
+        ACCENT_RGB="$((16#${_hex:0:2})),$((16#${_hex:2:2})),$((16#${_hex:4:2}))"
+    else
+        info "WARNING: ignoring accent colour '$ACCENT': expected #rrggbb"
+    fi
+fi
+
+# Stage the chosen profile picture into the target.
+#
+# The file lives on the live system -- either one of ours under
+# /usr/share/sakura/avatars or something the user browsed to -- and the chroot
+# cannot see it, so it has to be copied across before the chroot starts.
+AVATAR_STAGED=""
+if [[ -n "$AVATAR" ]]; then
+    # QML hands over a URL; everything below wants a path.
+    _avatar_path="${AVATAR#file://}"
+    if [[ -r "$_avatar_path" ]]; then
+        install -Dm644 "$_avatar_path" /mnt/var/tmp/sakura-avatar
+        AVATAR_STAGED=/var/tmp/sakura-avatar
+    else
+        info "WARNING: could not read the chosen profile picture, skipping it"
+    fi
+fi
+
 arch-chroot /mnt /bin/bash -euo pipefail <<CHROOT
 locale-gen >/dev/null
 
@@ -973,7 +1036,10 @@ pacman-key --init >/dev/null 2>&1
 pacman-key --populate archlinux sakura >/dev/null 2>&1
 pacman-key --updatedb >/dev/null 2>&1
 
-useradd -m -G wheel -s /bin/bash "$USERNAME"
+# -c is the full name. Plasma's lock screen, the login greeter and the user
+# switcher all show it, and without it they show the login name instead, so a
+# machine set up for "Adam Biggs" greeted him as "abiggs".
+useradd -m -G wheel -s /bin/bash -c "$FULLNAME" "$USERNAME"
 echo "$USERNAME:$USERPASS" | chpasswd
 if [ -n "$ROOTPASS" ]; then
     echo "root:$ROOTPASS" | chpasswd
@@ -1006,12 +1072,119 @@ LANG=$LOCALE
 LANGUAGE=$LANG_CODE
 LOCALERC
 chown "$USERNAME:$USERNAME" "/home/$USERNAME/.config/plasma-localerc"
+
+# The accent colour chosen on the installer's appearance screen.
+#
+# This is what makes the choice mean anything. Plasma reads AccentColor from
+# kdeglobals and every Qt application that follows the colour scheme picks it
+# up -- the store, the update centre, System Settings, and the installer's own
+# successor screens. Without it the question was cosmetic: people chose a
+# colour, and the desktop came up in the default pink regardless.
+#
+# Written as "r,g,b" because that is the format KDE stores it in; a hex string
+# here is silently ignored rather than rejected.
+if [ -n "$ACCENT_RGB" ]; then
+    _kdeglobals="/home/$USERNAME/.config/kdeglobals"
+    if [ -f "\$_kdeglobals" ] && grep -q '^\[General\]' "\$_kdeglobals"; then
+        # Insert into the existing section rather than appending a second one.
+        sed -i "/^\[General\]/a AccentColor=$ACCENT_RGB" "\$_kdeglobals"
+    else
+        printf '[General]\nAccentColor=%s\n' "$ACCENT_RGB" >> "\$_kdeglobals"
+    fi
+    chown "$USERNAME:$USERNAME" "\$_kdeglobals"
+fi
+
+# 12-hour or 24-hour, as chosen on the time screen.
+#
+# The installer has asked this since the beginning and passed the answer
+# nowhere, so the clock was whatever the locale happened to imply. KDE decides
+# it from LC_TIME, so the answer is expressed as a locale whose convention
+# matches: en_GB writes 14:30, en_US writes 2:30 PM. Both are generated below
+# for exactly this reason.
+if [ -n "$CLOCK" ]; then
+    case "$CLOCK" in
+        24) _lctime="en_GB.UTF-8" ;;
+        12) _lctime="en_US.UTF-8" ;;
+        *)  _lctime="" ;;
+    esac
+    if [ -n "\$_lctime" ]; then
+        sed -i "/^\[Formats\]/a LC_TIME=\$_lctime" \
+            "/home/$USERNAME/.config/plasma-localerc"
+    fi
+fi
 if [ "$FEEDBACK" = "on" ]; then
     printf '[Global]\nFeedbackLevel=16\n' > "/home/$USERNAME/.config/PlasmaUserFeedback"
 else
     printf '[Global]\nFeedbackLevel=0\n' > "/home/$USERNAME/.config/PlasmaUserFeedback"
 fi
 chown "$USERNAME:$USERNAME" "/home/$USERNAME/.config/PlasmaUserFeedback"
+
+# The update schedule chosen on the installer's Updates screen.
+#
+# Four questions were asked there -- install automatically, only what the
+# canary tested, at what time, and only on mains power -- and all four
+# answers were dropped. Every machine got the packaged defaults, so somebody
+# who turned automatic updates off still had them on.
+#
+# These keys already exist in the shipped file, so they are rewritten in
+# place: appending would leave two AutoApply lines and KConfig takes the
+# first, which would look like the setting being ignored again.
+_conf=/etc/sakura/sakura.conf
+if [ -f "\$_conf" ]; then
+    set_update_key() {
+        # Only inside [Updates]: AutoUpdate and friends appear under [Store]
+        # too, and a file-wide substitution would rewrite the wrong one.
+        sed -i "/^\[Updates\]/,/^\[/ s/^\$1=.*/\$1=\$2/" "\$_conf"
+    }
+    [ "$AUTO_UPDATE" = "on" ] && set_update_key AutoApply true || set_update_key AutoApply false
+    [ "$CANARY_ONLY" = "on" ] && set_update_key RequireCanaryEvidence true || set_update_key RequireCanaryEvidence false
+    [ "$AC_ONLY" = "on" ] && set_update_key RequireACPower true || set_update_key RequireACPower false
+    set_update_key Window "$UPDATE_TIME"
+else
+    echo "[sakura-install] warning: \$_conf is missing; update schedule not applied"
+fi
+
+# The profile picture, in both places that read one.
+#
+# AccountsService is what the login greeter and the user switcher read;
+# ~/.face.icon is what several older Qt and GTK dialogs read. Writing only one
+# of them gives a machine that shows the picture in some places and the
+# initials in others, which reads as a bug rather than as a choice.
+if [ -n "$AVATAR_STAGED" ] && [ -r "$AVATAR_STAGED" ]; then
+    install -Dm644 "$AVATAR_STAGED" "/var/lib/AccountsService/icons/$USERNAME"
+    install -Dm644 "$AVATAR_STAGED" "/home/$USERNAME/.face.icon"
+    chown "$USERNAME:$USERNAME" "/home/$USERNAME/.face.icon"
+    rm -f "$AVATAR_STAGED"
+fi
+
+# Pin the chosen browser to the task bar.
+#
+# The panel is built from our look-and-feel layout script the first time the
+# user logs in, and that script carries a short hardcoded list of launchers. A
+# browser is the one application a new machine is certain to need in its first
+# minute, so the one that was actually chosen belongs on the panel next to the
+# file manager.
+#
+# The .desktop name is looked up from the package rather than kept in a table
+# here: brave-bin ships brave-browser.desktop and vivaldi ships
+# vivaldi-stable.desktop, and a table of those would be wrong the first time
+# any of them renamed a file.
+if [ -n "$BROWSER" ]; then
+    _desktop=\$(pacman -Ql "$BROWSER" 2>/dev/null \
+        | awk '\$2 ~ /\/usr\/share\/applications\/.*\.desktop\$/ {print \$2}' \
+        | head -1)
+    if [ -n "\$_desktop" ]; then
+        _entry="applications:\$(basename "\$_desktop")"
+        for _layout in /usr/share/plasma/look-and-feel/org.sakura.*.desktop/contents/layouts/org.kde.plasma.desktop-layout.js; do
+            [ -f "\$_layout" ] || continue
+            # Before Konsole: file manager, browser, store, terminal is the
+            # order of how often a new user reaches for each.
+            sed -i "s#\(\s*\)"applications:org.kde.konsole.desktop",#\1"\$_entry",\n\1"applications:org.kde.konsole.desktop",#" "\$_layout"
+        done
+    else
+        echo "[sakura-install] warning: no .desktop file found for $BROWSER; not pinning it"
+    fi
+fi
 
 echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/10-wheel
 chmod 440 /etc/sudoers.d/10-wheel

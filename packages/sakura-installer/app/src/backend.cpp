@@ -638,6 +638,44 @@ void Backend::install(const QVariantMap &answers)
     const QString browser = answers[QStringLiteral("browser")].toString();
     if (!browser.isEmpty() && browser != QLatin1String("none")) {
         args << QStringLiteral("--extra-packages") << browser;
+        // Also by name, so the installer can pin it to the task bar. Passing
+        // it as an extra package alone says what to install and nothing about
+        // what it is.
+        args << QStringLiteral("--browser") << browser;
+    }
+
+    // Everything below was collected by the installer and then dropped on the
+    // floor. The accent colour was the visible one -- people chose a colour on
+    // the appearance screen and the installed desktop came up pink anyway --
+    // but the full name, the profile picture, the clock format and all four
+    // update-schedule answers went the same way.
+    const QString fullname = answers[QStringLiteral("fullname")].toString();
+    if (!fullname.isEmpty()) {
+        args << QStringLiteral("--fullname") << fullname;
+    }
+    const QString avatar = answers[QStringLiteral("avatar")].toString();
+    if (!avatar.isEmpty()) {
+        args << QStringLiteral("--avatar") << avatar;
+    }
+    const QString accent = answers[QStringLiteral("accent")].toString();
+    if (!accent.isEmpty()) {
+        args << QStringLiteral("--accent") << accent;
+    }
+    args << QStringLiteral("--clock")
+         << (answers[QStringLiteral("hour24")].toBool() ? QStringLiteral("24")
+                                                        : QStringLiteral("12"));
+    args << QStringLiteral("--auto-update")
+         << (answers[QStringLiteral("autoUpdate")].toBool() ? QStringLiteral("on")
+                                                            : QStringLiteral("off"));
+    args << QStringLiteral("--canary-only")
+         << (answers[QStringLiteral("canaryOnly")].toBool() ? QStringLiteral("on")
+                                                            : QStringLiteral("off"));
+    args << QStringLiteral("--ac-only")
+         << (answers[QStringLiteral("acOnly")].toBool() ? QStringLiteral("on")
+                                                        : QStringLiteral("off"));
+    const QString updateTime = answers[QStringLiteral("updateTime")].toString();
+    if (!updateTime.isEmpty()) {
+        args << QStringLiteral("--update-time") << updateTime;
     }
 
     m_running = true;
