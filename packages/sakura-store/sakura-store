@@ -124,6 +124,17 @@ class Source:
     def available(self) -> bool:
         raise NotImplementedError
 
+    def why_unavailable(self) -> dict:
+        """Why this source is off, and what would turn it on.
+
+        "unavailable" on its own is a dead end. A source switched off by
+        policy and a source whose tooling is not installed need completely
+        different things from the person reading it, and the interface can
+        only say which if the source says which.
+        """
+        return {"reason": f"{self.name} is not available on this machine.",
+                "remedy": ""}
+
     def search(self, query: str) -> list[App]:
         raise NotImplementedError
 
@@ -172,6 +183,10 @@ class FlatpakSource(Source):
 
     def available(self) -> bool:
         return bool(run(["flatpak", "--version"]))
+
+    def why_unavailable(self) -> dict:
+        return {"reason": "Flatpak is not installed on this machine.",
+                "remedy": "Install the flatpak package, then import again."}
 
     def display_names(self) -> dict[str, str]:
         out = run(["flatpak", "list", "--app", "--columns=application,name"])
@@ -467,6 +482,17 @@ class AurSource(Source):
         # reappear because a config file failed to parse.
         return read_config().get("AUR", {}).get("Enabled", "false") == "true"
 
+    def why_unavailable(self) -> dict:
+        # The only way this source is off is that somebody chose to leave it
+        # off, which is the default. Say that, rather than implying breakage:
+        # nothing is wrong, and the remedy is a decision, not a repair.
+        return {"reason": "The AUR is switched off. It is off by default "
+                          "because AUR packages are build scripts written by "
+                          "other users and nobody reviews them.",
+                "remedy": "Turn the AUR on in the App Store's settings, then "
+                          "import again. Each package still has to be "
+                          "reviewed and accepted individually."}
+
     def installed(self) -> dict[str, str]:
         out = run(["pacman", "-Qm"])
         return {l.split()[0]: l.split()[1] for l in out.splitlines() if len(l.split()) == 2}
@@ -544,6 +570,11 @@ class SnapSource(Source):
 
     def available(self) -> bool:
         return bool(run(["snap", "version"]))
+
+    def why_unavailable(self) -> dict:
+        return {"reason": "Snap is not installed on this machine.",
+                "remedy": "Install the snapd package and enable "
+                          "snapd.socket, then import again."}
 
     def installed(self) -> dict[str, str]:
         out = run(["snap", "list"])
@@ -1665,9 +1696,12 @@ def cmd_read_list(args) -> int:
         return 1
 
     have = {}
+    off = {}
     for s in SOURCES:
         if s.available():
             have[s.name] = set(s.installed_apps().keys())
+        else:
+            off[s.name] = s.why_unavailable()
 
     rows = []
     for a in doc.get("apps", []):
@@ -1682,12 +1716,23 @@ def cmd_read_list(args) -> int:
             state = "present"
         else:
             state = "install"
-        rows.append({"id": sid, "source": src,
-                     "name": a.get("name") or sid, "state": state})
+        row = {"id": sid, "source": src,
+               "name": a.get("name") or sid, "state": state}
+        # Carry the reason on the row itself. A list can mix sources, and a
+        # single banner cannot explain why three of eleven entries are greyed
+        # out when they are greyed out for two different reasons.
+        if state == "unavailable" and src in off:
+            row.update(off[src])
+        rows.append(row)
 
     print(json.dumps({"from": doc.get("from", ""),
                       "exported": doc.get("exported", ""),
                       "apps": rows,
+                      # Only the sources this list actually needed, so a
+                      # machine without snap is not told about snap unless
+                      # the list contains a snap.
+                      "sources_off": {n: off[n] for n in off
+                                      if any(r["source"] == n for r in rows)},
                       "counts": {k: sum(1 for r in rows if r["state"] == k)
                                  for k in ("install", "present", "unavailable", "manual")}},
                      indent=2))
