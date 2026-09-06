@@ -154,6 +154,18 @@ umount -R /mnt 2>/dev/null || true
 # Only when the packages come over the network. A copy install is the whole
 # reason this can be done with the cable out, so requiring a connection first
 # would defeat the point of it.
+# Defined out here, not inside the branch below.
+#
+# It used to live inside "if METHOD == online", and everything else that asks
+# whether this machine has a network is outside that branch. On the default
+# copy install the branch never runs, so the function did not exist, the later
+# call failed with "command not found", and the test came out false: the
+# installer decided it had no network on a machine that did. That silently
+# skipped the graphics driver and the browser on every default install.
+_reachable() {
+    curl -sS -o /dev/null --max-time 15 "$1" 2>/dev/null
+}
+
 if [[ "${METHOD:-copy}" == "online" ]]; then
 step "Checking this machine can reach the package repositories"
 # Before anything is written to the disk, and that ordering is the point.
@@ -168,9 +180,6 @@ step "Checking this machine can reach the package repositories"
 # download fail -- leaving somebody with no operating system and none of
 # what used to be on the drive either. The check costs a second and it
 # happens while the disk is still untouched.
-_reachable() {
-    curl -sS -o /dev/null --max-time 15 "$1" 2>/dev/null
-}
 if ! _reachable "https://repo.sakuraos.org/sakura-core/os/x86_64/sakura-core.db" \
    && ! _reachable "http://173.233.87.167/sakura-core/os/x86_64/sakura-core.db"; then
     die "this machine cannot reach the SakuraOS repository.
