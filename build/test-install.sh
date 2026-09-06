@@ -149,23 +149,69 @@ if (( ! verify_only )); then
     # ships no agent, so without it the machine is unreachable and none of the
     # checks below can run. --extra-packages is the installer's own mechanism
     # for this, so nothing test-specific leaks into the installer itself.
-    CRYPT_ARGS=""
     CRYPT_IN="< /dev/null"
     if (( encrypt )); then
         # The passphrase goes down stdin, the same path the graphical
         # installer uses -- testing a different one would prove nothing about
         # the code that ships.
-        CRYPT_ARGS="--encrypt on --encryption-password-stdin"
         CRYPT_IN="<<< $CRYPTPASS"
     fi
-    run "setsid bash -c 'sakura-install --disk /dev/vda --user $USER_NAME \
-         --password $USER_PASS --hostname $HOSTNAME_ --timezone UTC \
-         --theme dark --keymap gb $CRYPT_ARGS \
-         --extra-packages "qemu-guest-agent $BROWSER_PKG" --browser "$BROWSER_PKG" \
-         --accent '#3daee9' --clock 12 --fullname 'Test User' \
-         --method "$METHOD" --yes \
-         > /tmp/install.log 2>&1 $CRYPT_IN; echo \$? > /tmp/install.rc' &" \
+    # Built as an array here, shipped as base64, and run from a file in the
+    # guest.
+    #
+    # It used to be one string containing a single-quoted bash -c payload,
+    # crossing three layers of quoting: this shell, the guest agent, and the
+    # bash the guest starts. Adding a value that itself needed quotes -- an
+    # accent colour, a full name with a space in it -- ended the payload early,
+    # and the command then silently never ran at all. The guest sat idle at
+    # load 0.00 while the harness printed progress dots for the full thirty
+    # minutes waiting for an install.rc nothing was going to write.
+    #
+    # base64 has no quotes, no spaces and no hashes, so it survives every layer
+    # unexamined. Adding an argument is now editing an array.
+    install_args=(
+        sakura-install
+        --disk /dev/vda
+        --user "$USER_NAME"
+        --password "$USER_PASS"
+        --hostname "$HOSTNAME_"
+        --timezone UTC
+        --theme dark
+        --keymap gb
+        --extra-packages "qemu-guest-agent $BROWSER_PKG"
+        --browser "$BROWSER_PKG"
+        --accent "#3daee9"
+        --clock 12
+        --fullname "Test User"
+        --method "$METHOD"
+        --yes
+    )
+    (( encrypt )) && install_args+=(--encrypt on --encryption-password-stdin)
+
+    # printf %q quotes each argument for the shell that will read the file.
+    INSTALL_CMD="$(printf '%q ' "${install_args[@]}")"
+    INSTALL_B64="$(printf '%s' "$INSTALL_CMD" | base64 -w0)"
+
+    run "echo $INSTALL_B64 | base64 -d > /tmp/install.cmd" >/dev/null 2>&1 || true
+    run "setsid bash -c 'bash /tmp/install.cmd > /tmp/install.log 2>&1 $CRYPT_IN; echo \$? > /tmp/install.rc' &" \
         >/dev/null 2>&1 || true
+
+    # Prove it started rather than assuming. This is the exact failure the
+    # rewrite above is for, and finding out here costs seconds where finding
+    # out from the timeout costs half an hour.
+    _started=0
+    for _i in $(seq 1 15); do
+        if run "test -s /tmp/install.log || test -f /tmp/install.rc" >/dev/null 2>&1; then
+            _started=1; break
+        fi
+        sleep 2
+    done
+    if (( ! _started )); then
+        echo "test-install: the installer did not start in the guest." >&2
+        echo "              /tmp/install.cmd holds what was sent:" >&2
+        run "cat /tmp/install.cmd" >&2 2>/dev/null || true
+        exit 1
+    fi
 
     echo -n ">> installing"
     deadline=$(( SECONDS + 1800 ))
