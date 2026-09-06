@@ -357,6 +357,20 @@ check "sakura-core registered exactly once" \
 # repository that holds them was configured, and the pin looked the .desktop
 # name up from the package because a hardcoded table would have been wrong for
 # Chrome and Brave.
+# The panel's pinned launchers. This regressed once without anyone noticing:
+# the layout set them, the write was silently dropped, and icontasks fell back
+# to its own defaults -- which pin Discover, a store SakuraOS does not install,
+# so a fresh desktop came up with a broken icon where the App Store should be.
+# The comment in the layout claimed it was handled for months while the key was
+# absent from every install.
+check "the panel layout pins our own launchers" \
+      "grep -q 'org.sakuraos.store.desktop' /usr/share/plasma/look-and-feel/org.sakura.dark.desktop/contents/layouts/org.kde.plasma.desktop-layout.js"
+check "the panel layout does not pin Discover" \
+      "! grep -q 'discover' /usr/share/plasma/look-and-feel/org.sakura.*.desktop/contents/layouts/org.kde.plasma.desktop-layout.js"
+# reloadConfig is what makes the write above actually reach the config file.
+# Without it the list is written and thrown away.
+check "the launcher write is committed" \
+      "grep -q 'reloadConfig' /usr/share/plasma/look-and-feel/org.sakura.dark.desktop/contents/layouts/org.kde.plasma.desktop-layout.js"
 check "the chosen browser is installed" \
       "pacman -Q $BROWSER_PKG"
 check "the browser is pinned to the task bar" \

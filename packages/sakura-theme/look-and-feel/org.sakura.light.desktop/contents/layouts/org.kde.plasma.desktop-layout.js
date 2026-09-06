@@ -29,6 +29,16 @@ tasks.writeConfig("launchers", [
     "applications:org.sakuraos.store.desktop",
     "applications:org.kde.konsole.desktop",
 ].join(","));
+// Without this the write is dropped and the key never reaches the config
+// file, so icontasks uses its own defaults instead: Discover, which we do not
+// install and which therefore renders as a broken icon, and
+// preferred://browser, which is why the panel showed whichever browser
+// happened to be installed rather than the one we pin.
+//
+// The comment above has claimed this was handled since the layout was
+// written. It was not: the launchers key was absent from a fresh install's
+// appletsrc entirely.
+tasks.reloadConfig();
 panel.addWidget("org.kde.plasma.marginsseparator");
 panel.addWidget("org.kde.plasma.systemtray");
 panel.addWidget("org.kde.plasma.digitalclock");

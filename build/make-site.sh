@@ -19,6 +19,15 @@ OUT="$OUT_DIR/index.html"
 [[ -f "$SRC" ]] || { echo "no $SRC" >&2; exit 1; }
 mkdir -p "$OUT_DIR"
 
+# The recovery demo's frames. They are real screenshots of an installed
+# machine, served as files rather than inlined: six images is most of a
+# megabyte, and the page already carries its photograph as a data URI.
+if [[ -d "$REPO_ROOT/site/shots" ]]; then
+    mkdir -p "$OUT_DIR/shots"
+    cp -f "$REPO_ROOT/site/shots/"* "$OUT_DIR/shots/"
+    echo ">> copied $(ls "$REPO_ROOT/site/shots" | wc -l) screenshots"
+fi
+
 # The source opens with <title>, <link> and a <style> block, then the page
 # content. Split on the end of that first style block so the head-ish part
 # lands in <head> where it belongs; <title> in <body> is invalid and browsers
