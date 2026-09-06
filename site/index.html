@@ -265,9 +265,8 @@ code{
   <circle cx="100" cy="100" r="96" fill="url(#ring)"/>
   <circle cx="100" cy="100" r="96" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="2"/>
 
-  <!-- Five petals at 72 degrees. The notched tip is what makes a sakura read
-       as a sakura rather than as a generic flower. -->
-  <g transform="translate(100,100) scale(1.18)">
+  
+  <g transform="translate(100,100) rotate(0) scale(1.18)">
     <g fill="url(#petal)" stroke="#f0a3b8" stroke-opacity="0.45" stroke-width="1.2">
       <path d="M0,0 C-21,-20 -25,-50 -11,-64 C-6,-69 -3,-60 0,-55 C3,-60 6,-69 11,-64 C25,-50 21,-20 0,0 Z"/>
       <path d="M0,0 C-21,-20 -25,-50 -11,-64 C-6,-69 -3,-60 0,-55 C3,-60 6,-69 11,-64 C25,-50 21,-20 0,0 Z" transform="rotate(72)"/>
@@ -276,21 +275,6 @@ code{
       <path d="M0,0 C-21,-20 -25,-50 -11,-64 C-6,-69 -3,-60 0,-55 C3,-60 6,-69 11,-64 C25,-50 21,-20 0,0 Z" transform="rotate(288)"/>
     </g>
 
-    <!-- Stamens -->
-    <g stroke="#f5a8bd" stroke-width="1.6" stroke-linecap="round">
-      <line x1="0" y1="0" x2="0"   y2="-22"/>
-      <line x1="0" y1="0" x2="-14" y2="-16"/>
-      <line x1="0" y1="0" x2="14"  y2="-16"/>
-      <line x1="0" y1="0" x2="-9"  y2="-21"/>
-      <line x1="0" y1="0" x2="9"   y2="-21"/>
-    </g>
-    <g fill="#fbbf3f">
-      <circle cx="0"   cy="-23" r="2.6"/>
-      <circle cx="-15" cy="-17" r="2.6"/>
-      <circle cx="15"  cy="-17" r="2.6"/>
-      <circle cx="-10" cy="-22" r="2.4"/>
-      <circle cx="10"  cy="-22" r="2.4"/>
-    </g>
     <circle cx="0" cy="0" r="6" fill="#ffd9e2" stroke="#f0a3b8" stroke-opacity="0.5"/>
   </g>
 </svg>
