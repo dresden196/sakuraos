@@ -1,0 +1,14 @@
+# Upstream signing keys to import before building AUR packages.
+#
+# Some PKGBUILDs verify their source against a vendor's own OpenPGP key. That
+# check is worth having -- these are prebuilt browser binaries fetched over the
+# network -- so the answer is to import the key, not to pass --skippgpcheck and
+# stop checking. A build that cannot verify its source should fail.
+#
+# Format: <key-id>  # who it belongs to, and which package needs it
+# Verify a new entry by hand before adding it: the whole value of this file is
+# that somebody checked once.
+
+# Helium signing key (https://helium.computer/) <helium@imput.net>
+# Needed by helium-browser-bin.
+351601AD01D6378E
