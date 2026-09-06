@@ -70,8 +70,27 @@ docker volume create "$CACHE_VOLUME" >/dev/null
 # Commit count rather than a timestamp: it moves when the source moves, so
 # rebuilding the same commit does not manufacture an update for every package
 # on every machine. Stamped into the copy under $WORK, never into the tree.
+# pkgrel becomes 1.<commit count>, so the version identifies the commit a
+# package was built from.
+#
+# That only holds if the tree is clean. Building with uncommitted changes
+# produces a package with the same version as the last clean build and
+# different contents, and pacman will not upgrade between two identical
+# versions: a machine on the earlier one keeps it forever, with no way to tell.
+# That is not hypothetical -- the panel launcher fix shipped as 1.191 twice,
+# once without it and once with.
 BUILD_STAMP="$(git -C "$REPO_ROOT" rev-list --count HEAD 2>/dev/null || echo 0)"
+BUILD_DIRTY=0
+if [[ -n "$(git -C "$REPO_ROOT" status --porcelain 2>/dev/null)" ]]; then
+    BUILD_DIRTY=1
+fi
 echo ">> build stamp: pkgrel suffix .$BUILD_STAMP"
+if (( BUILD_DIRTY )); then
+    echo ">> WARNING: the working tree has uncommitted changes."
+    echo ">>          These packages are version 1.$BUILD_STAMP, the same as a"
+    echo ">>          build from the commit alone, but their contents differ."
+    echo ">>          Fine for testing. publish-repo.sh will refuse to ship them."
+fi
 
 rc=0
 docker run --rm \
@@ -82,6 +101,7 @@ docker run --rm \
     -e "SKIP_AUR=$SKIP_AUR" \
     -e "AUR_ONLY=$AUR_ONLY" \
     -e "BUILD_STAMP=$BUILD_STAMP" \
+    -e "BUILD_DIRTY=$BUILD_DIRTY" \
     -e "HOST_UID=$(id -u)" \
     -e "HOST_GID=$(id -g)" \
     -w /build \
@@ -347,3 +367,16 @@ echo
 echo ">> sakura-core now contains:"
 ls -1 "$REPO_DIR"/*.pkg.tar.zst 2>/dev/null | xargs -r -n1 basename
 exit $rc
+
+# Record whether these packages came from a clean tree. publish-repo.sh reads
+# it: a version number that does not identify its contents must not reach a
+# machine that cannot tell the difference.
+if [[ -d "$REPO_ROOT/repo" ]]; then
+    if (( BUILD_DIRTY )); then
+        printf 'built from a dirty tree at commit %s\n' \
+            "$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null)" \
+            > "$REPO_ROOT/repo/.dirty-build"
+    else
+        rm -f "$REPO_ROOT/repo/.dirty-build"
+    fi
+fi
