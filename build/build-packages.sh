@@ -292,11 +292,21 @@ docker run --rm \
             case "$base" in
                 *-debug-*) continue ;;
                 nvidia-580xx-*|opencl-nvidia-580xx-*) dest="$EXTRA" ;;
-                # Browsers: a few hundred megabytes each, and an install uses
+                # Zen is the exception, and goes on the media.
+                #
+                # It is the default browser, and the default has to work with
+                # no network. An offline install copies the live filesystem and
+                # installs nothing, so a browser that is only in sakura-extra
+                # is a browser an offline machine never gets -- which left the
+                # offline path producing a complete desktop with no way to
+                # reach the web at all.
+                zen-browser-bin-*) dest="$CORE" ;;
+                # The rest are a few hundred megabytes each and an install uses
                 # exactly one of them. Putting four on every ISO to ship three
                 # nobody chose is the definition of what sakura-extra is for.
-                # They are fetched over the network when the installer asks.
-                zen-browser-bin-*|brave-bin-*|google-chrome-*|helium-browser-bin-*) dest="$EXTRA" ;;
+                # They are fetched over the network when the installer asks,
+                # which is why the installer only offers them when there is one.
+                brave-bin-*|google-chrome-*|helium-browser-bin-*) dest="$EXTRA" ;;
                 *) dest="$CORE" ;;
             esac
             cp -f "$pkg" "$dest/"

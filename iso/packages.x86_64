@@ -249,6 +249,15 @@ merkuro
 noto-fonts-cjk
 okular
 plasma-systemmonitor
+# The default browser, on the media rather than fetched.
+#
+# An offline install copies this filesystem and installs nothing over the
+# network, so anything not here is something an offline machine never gets.
+# Leaving the browser out produced a finished desktop with no way to reach the
+# web -- and the installer told the user an update would fill it in, which
+# nothing ever did. The other browsers stay network-only; this is the one that
+# has to work without a network because it is the one chosen by default.
+zen-browser-bin
 print-manager
 sakura-aur-campaign-check
 sakura-plymouth
