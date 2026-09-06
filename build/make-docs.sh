@@ -12,10 +12,15 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC="$REPO_ROOT/site/docs"
 OUT="$REPO_ROOT/out/site/docs"
+# Where these pages will be served from. They now live at the root of
+# wiki.sakuraos.org rather than under /docs on the main site, and every link
+# in them is absolute, so the prefix has to be a variable rather than baked
+# into forty href attributes.
+DOCS_BASE="${DOCS_BASE-}"
 
 # slug|nav label|page title|one-line summary
 PAGES=(
-"index|Overview|SakuraOS documentation|What this system does, and where each part is written down."
+"index|Overview|SakuraOS wiki|What this system does, and where each part is written down."
 "install|Installing|Installing SakuraOS|What the installer asks, what it writes, and the disk layout it creates."
 "recovery|Recovery|Restore points and recovery|Snapshots, the boot menu, the failed-boot watchdog, and how to go back."
 "updates|Updates|How updates work|The schedule, the restore point, and what gets held back."
@@ -33,8 +38,8 @@ nav_html() {
     local current="$1" entry slug label
     for entry in "${PAGES[@]}"; do
         IFS='|' read -r slug label _ _ <<<"$entry"
-        local href="/docs/$slug"
-        [[ "$slug" == "index" ]] && href="/docs/"
+        local href="$DOCS_BASE/$slug"
+        [[ "$slug" == "index" ]] && href="$DOCS_BASE/"
         if [[ "$slug" == "$current" ]]; then
             printf '      <a class="on" href="%s">%s</a>\n' "$href" "$label"
         else
@@ -61,13 +66,13 @@ for entry in "${PAGES[@]}"; do
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,200..500;1,6..72,200..400&family=Karla:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="/docs/docs.css">
+<link rel="stylesheet" href="$DOCS_BASE/docs.css">
 </head>
 <body>
 <a class="skip" href="#content">Skip to content</a>
 <header class="topbar">
   <a class="brand" href="/">SakuraOS</a>
-  <span class="crumb">Documentation</span>
+  <span class="crumb">Wiki</span>
 </header>
 <div class="shell">
   <nav class="side" aria-label="Documentation">
