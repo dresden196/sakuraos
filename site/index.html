@@ -95,6 +95,25 @@ section:first-of-type{padding-top:0}
 /* ---- hero ------------------------------------------------------------- */
 .hero{min-height:100svh; display:grid; place-items:center; text-align:center; padding:6rem 0 4rem}
 .hero .mark{width:112px; height:112px; filter:drop-shadow(0 14px 34px rgba(216,27,96,.4))}
+/* The badge as a link to the release post. It reads as a label, so it has to
+   say it is clickable: the underline on hover and the arrow are what stop it
+   being a decoration people never press. */
+.badge-link{
+  text-decoration:none; cursor:pointer;
+  transition:border-color .14s ease, transform .14s ease, background .14s ease;
+}
+.badge-link:hover{
+  border-color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 16%,transparent);
+  transform:translateY(-1px);
+}
+.badge-link::after{content:"\2192"; margin-left:.15rem; opacity:.75}
+.badge-new{
+  background:var(--accent); color:var(--bg);
+  border-radius:999px; padding:.1rem .5rem;
+  font-size:.68rem; letter-spacing:.1em; text-transform:uppercase;
+}
+
 .badge{
   display:inline-flex; align-items:center; gap:.55rem;
   padding:.4rem 1rem; border-radius:999px;
@@ -325,6 +344,7 @@ code{
       <span>SakuraOS</span>
     </a>
     <nav>
+      <a href="https://blog.sakuraos.org/">Blog</a>
       <a href="https://wiki.sakuraos.org/">Wiki</a>
       <!-- Icons inline rather than fetched: the page is served with a strict
            policy and one more request for two small glyphs is not worth it. -->
@@ -375,7 +395,10 @@ code{
 </svg>
 
     <h1>SakuraOS</h1>
-    <span class="badge">1.0 · Cherry Blossom</span>
+    <a class="badge badge-link" href="https://blog.sakuraos.org/sakuraos-1-0-cherry-blossom">
+      <span class="badge-new">New</span>
+      1.0 Cherry Blossom release
+    </a>
     <p class="tagline">A no nonsense distro.</p>
     <p class="lede" style="max-width:52ch">
       SakuraOS is an Arch based Linux distribution that ships with KDE Plasma
@@ -787,7 +810,8 @@ code{
 <footer class="foot">
   <div class="stack g-4">
     <div class="links">
-      <a href="https://wiki.sakuraos.org/">Wiki</a>
+<a href="https://blog.sakuraos.org/">Blog</a>
+            <a href="https://wiki.sakuraos.org/">Wiki</a>
       <a href="https://x.com/ThesakuraOS" rel="me noopener" target="_blank">X</a>
       <a href="https://www.reddit.com/r/SakuraOS/" rel="noopener" target="_blank">Reddit</a>
     </div>

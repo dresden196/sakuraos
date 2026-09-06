@@ -1,0 +1,124 @@
+<p class="standfirst">
+  Arch Linux with the parts that usually take a weekend already decided, and a
+  way back when an update goes wrong.
+</p>
+
+<p>
+  SakuraOS 1.0 is here. It is Arch underneath, with KDE Plasma on the desktop,
+  a kernel chosen by what your processor actually supports, and four
+  applications built specifically for it. Installing it does not ask you to
+  pick a bootloader or compare filesystems.
+</p>
+
+<p>
+  This first release is about one idea. Arch has the best software model in
+  Linux, and the worst recovery story. We kept the first and fixed the second.
+</p>
+
+<h2>A way back that does not need a live USB</h2>
+
+<p>
+  A restore point is taken before every package transaction. Not nightly, not
+  on a schedule you configure: before each one, so the state you can return to
+  is the state you were in a second earlier.
+</p>
+
+<p>
+  If an update leaves the machine unable to start, you do not need to know what
+  a chroot is. After three failed starts the recovery environment opens by
+  itself, lists the restore points in plain language, and puts the system back
+  when you pick one. Your home directory is on a separate subvolume and is not
+  touched either way.
+</p>
+
+<figure>
+  <img src="/media/recovery-list.png" alt="The SakuraOS recovery screen listing restore points to go back to">
+  <figcaption>Recovery, started by the machine itself after three failed boots.</figcaption>
+</figure>
+
+<p>
+  The rollback keeps what it replaced rather than deleting it, so changing your
+  mind is possible in both directions. On an encrypted install it asks for your
+  passphrase first, then behaves identically.
+</p>
+
+<h2>Updates that were installed somewhere else first</h2>
+
+<p>
+  Every night, a machine is installed from scratch, the day's Arch updates are
+  applied to it, it is restarted, and forty-four checks are run against what
+  comes back. Anything that breaks it is held back from you, with the reason
+  attached. Everything else arrives at Arch speed, because holding packages
+  back on a schedule is how a rolling release stops being one.
+</p>
+
+<div class="callout">
+  <p>
+    This is not a promise about a future version. The canary runs nightly now,
+    and what it publishes is what your machine reads before it applies
+    anything.
+  </p>
+</div>
+
+<h2>The terminal, without the cliff</h2>
+
+<p>
+  Immutable distributions have real advantages, and a real cost: eventually you
+  need to do something the system will not let you do. SakuraOS stays fully
+  writable, and puts a little over thirty rules in front of the commands known
+  to break an Arch install.
+</p>
+
+<p>
+  The important ones run inside pacman itself, so they apply whether the
+  operation started in a terminal, a script, <code>yay</code>, or the App
+  Store. When a rule stops something it explains why, shows the safer form, and
+  prints the exact override. It can be set to warn instead of block, or turned
+  off entirely, in Settings.
+</p>
+
+<h2>The AUR, with the scary part handled</h2>
+
+<p>
+  The AUR is off on a fresh install, because it is build scripts written by
+  other users that nobody reviews. Turning it on is one switch in Settings.
+</p>
+
+<p>
+  Once it is on, two things happen that do not happen elsewhere. Everything you
+  have installed is checked against every published AUR attack campaign, from
+  inside pacman, after every install and upgrade. And before a package builds
+  you see the script, what changed since the version you last accepted, and the
+  signals that matter: a maintainer who changed last week, a package adopted
+  three days ago, a download that is not coming from the project.
+</p>
+
+<h2>What is in the box</h2>
+
+<ul>
+  <li><strong>Installer</strong>, which detects your hardware and applies the defaults rather than asking you to choose them.</li>
+  <li><strong>App Store</strong>, covering repository packages, Flatpak, Snap, AppImage and the AUR, with the source of every application stated plainly.</li>
+  <li><strong>Update Center</strong>, which owns the restore points and the rollback.</li>
+  <li><strong>Terminal Assist</strong>, the rules described above.</li>
+  <li><strong>Sakura Settings</strong>, where the AUR, the update schedule and Terminal Assist are configured.</li>
+</ul>
+
+<p>
+  The kernel is chosen by probing whether your processor supports x86-64-v3. If
+  it does you get the tuned CachyOS build; if it does not you get the standard
+  one, and nothing about the install changes. Both ship on the same image.
+</p>
+
+<h2>Getting it</h2>
+
+<p>
+  One image, x86_64, about 3.2 GB. There is no edition to choose between.
+  Everything above is on the media, so an install works with the cable out,
+  including a browser.
+</p>
+
+<p>
+  The <a href="https://wiki.sakuraos.org/">wiki</a> describes what each part
+  does and how to change it. Bugs and questions are welcome on
+  <a href="https://www.reddit.com/r/SakuraOS/" rel="noopener">r/SakuraOS</a>.
+</p>
