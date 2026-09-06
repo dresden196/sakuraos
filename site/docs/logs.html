@@ -1,0 +1,94 @@
+<h1>Gathering logs and reporting bugs</h1>
+<p class="lede">
+  A report with the right log attached is usually answered. One without it
+  usually turns into a conversation about how to produce it. This page is that
+  conversation, written down once.
+</p>
+
+<h2>The one command worth knowing</h2>
+<p>
+  <code>journalctl</code> is the system's log. Almost every question about
+  "why did that fail" is answered by one of these:
+</p>
+<pre><code>journalctl -b            # everything since this boot
+journalctl -b -1         # the boot before this one, useful after a crash
+journalctl -b -p err     # only errors, which is usually enough
+journalctl -u sddm       # one service
+journalctl -f            # follow, while you reproduce the fault</code></pre>
+<p>
+  Inside it, arrow keys and Page Up/Down scroll, <code>/</code> searches,
+  <code>G</code> jumps to the end, and <code>q</code> quits.
+</p>
+
+<h2>Kernel messages</h2>
+<p>
+  For hardware that is not detected, firmware that failed to load, or a disk
+  throwing errors, the kernel ring buffer is the place to look:
+</p>
+<pre><code>sudo dmesg -T | tail -50
+sudo dmesg -T | grep -i -E 'firmware|error|fail'</code></pre>
+
+<h2>What changed recently</h2>
+<p>
+  On a rolling release this is often the whole answer:
+</p>
+<pre><code>grep -E 'upgraded|installed' /var/log/pacman.log | tail -40</code></pre>
+<p>
+  The Update Center shows the same history with restore points beside it, which
+  is easier to read and lets you act on it.
+</p>
+
+<h2>Something specific to SakuraOS</h2>
+<p>
+  The parts we wrote log to the journal like anything else:
+</p>
+<pre><code>journalctl -u sakura-updates          # the nightly update run
+journalctl -u sakura-boot-success     # the failed-boot watchdog
+journalctl -u sakura-kernel-sync      # boot image vs installed kernel
+journalctl -t sakura-install          # the installer, on the live media</code></pre>
+<p>
+  The recovery environment prints to the screen rather than the journal,
+  because at that point there is no journal to write to. A photograph of it is
+  a legitimate bug report.
+</p>
+
+<h2>A program that will not start</h2>
+<p>
+  Run it from a terminal. Almost everything prints the reason and then exits,
+  and that line is worth more than any description of the symptom:
+</p>
+<pre><code>sakura-store 2>&amp;1 | tail -20</code></pre>
+
+<h2>What to include in a report</h2>
+<p>
+  Four things, and it does not need to be more than a few lines:
+</p>
+<ul>
+  <li>What you did, what you expected, and what happened instead.</li>
+  <li>Whether it started after an update, and which one, from the history above.</li>
+  <li>The relevant log, pasted as text rather than a screenshot where possible.</li>
+  <li>Your hardware, if it is a hardware fault: <code>inxi -Fxz</code> gives a tidy summary with serial numbers stripped.</li>
+</ul>
+
+<div class="note">
+  <p>
+    <strong>Check what you are pasting.</strong> A journal can contain network
+    names, hostnames and paths that include your name. <code>inxi -Fxz</code>
+    strips identifiers; <code>journalctl</code> does not.
+  </p>
+</div>
+
+<h2>Where to send it</h2>
+<ul>
+  <li><strong>Bugs in SakuraOS itself</strong>, meaning the installer, the store, the Update Center, Terminal Assist, Settings or the recovery environment: the issue tracker in the repository.</li>
+  <li><strong>Questions and things that might not be bugs</strong>: <a href="https://www.reddit.com/r/SakuraOS/" rel="noopener">r/SakuraOS</a>.</li>
+  <li><strong>A package that is broken upstream</strong>, meaning it behaves the same on plain Arch: report it to Arch or to the package's own project. Our nightly canary catches many of these first and holds the package back, so it is worth checking whether the Update Center already lists it as held.</li>
+</ul>
+
+<h2>Security problems</h2>
+<p>
+  If you have found something with security consequences, please do not open a
+  public issue for it. Send it privately through the contact address in the
+  repository, describe the class of problem, and give the maintainers a chance
+  to fix it before it is public.
+</p>

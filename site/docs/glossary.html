@@ -1,0 +1,80 @@
+<h1>Glossary</h1>
+<p class="lede">
+  The words this wiki uses. Where a term means something specific here rather
+  than generally, that is the meaning given.
+</p>
+
+<h2>AUR</h2>
+<p>
+  The Arch User Repository: build scripts written by other users, for software
+  not packaged by Arch itself. Nobody reviews them. Off by default here. See
+  <a href="/aur">The AUR</a>.
+</p>
+
+<h2>BTRFS</h2>
+<p>
+  The filesystem SakuraOS installs on. It can take a snapshot of itself
+  instantly and cheaply, which is what makes restore points practical.
+</p>
+
+<h2>Canary</h2>
+<p>
+  A machine of ours that installs each night, applies the day's updates,
+  restarts, and is checked. What breaks it is held back from you. See
+  <a href="/updates">Updates</a>.
+</p>
+
+<h2>Hook</h2>
+<p>
+  A script pacman runs before or after a transaction. SakuraOS uses hooks for
+  the checks that must not be avoidable, because a hook runs whatever asked for
+  the package: a terminal, a script, <code>yay</code>, or the App Store.
+</p>
+
+<h2>Pacman</h2>
+<p>
+  Arch's package manager, and the thing underneath the App Store. Everything
+  that installs or removes software goes through it.
+</p>
+
+<h2>Restore point</h2>
+<p>
+  A snapshot of the system taken before a change, that you can return to. Not a
+  backup: it is on the same disk and does not protect against the disk failing.
+</p>
+
+<h2>Rolling release</h2>
+<p>
+  A distribution with no versions. Software arrives when it is released rather
+  than being held for a version upgrade every six months. It is why Arch has
+  current software, and why a bad day upstream reaches you sooner.
+</p>
+
+<h2>Subvolume</h2>
+<p>
+  An independently snapshottable part of a BTRFS filesystem. SakuraOS puts the
+  system, your home directory, the logs, the package cache and the snapshots in
+  separate ones, which is why rolling the system back does not touch your files
+  or erase the logs that explain what happened.
+</p>
+
+<h2>Secure Boot</h2>
+<p>
+  A firmware feature that refuses to start anything not signed by a key it
+  trusts. SakuraOS enrolls its own keys and signs both its system and recovery
+  images, so recovery still works with it on.
+</p>
+
+<h2>UKI</h2>
+<p>
+  Unified Kernel Image: the kernel, its initramfs and its command line in one
+  signed file. Both the system and the recovery environment are UKIs here,
+  which is what lets both be signed for Secure Boot.
+</p>
+
+<h2>x86-64-v3</h2>
+<p>
+  A set of processor instructions, roughly anything from 2013 onward. The
+  installer checks for it and gives machines that have it a kernel built to use
+  it. See <a href="/kernel">Kernel</a>.
+</p>

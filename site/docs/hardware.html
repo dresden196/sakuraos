@@ -1,0 +1,95 @@
+<h1>Hardware and drivers</h1>
+<p class="lede">
+  Most of this is decided during the install without asking you. This page is
+  what it decided, and what to do on the hardware where the answer is not
+  automatic.
+</p>
+
+<h2>Graphics</h2>
+<p>
+  The installer looks at what is in the machine and installs accordingly. On
+  AMD and Intel that is the open driver in the kernel plus the userspace
+  packages, and there is nothing to choose.
+</p>
+
+<h3>NVIDIA</h3>
+<p>
+  Which driver you get depends on the age of the card, because NVIDIA dropped
+  older ones from the current branch:
+</p>
+<ul>
+  <li><strong>Turing and newer</strong> get the open kernel modules, which is what NVIDIA now recommends.</li>
+  <li><strong>Maxwell and Pascal</strong> need the frozen 580xx branch. It is not on the media, because it is roughly 900&nbsp;MB installed for a minority of machines, so it is fetched during the install. An offline install on one of these cards gets the open drivers and will want that package once it is online.</li>
+  <li><strong>Older than Maxwell</strong> is Nouveau, and performance will reflect that.</li>
+</ul>
+<p>
+  The legacy branch is DKMS: it rebuilds against each new kernel, and one day
+  it will stop building against a kernel nobody is going to fix it for. That is
+  a property of the driver, not of SakuraOS, and it is the reason the card is
+  worth replacing eventually.
+</p>
+
+<h3>Two cards</h3>
+<p>
+  Laptops with Intel or AMD integrated graphics plus an NVIDIA card are
+  detected as such, and the NVIDIA driver is installed alongside rather than
+  instead. Which card a program uses is a per-program setting in Plasma.
+</p>
+
+<h2>Wireless and bluetooth</h2>
+<p>
+  NetworkManager is installed and enabled, and bluetooth is enabled with it, so
+  the Plasma pages for both work without setup. Adapters that need firmware
+  from <code>linux-firmware</code> are covered, since that package is on the
+  media. Anything needing a vendor firmware package will appear in
+  <code>dmesg</code> asking for a file by name, which is usually enough to find
+  the package.
+</p>
+
+<h2>Printers and scanners</h2>
+<p>
+  CUPS is installed with its socket enabled rather than the service, so the
+  printing stack costs nothing until something actually prints. Drivers for
+  most printers come from the <code>gutenprint</code> and
+  <code>foomatic</code> packages, which are already there, and scanners are
+  handled by SANE with Skanpage as the front end. Adding a network printer is
+  the Plasma page and nothing else.
+</p>
+
+<h2>Disks</h2>
+<p>
+  The installer picks an I/O scheduler per drive rather than setting one
+  globally: NVMe gets none, because the queue in the device is better than the
+  one in the kernel, and rotational disks get one that assumes seeking is
+  expensive. See <a href="/tuning">Tuning</a>.
+</p>
+<p>
+  Extra drives are not touched during installation. Mount them from the Plasma
+  disk pages, or add them to <code>/etc/fstab</code> if you want them at boot.
+</p>
+
+<h2>Laptops</h2>
+<p>
+  Power profiles are handled by <code>power-profiles-daemon</code>, which the
+  Plasma battery applet drives. Updates only install on mains power by default,
+  so a machine on battery will not run a transaction flat. Suspend and resume
+  are the kernel's, with no SakuraOS-specific handling, which means a machine
+  that suspends badly on Arch will suspend badly here.
+</p>
+
+<h2>Machines with 8&nbsp;GB or less</h2>
+<p>
+  Compressed swap in RAM is configured by default, which is why a machine with
+  8&nbsp;GB stays usable under load rather than reaching for the disk. There is
+  nothing to enable.
+</p>
+
+<h2>Firmware and Secure Boot</h2>
+<p>
+  If your firmware is in setup mode during the install, SakuraOS enrolls its
+  own keys and signs both the system and recovery images. If it is not, the
+  install finishes with Secure Boot off and says so rather than failing. Both
+  images are signed the same way, so recovery works with Secure Boot on, which
+  is the reason snapshots are not separate boot menu entries. See
+  <a href="/recovery">Recovery</a>.
+</p>
