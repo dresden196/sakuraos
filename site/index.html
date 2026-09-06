@@ -122,9 +122,8 @@ section:first-of-type{padding-top:0}
 
 /* ---- recovery demo ---------------------------------------------------- */
 .demo{display:grid; gap:1.6rem; grid-template-columns:1fr; align-items:start}
-@media(min-width:900px){.demo{grid-template-columns:1.15fr .85fr}}
 .screen{
-  aspect-ratio:16/10; border-radius:16px; overflow:hidden; position:relative;
+  aspect-ratio:16/9; border-radius:16px; overflow:hidden; position:relative;
   background:#0a070d; border:1px solid rgba(255,255,255,.13);
   font-family:"JetBrains Mono",ui-monospace,monospace; font-size:.8rem;
   display:grid; place-items:center; text-align:center; padding:1.5rem;
@@ -138,7 +137,8 @@ section:first-of-type{padding-top:0}
 .restored{color:#8fd3a4; font-size:1rem}
 .wall{position:absolute; inset:0; background-size:cover; background-position:center; opacity:.9}
 .wall::after{content:""; position:absolute; inset:0; background:rgba(12,8,15,.25)}
-.steps{list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:.55rem}
+.steps{list-style:none; padding:0; margin:0; display:grid; gap:.55rem}
+@media(min-width:820px){.steps{grid-template-columns:1fr 1fr; column-gap:1.2rem}}
 .steps li{
   display:flex; gap:.8rem; align-items:flex-start; padding:.7rem .9rem;
   border-radius:11px; border:1px solid transparent; color:var(--text-dim); font-size:.93rem;
@@ -214,6 +214,18 @@ td:first-child{font-weight:500; white-space:nowrap}
 /* Icon-only, so the glyph is the whole affordance: square padding keeps the
    hit area round rather than a wide pill around a small mark. */
 .topbar nav a.icon{padding:.4rem}
+
+/* Positioned against .screen, which has an aspect-ratio and therefore a real
+   height. Sizing against .inner does not work: that box is sized by its
+   content, so an image asking for height:100% of it resolves to zero and the
+   frame renders empty. inset:0 also ignores the padding meant for text, so a
+   screenshot fills the frame edge to edge. */
+.shotimg{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:contain; object-position:center;
+  background:#0a070d;
+}
 
 /* A pull quote, used where a section lands on a single idea. */
 .pull{
@@ -481,12 +493,12 @@ code{
         <div class="screen" id="screen"><div class="inner" id="screenInner"></div></div>
         <div class="stack g-4">
           <ol class="steps" id="steps">
-            <li data-s="0"><span class="n">1</span><span>A working system. BTRFS takes a restore point before every change, automatically.</span></li>
-            <li data-s="1"><span class="n">2</span><span>Something lands badly: a driver, a config, a half-finished upgrade.</span></li>
-            <li data-s="2"><span class="n">3</span><span>It will not boot. This is where most people reinstall.</span></li>
-            <li data-s="3"><span class="n">4</span><span>Pick <em>Recovery</em> from the boot menu.</span></li>
-            <li data-s="4"><span class="n">5</span><span>Choose a point to go back to, in plain language.</span></li>
-            <li data-s="5"><span class="n">6</span><span>Back exactly as it was. Nothing was deleted.</span></li>
+            <li data-s="0"><span class="n">1</span><span>A working system. A restore point is taken before every change, automatically.</span></li>
+            <li data-s="1"><span class="n">2</span><span>Updates arrive. Each one is a point you can go back to.</span></li>
+            <li data-s="2"><span class="n">3</span><span>Something lands badly and it will not boot. This is where most people reinstall.</span></li>
+            <li data-s="3"><span class="n">4</span><span>After three failed starts, recovery opens by itself and lists the points, in plain language.</span></li>
+            <li data-s="4"><span class="n">5</span><span>Pick one. What it replaced is kept, not deleted.</span></li>
+            <li data-s="5"><span class="n">6</span><span>Back exactly as it was.</span></li>
           </ol>
           <div style="display:flex;gap:.7rem;flex-wrap:wrap">
             <button class="btn" id="demoNext">Install a bad update</button>
@@ -803,36 +815,29 @@ code{
   var next   = document.getElementById("demoNext");
   var reset  = document.getElementById("demoReset");
 
-  var LABEL = ["Install a bad update","Restart","Open the boot menu",
-               "Choose Recovery","Go back to 09:12","Start over"];
+  var LABEL = ["Install an update","Break it","See what recovery offers",
+               "Go back to before the update","See the result","Start over"];
+
+  // Every frame is one image, loaded eagerly. loading="lazy" looks right here
+  // and does not work: the image sits in a container the browser does not
+  // consider visible, so it defers the load indefinitely and the frame stays
+  // blank forever. Six images come to about 700 KB.
+  function shot(src, alt){
+    return '<img class="shotimg" src="' + src + '" alt="' + alt + '">';
+  }
 
   var FRAMES = [
-    function(){ return '<div class="wall" style="background-image:url(' + wall + ')"></div>'; },
-    function(){ return '<div class="boot-line">'
-      + '<span class="mute">[  OK  ]</span> Taking restore point <b>before installing 14 updates</b>\n'
-      + '<span class="mute">[  OK  ]</span> Installing linux 7.1.8\n'
-      + '<span class="mute">[  OK  ]</span> Installing nvidia 610.57\n'
-      + '<span class="mute">[  OK  ]</span> Rebuilding boot image\n\n'
-      + 'Restart to finish.</div>'; },
-    function(){ return '<div class="boot-line">'
-      + 'Scanning for Btrfs filesystems\nregistered: /dev/nvme0n1p2\n\n'
-      + '<span class="f">[FAILED]</span> Failed to mount /boot.\n'
-      + '<span class="f">[DEPEND]</span> Dependency failed for Local File Systems.\n\n'
-      + 'You are in emergency mode.\n'
-      + 'Cannot open access to console, the root account is locked.</div>'; },
-    function(){ return '<div class="menu">'
-      + '<div>SakuraOS</div><div class="sel">SakuraOS Recovery</div>'
-      + '</div><p style="color:#8b7f92;margin-top:1.2rem;font-size:.72rem">Go back to an earlier restore point</p>'; },
-    function(){ return '<div style="text-align:left;display:inline-block">'
-      + '<p style="color:#e8dfe6;margin:0 0 .9rem">Something wrong with your system?<br>Pick a point to go back to:</p>'
-      + '<div class="menu">'
-      + '<div class="sel">1)&nbsp; 09:12&nbsp;&nbsp; before installing 14 updates</div>'
-      + '<div>2)&nbsp; Yesterday 20:31&nbsp;&nbsp; before installing nvidia 610</div>'
-      + '<div>c)&nbsp; Cancel and restart normally</div>'
-      + '</div></div>'; },
-    function(){ return '<div class="wall" style="background-image:url(' + wall + ')"></div>'
-      + '<div class="inner" style="position:relative"><p class="restored">Restored.</p>'
-      + '<p style="color:#cbbfd3;font-size:.78rem;margin-top:.5rem">Nothing was deleted. The state you replaced was kept.</p></div>'; }
+    // Photographs of a real machine, not drawings of one. Captured from an
+    // installed SakuraOS VM: the update, the break, the failure, recovery
+    // starting by itself after three failed starts, the rollback, and the
+    // desktop afterwards. Replacing hand-written markup that imitated all six
+    // is the only reason the sentence above this demo is true.
+    function(){ return shot("/shots/1-desktop.jpg",   "The SakuraOS desktop"); },
+    function(){ return shot("/shots/2-updates.jpg",   "Update Center showing pending updates and restore points"); },
+    function(){ return shot("/shots/3-failed.png",    "A boot that fails and drops to emergency mode"); },
+    function(){ return shot("/shots/4-recovery.png",  "Recovery listing the restore points to go back to"); },
+    function(){ return shot("/shots/5-restoring.png", "The rollback running and reporting what it kept"); },
+    function(){ return shot("/shots/6-restored.jpg",  "The desktop, restored"); }
   ];
 
   var at = 0;
