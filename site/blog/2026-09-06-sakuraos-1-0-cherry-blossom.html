@@ -3,24 +3,25 @@
   way back when an update goes wrong.
 </p>
 
+<h2>Welcome to SakuraOS</h2>
+
 <p>
-  SakuraOS 1.0 is here. It is Arch underneath, with KDE Plasma on the desktop,
-  a kernel chosen by what your processor actually supports, and four
-  applications built specifically for it. Installing it does not ask you to
-  pick a bootloader or compare filesystems.
+  SakuraOS 1.0 is here. This is our public release of the Sakura Operating
+  System. It is Arch underneath, with KDE Plasma on the desktop, a performance
+  tuned kernel, and five applications built from the ground up for SakuraOS. An
+  opinionated distro with all the right flavors mixed in.
 </p>
 
 <p>
-  This first release is about one idea. Arch has the best software model in
-  Linux, and the worst recovery story. We kept the first and fixed the second.
+  This first release is about one idea. Arch has the best model in Linux, but
+  the worst recovery story. We kept the first and fixed the second.
 </p>
 
-<h2>A way back that does not need a live USB</h2>
+<h2>A way back that does not need a live USB anymore</h2>
 
 <p>
-  A restore point is taken before every package transaction. Not nightly, not
-  on a schedule you configure: before each one, so the state you can return to
-  is the state you were in a second earlier.
+  Restore points are taken before every package transaction, so the state you
+  can return to is the state you were in a second earlier.
 </p>
 
 <p>
@@ -28,7 +29,7 @@
   a chroot is. After three failed starts the recovery environment opens by
   itself, lists the restore points in plain language, and puts the system back
   when you pick one. Your home directory is on a separate subvolume and is not
-  touched either way.
+  touched.
 </p>
 
 <figure>
@@ -42,25 +43,17 @@
   passphrase first, then behaves identically.
 </p>
 
-<h2>Updates that were installed somewhere else first</h2>
+<h2>The fastest turn around time in the game</h2>
 
 <p>
-  Every night, a machine is installed from scratch, the day's Arch updates are
+  Every night a machine is installed from scratch, the day's Arch updates are
   applied to it, it is restarted, and forty-four checks are run against what
   comes back. Anything that breaks it is held back from you, with the reason
-  attached. Everything else arrives at Arch speed, because holding packages
-  back on a schedule is how a rolling release stops being one.
+  attached. Everything else arrives at the speed of Arch, because holding
+  packages back on a schedule is how a rolling release stops being one.
 </p>
 
-<div class="callout">
-  <p>
-    This is not a promise about a future version. The canary runs nightly now,
-    and what it publishes is what your machine reads before it applies
-    anything.
-  </p>
-</div>
-
-<h2>The terminal, without the cliff</h2>
+<h2>The terminal can be daunting, for novices and long time users alike</h2>
 
 <p>
   Immutable distributions have real advantages, and a real cost: eventually you
@@ -77,11 +70,18 @@
   off entirely, in Settings.
 </p>
 
-<h2>The AUR, with the scary part handled</h2>
+<h2>The AUR is amazing, and also scary</h2>
 
 <p>
-  The AUR is off on a fresh install, because it is build scripts written by
-  other users that nobody reviews. Turning it on is one switch in Settings.
+  To most people the AUR is necessary. It is the biggest user repository in all
+  of Linux, and being that big means things get missed. We have all seen the
+  recent run of malware turning up in it, and it is not a one off: it seems
+  like every month another package is found carrying something it should not.
+</p>
+
+<p>
+  So the AUR is off on a fresh install. Turning it on is one switch in
+  Settings.
 </p>
 
 <p>
