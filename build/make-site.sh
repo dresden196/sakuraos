@@ -28,6 +28,25 @@ if [[ -d "$REPO_ROOT/site/shots" ]]; then
     echo ">> copied $(ls "$REPO_ROOT/site/shots" | wc -l) screenshots"
 fi
 
+# Stamp each screenshot reference with a hash of the file it points at.
+#
+# nginx serves these with max-age=300, so replacing an image leaves anyone who
+# already has it looking at the old one, with no way to tell. That happened:
+# the screenshots were recaptured and the page still showed the previous set.
+# A URL that changes when the bytes change cannot go stale, and an unchanged
+# image keeps its URL and stays cached.
+stamp_shots() {
+    local page="$1" dir="$2" f name hash
+    for f in "$dir"/*; do
+        [[ -f "$f" ]] || continue
+        name="$(basename "$f")"
+        hash="$(md5sum "$f" | cut -c1-8)"
+        # The references sit inside JavaScript string literals, so the
+        # character right after the filename is the closing quote.
+        sed -i "s#/shots/${name}\"#/shots/${name}?v=${hash}\"#g" "$page"
+    done
+}
+
 # The source opens with <title>, <link> and a <style> block, then the page
 # content. Split on the end of that first style block so the head-ish part
 # lands in <head> where it belongs; <title> in <body> is invalid and browsers
@@ -63,6 +82,9 @@ open(out, 'w', encoding='utf-8').write(
 PY
 
 echo ">> wrote $OUT ($(stat -c%s "$OUT") bytes)"
+
+stamp_shots "$OUT" "$OUT_DIR/shots"
+echo ">> stamped $(grep -o "shots/[a-z0-9.-]*?v=" "$OUT" | wc -l) screenshot URLs"
 grep -q '<meta charset="utf-8">' "$OUT" || { echo "charset missing" >&2; exit 1; }
 grep -q 'name="viewport"' "$OUT" || { echo "viewport missing" >&2; exit 1; }
 echo ">> charset and viewport present"
