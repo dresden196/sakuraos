@@ -246,24 +246,48 @@ void Backend::loadHistory()
     // built around, apparently absent. The D-Bus path is the one that honours
     // the ALLOW_GROUPS=wheel the installer sets, and listing snapshots is not
     // a privileged act; taking or restoring one still is.
+    // --csvout, not the table.
+    //
+    // The table was parsed with a regex expecting an ASCII pipe between the
+    // columns. snapper draws it with U+2502, the box-drawing vertical, so the
+    // regex matched nothing and the tab said "No restore points yet." on a
+    // machine that had them -- the same wrong answer this code was already
+    // fixed for once, arrived at a second way.
+    //
+    // A decorated table is a display format and is entitled to change. csvout
+    // is the one snapper offers for reading, so nothing here depends on how it
+    // chooses to draw a line.
     const QString out = capture(QStringLiteral("snapper"),
-        {QStringLiteral("-c"), QStringLiteral("root"),
+        {QStringLiteral("--csvout"), QStringLiteral("-c"), QStringLiteral("root"),
          QStringLiteral("list"), QStringLiteral("--columns"),
          QStringLiteral("number,date,description")});
 
-    static const QRegularExpression row(
-        QStringLiteral("^\\s*(\\d+)\\s*\\|\\s*([^|]*?)\\s*\\|\\s*(.*?)\\s*$"));
-
     const auto lines = out.split(QLatin1Char('\n'));
     for (const QString &line : lines) {
-        const auto m = row.match(line);
-        if (!m.hasMatch() || m.captured(1) == QLatin1String("0")) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty() || trimmed.startsWith(QLatin1String("number"))) {
+            continue;                       // header
+        }
+        // Split on the first two commas only: a description may contain one,
+        // and it is the last field.
+        const int c1 = trimmed.indexOf(QLatin1Char(','));
+        if (c1 < 0) continue;
+        const int c2 = trimmed.indexOf(QLatin1Char(','), c1 + 1);
+        if (c2 < 0) continue;
+        const QString number = trimmed.left(c1).trimmed();
+        const QString date = trimmed.mid(c1 + 1, c2 - c1 - 1).trimmed();
+        QString desc = trimmed.mid(c2 + 1).trimmed();
+        if (desc.startsWith(QLatin1Char('"')) && desc.endsWith(QLatin1Char('"'))) {
+            desc = desc.mid(1, desc.size() - 2);
+        }
+        // 0 is the live system, not a point to go back to.
+        if (number.isEmpty() || number == QLatin1String("0")) {
             continue;
         }
         m_history.append(QVariantMap{
-            {QStringLiteral("number"), m.captured(1)},
-            {QStringLiteral("date"), m.captured(2)},
-            {QStringLiteral("description"), m.captured(3)},
+            {QStringLiteral("number"), number},
+            {QStringLiteral("date"), date},
+            {QStringLiteral("description"), desc},
         });
     }
     std::reverse(m_history.begin(), m_history.end());
