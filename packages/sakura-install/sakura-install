@@ -749,47 +749,6 @@ The disk would not boot, so the install has been stopped instead."
         fi
     fi
 
-    # Graphics and extras are best-effort by comparison. Offline they may not
-    # resolve, and an install that otherwise succeeded should not be thrown
-    # away over them -- the live image already carries the open drivers, and
-    # Drop extras that cannot be resolved, rather than letting one of them
-    # take the install down.
-    #
-    # The browser is an extra package, and a browser choice must never be able
-    # to fail an installation -- it is the least important decision on any of
-    # these screens. pacstrap is all-or-nothing: one unresolvable name and the
-    # whole transaction fails, at the end, on a disk that has already been
-    # written. The chroot pacman below is all-or-nothing in the other
-    # direction, dropping the graphics driver too because a browser was
-    # missing.
-    #
-    # Checked against the target's own repositories, so a package that exists
-    # only in sakura-extra still counts.
-    # shellcheck disable=SC2086
-    if [[ -n "$EXTRA_PACKAGES" ]]; then
-        _keep=""
-        for _pkg in $EXTRA_PACKAGES; do
-            if arch-chroot /mnt pacman -Si "$_pkg" >/dev/null 2>&1; then
-                _keep="$_keep $_pkg"
-            else
-                info "WARNING: $_pkg is not available in any repository; skipping it"
-                info "the rest of the install carries on without it"
-            fi
-        done
-        EXTRA_PACKAGES="${_keep# }"
-    fi
-
-    # the first update after the machine is online will fill in the rest.
-    # shellcheck disable=SC2086
-    if [[ "$HAVE_NET" != "yes" ]]; then
-        info "no network: skipping graphics and extra packages"
-        info "the open drivers are already on this system; the first update will fill in the rest"
-    elif [[ -n "${GRAPHICS_PACKAGES}${EXTRA_PACKAGES}" ]]; then
-        arch-chroot /mnt pacman -S --noconfirm --needed \
-            $GRAPHICS_PACKAGES $EXTRA_PACKAGES 2>&1 | tail -3 \
-            || info "WARNING: some extra packages could not be installed; \
-the system will pick them up once it is online."
-    fi
 
     # Only now is the on-media repo finished with. It is the file:// source
     # the kernel installs from when there is no network, so removing it
@@ -806,6 +765,57 @@ the system will pick them up once it is online."
             /mnt/etc/pacman.conf 2>/dev/null || true
         grep -q 'sakura-core.conf' /mnt/etc/pacman.conf \
             || echo 'Include = /etc/pacman.d/sakura-core.conf' >> /mnt/etc/pacman.conf
+    fi
+
+    # Graphics and extras, now that the target can see the network repositories.
+    #
+    # This has to come after the swap above, not before it. sakura-extra is
+    # only defined by sakura-core.conf, and until that Include is in place the
+    # target knows about sakura-core on the media and nothing else -- so every
+    # browser, which is exactly what sakura-extra holds, resolved to nothing
+    # and was skipped as "not available in any repository". The install
+    # succeeded and quietly had no browser in it.
+    #
+    # Best-effort by comparison with the kernel: offline they may not resolve,
+    # and an install that otherwise succeeded should not be thrown away over
+    # them. The live image already carries the open drivers, and the first
+    # update after the machine is online will fill in the rest.
+    if [[ "$HAVE_NET" != "yes" ]]; then
+        info "no network: skipping graphics and extra packages"
+        info "the open drivers are already on this system; the first update will fill in the rest"
+    elif [[ -n "${GRAPHICS_PACKAGES}${EXTRA_PACKAGES}" ]]; then
+        # Pick up the network databases the swap just pointed at. Without this
+        # sakura-extra has no database in the target and everything in it looks
+        # missing.
+        arch-chroot /mnt pacman -Sy >/dev/null 2>&1 || true
+        rm -f /mnt/var/lib/pacman/db.lck
+
+        # Drop extras that cannot be resolved rather than letting one of them
+        # take the install down. A browser must never be able to fail an
+        # installation: it is the least important decision on any of these
+        # screens, and pacman -S is all-or-nothing, so one bad name would drop
+        # the graphics driver with it.
+        # shellcheck disable=SC2086
+        if [[ -n "$EXTRA_PACKAGES" ]]; then
+            _keep=""
+            for _pkg in $EXTRA_PACKAGES; do
+                if arch-chroot /mnt pacman -Si "$_pkg" >/dev/null 2>&1; then
+                    _keep="$_keep $_pkg"
+                else
+                    info "WARNING: $_pkg is not available in any repository; skipping it"
+                    info "the rest of the install carries on without it"
+                fi
+            done
+            EXTRA_PACKAGES="${_keep# }"
+        fi
+
+        # shellcheck disable=SC2086
+        if [[ -n "${GRAPHICS_PACKAGES}${EXTRA_PACKAGES}" ]]; then
+            arch-chroot /mnt pacman -S --noconfirm --needed \
+                $GRAPHICS_PACKAGES $EXTRA_PACKAGES 2>&1 | tail -3 \
+                || info "WARNING: some extra packages could not be installed; \
+the system will pick them up once it is online."
+        fi
     fi
 else
     step "Installing packages"

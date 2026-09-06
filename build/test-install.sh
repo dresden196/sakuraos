@@ -60,6 +60,12 @@ for arg in "$@"; do
     esac
 done
 CRYPTPASS=diskpass
+# A browser is installed on every run, because the browser list went three
+# names wrong for months precisely because nothing here ever picked one. It
+# lives in sakura-extra and is fetched over the network, so this also proves
+# the target can reach that repository -- which it could not, for a while,
+# because the extras were installed before the repository was configured.
+BROWSER_PKG="${SAKURA_TEST_BROWSER:-vivaldi}"
 
 run() { "$REPO_ROOT/build/guest-run.sh" "$@"; }
 
@@ -155,7 +161,9 @@ if (( ! verify_only )); then
     run "setsid bash -c 'sakura-install --disk /dev/vda --user $USER_NAME \
          --password $USER_PASS --hostname $HOSTNAME_ --timezone UTC \
          --theme dark --keymap gb $CRYPT_ARGS \
-         --extra-packages qemu-guest-agent --method "$METHOD" --yes \
+         --extra-packages "qemu-guest-agent $BROWSER_PKG" --browser "$BROWSER_PKG" \
+         --accent '#3daee9' --clock 12 --fullname 'Test User' \
+         --method "$METHOD" --yes \
          > /tmp/install.log 2>&1 $CRYPT_IN; echo \$? > /tmp/install.rc' &" \
         >/dev/null 2>&1 || true
 
@@ -297,6 +305,23 @@ check "sakura-core registered exactly once" \
 # lands the other way round, but nothing re-checked it afterwards, and this
 # file is exactly the kind that a pacnew merge quietly reorders. The canary
 # runs these checks again after every update, which is where it matters.
+# The browser the installer was told to install, actually installed, and
+# actually pinned. Each of these was broken at some point and none of them was
+# checked: the package name was wrong, the extras were installed before the
+# repository that holds them was configured, and the pin looked the .desktop
+# name up from the package because a hardcoded table would have been wrong for
+# Chrome and Brave.
+check "the chosen browser is installed" \
+      "pacman -Q $BROWSER_PKG"
+check "the browser is pinned to the task bar" \
+      "grep -q \"\$(pacman -Ql $BROWSER_PKG | awk '\$2 ~ /applications\\/.*desktop\$/ {print \"applications:\" substr(\$2, match(\$2, /[^\\/]*\$/))}' | head -1)\" /usr/share/plasma/look-and-feel/org.sakura.dark.desktop/contents/layouts/org.kde.plasma.desktop-layout.js"
+# The answers the installer collects and used to drop on the floor.
+check "the accent colour was applied" \
+      "grep -q '^AccentColor=61,174,233' /home/$USER_NAME/.config/kdeglobals"
+check "the clock format was applied" \
+      "grep -q '^LC_TIME=en_US.UTF-8' /home/$USER_NAME/.config/plasma-localerc"
+check "the full name reached the account" \
+      "getent passwd $USER_NAME | cut -d: -f5 | grep -q 'Test User'"
 check "sakura-core is included before [core]" \
       "test \"\$(grep -n '^Include = /etc/pacman.d/sakura-core.conf' /etc/pacman.conf | cut -d: -f1)\" -lt \"\$(grep -n '^\\[core\\]' /etc/pacman.conf | cut -d: -f1)\""
 # These two are the only checks that need a route out. Offline they are not

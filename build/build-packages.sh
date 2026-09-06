@@ -8,6 +8,9 @@
 #
 #   ./build/build-packages.sh              everything, including AUR rebuilds
 #   ./build/build-packages.sh --skip-aur   only our own packages
+#   ./build/build-packages.sh --aur-only=zen-browser-bin,brave-bin
+#                                          our packages, plus just these
+#                                          rebuilt from the AUR
 #
 # The AUR rebuilds are the expensive part -- args, cpr, zsync2 and snapd
 # together dominate the wall clock -- and they change only when their upstream
@@ -16,9 +19,16 @@
 set -euo pipefail
 
 SKIP_AUR=0
+# Build only these AUR packages, reusing the previous build of the rest.
+#
+# The manifest holds the NVIDIA legacy driver, which is DKMS and takes tens of
+# minutes, so "rebuild the browsers" should not mean "recompile a graphics
+# driver". Comma-separated, e.g. --aur-only=zen-browser-bin,brave-bin
+AUR_ONLY=""
 for arg in "$@"; do
     case "$arg" in
         --skip-aur) SKIP_AUR=1 ;;
+        --aur-only=*) AUR_ONLY="${arg#--aur-only=}" ;;
         *) echo "unknown flag: $arg" >&2; exit 1 ;;
     esac
 done
@@ -70,6 +80,7 @@ docker run --rm \
     -v "$CACHE_VOLUME:/var/cache/pacman/pkg" \
     -e "SIGNER=$SIGNER" \
     -e "SKIP_AUR=$SKIP_AUR" \
+    -e "AUR_ONLY=$AUR_ONLY" \
     -e "BUILD_STAMP=$BUILD_STAMP" \
     -e "HOST_UID=$(id -u)" \
     -e "HOST_GID=$(id -g)" \
@@ -164,9 +175,20 @@ docker run --rm \
         # nothing else, which is worse than a slow build.
         REUSE=/home/builder/reuse
         install -d -o builder -g builder "$REUSE"
-        if (( SKIP_AUR )); then
+        # Is this package one of the ones we were asked to rebuild?
+        wanted() {
+            [[ -z "$AUR_ONLY" ]] && return 0
+            case ",$AUR_ONLY," in *",$1,"*) return 0 ;; esac
+            return 1
+        }
+        # With --aur-only, everything not named is reused exactly as it is
+        # under --skip-aur; without it, the old behaviour is unchanged.
+        if (( SKIP_AUR )) || [[ -n "$AUR_ONLY" ]]; then
             while read -r pkg flags; do
                 if [[ -z "$pkg" || "$pkg" == \#* ]]; then continue; fi
+                # About to be rebuilt, so reusing the old copy would just be
+                # overwritten -- and would mask a failed rebuild.
+                if [[ -n "$AUR_ONLY" ]] && wanted "$pkg"; then continue; fi
                 found=0
                 for d in /build/repo/sakura-core/os/x86_64 \
                          /build/repo/sakura-extra/os/x86_64; do
@@ -185,8 +207,27 @@ docker run --rm \
             done < /build/packages/aur/manifest.txt
         fi
 
+        # Import upstream signing keys before anything tries to verify against
+        # them. A PKGBUILD that checks its source against a vendor key fails
+        # with "unknown public key" otherwise, and the tempting fix --
+        # --skippgpcheck -- turns a real check into no check at all on exactly
+        # the packages that most deserve one: prebuilt browser binaries.
+        if [[ -r /build/packages/aur/keys.txt ]]; then
+            while read -r key _rest; do
+                if [[ -z "$key" || "$key" == \#* ]]; then continue; fi
+                if su builder -c "GNUPGHOME=/home/builder/.gnupg gpg \
+                        --keyserver keyserver.ubuntu.com --recv-keys $key" \
+                        >/dev/null 2>&1; then
+                    echo ">>> imported signing key $key"
+                else
+                    echo ">>> warning: could not import signing key $key"
+                fi
+            done < /build/packages/aur/keys.txt
+        fi
+
         while read -r pkg flags; do
             if (( SKIP_AUR )); then continue; fi
+            if ! wanted "$pkg"; then continue; fi
             # An if, not "[[ ... ]] && continue": under set -e a false test
             # makes the && list return non-zero and kills the whole build,
             # after it has already succeeded.
