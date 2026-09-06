@@ -41,8 +41,54 @@ QQC2.ApplicationWindow {
     // 4.5:1 wanted for normal-size text, and is the reason this comment
     // exists rather than being a thing to discover later: the alternative was
     // 2.80:1, or a brand colour that is not the brand.
-    readonly property color accent: dark ? "#ffb7c5" : "#e0648c"
-    readonly property color accentText: "#3a2731"
+    // The colour picked on the appearance screen, made legible against this
+    // background.
+    //
+    // It used to be this pair of literals and nothing else, so cycling through
+    // the swatches changed the answer the installer stored and never changed
+    // the installer -- you picked Jade and everything stayed pink. Binding it
+    // straight to the choice would have reintroduced the very problem the
+    // paragraph above describes: blossom pink is 1.60:1 on a light background,
+    // and a focus ring nobody can see is worse than the wrong colour.
+    //
+    // So the choice is honoured, and then moved until it clears 3:1 against
+    // the background it is actually drawn on -- darkened on a light theme,
+    // lightened on a dark one. A colour already clear of the threshold is left
+    // exactly as chosen, which is every swatch in dark mode.
+    function relLuminance(c) {
+        function ch(v) { return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b)
+    }
+    function contrastRatio(a, b) {
+        var la = relLuminance(a), lb = relLuminance(b)
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+    }
+    function legibleAccent(chosen) {
+        var c = chosen
+        if (contrastRatio(c, bg) >= 3.0)
+            return c
+        // Which way to move depends on the theme, not on the colour: on a dark
+        // background a dim accent has to come up, on a light one it has to go
+        // down. Bounded, because a colour that cannot get there should stop at
+        // its best rather than loop.
+        var lightenIt = relLuminance(bg) < 0.5
+        for (var i = 0; i < 24; i++) {
+            c = lightenIt ? Qt.lighter(c, 1.08) : Qt.darker(c, 1.08)
+            if (contrastRatio(c, bg) >= 3.0)
+                return c
+        }
+        return c
+    }
+    readonly property color accent:
+        legibleAccent(answers.accent && answers.accent.length
+                      ? answers.accent
+                      : (dark ? "#ffb7c5" : "#e0648c"))
+    // Ink on top of the accent, chosen by which of the two reads better. It
+    // was a single dark literal, which is right for blossom pink and wrong the
+    // moment somebody picks something dark enough to need light text.
+    readonly property color accentText:
+        contrastRatio("#3a2731", accent) >= contrastRatio("#ffffff", accent)
+            ? "#3a2731" : "#ffffff"
     readonly property color bg:     dark ? "#26161e" : "#faf6f8"
     readonly property color panel:  dark ? "#2f1f28" : "#f1e7ec"
     readonly property color card:   dark ? "#3a2731" : "#ffffff"
