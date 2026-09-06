@@ -6,7 +6,7 @@
      before, which is how the boot logo, the installer and the spinning globe
      on the network screen came to be three different flowers.
 
-     0 is replaced with a rotation in degrees, so the boot throbber is
+     __ROT__ is replaced with a rotation in degrees, so the boot throbber is
      this mark turning rather than a second drawing of one.
 
      The stamens are deliberately gone: five stalks with dots on the ends read
@@ -31,7 +31,7 @@
 
   <!-- Five petals at 72 degrees. The notched tip is what makes a sakura read
        as a sakura rather than as a generic flower. -->
-  <g transform="translate(100,100) rotate(0) scale(1.18)">
+  <g transform="translate(100,100) rotate(__ROT__) scale(1.18)">
     <g fill="url(#petal)" stroke="#f0a3b8" stroke-opacity="0.45" stroke-width="1.2">
       <path d="M0,0 C-21,-20 -25,-50 -11,-64 C-6,-69 -3,-60 0,-55 C3,-60 6,-69 11,-64 C25,-50 21,-20 0,0 Z"/>
       <path d="M0,0 C-21,-20 -25,-50 -11,-64 C-6,-69 -3,-60 0,-55 C3,-60 6,-69 11,-64 C25,-50 21,-20 0,0 Z" transform="rotate(72)"/>

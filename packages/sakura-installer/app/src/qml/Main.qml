@@ -1337,10 +1337,12 @@ QQC2.ApplicationWindow {
                         // A little under a fifth of a turn each, so the
                         // petals sit apart rather than merging into a disc.
                         ctx.rotate(i * 2 * Math.PI / 5)
+                        // The same stops as the petal gradient in
+                        // branding/sakura-mark.svg, read bottom to top.
                         var g = ctx.createLinearGradient(0, 0, 0, -size)
-                        g.addColorStop(0, "#f8c2d2")
-                        g.addColorStop(0.55, "#ffd9e4")
-                        g.addColorStop(1, "#fff2f6")
+                        g.addColorStop(0, "#ffc9d6")
+                        g.addColorStop(0.45, "#fff2f6")
+                        g.addColorStop(1, "#ffffff")
                         ctx.fillStyle = g
                         globe.petalPath(ctx, size)
                         ctx.fill()
@@ -1352,24 +1354,20 @@ QQC2.ApplicationWindow {
                         ctx.restore()
                     }
 
-                    // Stamens. A cherry blossom has a lot of them and they
-                    // are long; a plain dot in the middle is what makes a
-                    // drawn flower look like a clip-art daisy.
-                    ctx.strokeStyle = Qt.rgba(0.85, 0.45, 0.55, 0.75)
-                    ctx.lineWidth = 0.8
-                    for (var t = 0; t < 9; ++t) {
-                        var a = t * 2 * Math.PI / 9 + 0.2
-                        var len = size * (0.34 + (t % 3) * 0.07)
-                        ctx.beginPath()
-                        ctx.moveTo(0, 0)
-                        ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len)
-                        ctx.stroke()
-                        ctx.fillStyle = "#ffe9a8"
-                        ctx.beginPath()
-                        ctx.arc(Math.cos(a) * len, Math.sin(a) * len,
-                                size * 0.055, 0, Math.PI * 2)
-                        ctx.fill()
-                    }
+                    // A soft centre, matching branding/sakura-mark.svg.
+                    //
+                    // This used to draw nine stamens with pollen on the ends,
+                    // which made the flower on the globe a different flower
+                    // from the one in the corner of the same window, on the
+                    // boot screen and on the website. The mark has no stamens,
+                    // so neither does this.
+                    ctx.fillStyle = "#ffd9e2"
+                    ctx.strokeStyle = Qt.rgba(0.94, 0.64, 0.72, 0.5)
+                    ctx.lineWidth = 0.7
+                    ctx.beginPath()
+                    ctx.arc(0, 0, size * 0.14, 0, Math.PI * 2)
+                    ctx.fill()
+                    ctx.stroke()
                     ctx.restore()
                 }
             }
