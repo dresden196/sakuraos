@@ -77,8 +77,20 @@ if [[ -d "$REPO_ROOT/repo" ]]; then
     # The live system needs the same repo definition as the build, pointed at
     # the on-media copy. Deriving it from iso/pacman.conf keeps the two from
     # drifting apart.
+    # The live system's copy: the same file with the paths moved to the media,
+    # minus [sakura-extra]. The build needs that section to put the default
+    # browser into the live filesystem, but only sakura-core is copied onto the
+    # media, so leaving it in would point the live session and the installer at
+    # a repository that is not there -- every pacman run on the live system
+    # would then complain about a missing database.
+    #
+    # The browser is in the filesystem either way, which is what an offline
+    # install copies. Staging the package as well would put the same 139 MB on
+    # the ISO twice.
     sed 's#file:///build/repo/#file:///usr/share/sakura/repo/#' \
-        "$REPO_ROOT/iso/pacman.conf" > "$LIVE_PACMAN_CONF"
+        "$REPO_ROOT/iso/pacman.conf" \
+        | awk '/^\[sakura-extra\]/{skip=1} /^\[/ && !/^\[sakura-extra\]/{skip=0} !skip' \
+        > "$LIVE_PACMAN_CONF"
     echo ">> staged $(find "$STAGED_REPO" -name '*.pkg.tar.zst' | wc -l) packages onto the live media"
 fi
 
