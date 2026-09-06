@@ -1230,41 +1230,6 @@ if [ -n "$AVATAR_STAGED" ] && [ -r "$AVATAR_STAGED" ]; then
     rm -f "$AVATAR_STAGED"
 fi
 
-# Pin the chosen browser to the task bar.
-#
-# The panel is built from our look-and-feel layout script the first time the
-# user logs in, and that script carries a short hardcoded list of launchers. A
-# browser is the one application a new machine is certain to need in its first
-# minute, so the one that was actually chosen belongs on the panel next to the
-# file manager.
-#
-# The .desktop name is looked up from the package rather than kept in a table
-# here: brave-bin ships brave-browser.desktop and vivaldi ships
-# vivaldi-stable.desktop, and a table of those would be wrong the first time
-# any of them renamed a file.
-if [ -n "$BROWSER" ]; then
-    # The chroot runs with -euo pipefail, so this needs the guard: when the
-    # browser is not installed -- which happens whenever it could not be
-    # fetched -- pacman -Ql fails, pipefail propagates that through the
-    # pipeline, and the bare assignment ends the whole chroot. That turned a
-    # browser that was merely missing into a failed installation on a disk
-    # that had already been written.
-    _desktop=\$(pacman -Ql "$BROWSER" 2>/dev/null \
-        | awk '\$2 ~ /\/usr\/share\/applications\/.*\.desktop\$/ {print \$2}' \
-        | head -1) || true
-    if [ -n "\$_desktop" ]; then
-        _entry="applications:\$(basename "\$_desktop")"
-        for _layout in /usr/share/plasma/look-and-feel/org.sakura.*.desktop/contents/layouts/org.kde.plasma.desktop-layout.js; do
-            [ -f "\$_layout" ] || continue
-            # Before Konsole: file manager, browser, store, terminal is the
-            # order of how often a new user reaches for each.
-            sed -i "s#\(\s*\)"applications:org.kde.konsole.desktop",#\1"\$_entry",\n\1"applications:org.kde.konsole.desktop",#" "\$_layout"
-        done
-    else
-        echo "[sakura-install] warning: no .desktop file found for $BROWSER; not pinning it"
-    fi
-fi
-
 echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/10-wheel
 chmod 440 /etc/sudoers.d/10-wheel
 
@@ -1378,6 +1343,55 @@ CHROOT
 # -- see sakura-desktop -- is the whole of it. Editing this file to add them
 # again was written first and thrown away: it produced duplicate entries in
 # the login stack, which is a way to be asked twice rather than not at all.
+
+# Pin the chosen browser to the task bar.
+#
+# The panel is built from our look-and-feel layout the first time the user logs
+# in, and that layout carries a short hardcoded list of launchers. A browser is
+# the one application a new machine is certain to need in its first minute, so
+# the one actually chosen belongs on the panel next to the file manager.
+#
+# Done out here rather than inside the chroot heredoc. In there the sed had to
+# survive the heredoc, the outer shell and the chroot's own bash, and it did
+# not: the inner double quotes lost their escaping, the shell split the
+# expression into fragments, and it silently matched nothing. Out here it is
+# just a command.
+#
+# The .desktop name is read from the package rather than kept in a table:
+# brave-bin ships brave-browser.desktop, vivaldi ships vivaldi-stable.desktop
+# and google-chrome ships com.google.Chrome.desktop, and a table of those would
+# be wrong the first time any of them renamed a file.
+if [[ -n "$BROWSER" ]]; then
+    _desktop="$(arch-chroot /mnt pacman -Ql "$BROWSER" 2>/dev/null \
+        | awk '$2 ~ /\/usr\/share\/applications\/.*\.desktop$/ {print $2}' \
+        | head -1)" || true
+    if [[ -n "$_desktop" ]]; then
+        _entry="applications:$(basename "$_desktop")"
+        _pinned=0
+        for _layout in /mnt/usr/share/plasma/look-and-feel/org.sakura.*.desktop/contents/layouts/org.kde.plasma.desktop-layout.js; do
+            [[ -f "$_layout" ]] || continue
+            # Before Konsole: file manager, browser, store, terminal is the
+            # order of how often somebody new reaches for each.
+            if python3 - "$_layout" "$_entry" <<'PIN'; then
+import sys
+path, entry = sys.argv[1], sys.argv[2]
+text = open(path).read()
+needle = '"applications:org.kde.konsole.desktop",'
+if entry in text:
+    sys.exit(0)                      # already there
+if needle not in text:
+    sys.exit(1)                      # layout changed shape; say so
+indent = " " * (text.index(needle) - text.rindex("\n", 0, text.index(needle)) - 1)
+open(path, "w").write(text.replace(needle, '"%s",\n%s%s' % (entry, indent, needle), 1))
+PIN
+                _pinned=1
+            fi
+        done
+        (( _pinned )) || info "WARNING: could not pin $BROWSER to the task bar"
+    else
+        info "WARNING: no .desktop file found for $BROWSER; not pinning it"
+    fi
+fi
 
 step "Clearing the installation package cache"
 # pacstrap leaves every package it installed in the target's cache -- 1.7 GB
