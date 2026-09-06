@@ -146,6 +146,15 @@ a{color:var(--accent)}
 .article img{max-width:100%; height:auto; border-radius:12px; border:1px solid var(--hair); display:block}
 .article figure{margin:1.8rem 0}
 .article figcaption{font-size:.86rem; color:var(--text-dim); margin-top:.6rem; text-align:center}
+
+/* A whole-desktop screenshot shrunk to a 66ch text column is unreadable, and
+   being able to see the whole desktop is the entire point of showing it. These
+   break out of the measure and are bounded by the viewport instead. */
+.article figure.wide{
+  width:min(1240px,94vw);
+  margin-left:50%;
+  transform:translateX(-50%);
+}
 .article blockquote{
   margin:1.6rem 0; padding:.2rem 0 .2rem 1.2rem;
   border-left:3px solid color-mix(in srgb,var(--accent) 50%,transparent);
