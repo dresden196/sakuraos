@@ -1243,9 +1243,15 @@ fi
 # vivaldi-stable.desktop, and a table of those would be wrong the first time
 # any of them renamed a file.
 if [ -n "$BROWSER" ]; then
+    # The chroot runs with -euo pipefail, so this needs the guard: when the
+    # browser is not installed -- which happens whenever it could not be
+    # fetched -- pacman -Ql fails, pipefail propagates that through the
+    # pipeline, and the bare assignment ends the whole chroot. That turned a
+    # browser that was merely missing into a failed installation on a disk
+    # that had already been written.
     _desktop=\$(pacman -Ql "$BROWSER" 2>/dev/null \
         | awk '\$2 ~ /\/usr\/share\/applications\/.*\.desktop\$/ {print \$2}' \
-        | head -1)
+        | head -1) || true
     if [ -n "\$_desktop" ]; then
         _entry="applications:\$(basename "\$_desktop")"
         for _layout in /usr/share/plasma/look-and-feel/org.sakura.*.desktop/contents/layouts/org.kde.plasma.desktop-layout.js; do
