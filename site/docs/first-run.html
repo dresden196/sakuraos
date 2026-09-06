@@ -1,0 +1,84 @@
+<h1>After installing</h1>
+<p class="lede">
+  Most of the setup a new Arch install usually needs is already done. This page
+  is what was done, so you are not looking for it, and the short list of things
+  actually worth doing yourself.
+</p>
+
+<h2>Already done</h2>
+<p>
+  You do not need to enable, configure or install any of this:
+</p>
+<ul>
+  <li><strong>Automatic updates</strong>, at 03:00, on mains power, after a restore point, and never with an unattended reboot.</li>
+  <li><strong>Restore points</strong>, taken before every package transaction, with the boot-time recovery environment that reads them.</li>
+  <li><strong>The firewall and network</strong>: NetworkManager is running and bluetooth is enabled with it.</li>
+  <li><strong>Printing</strong>, socket-activated, so it costs nothing until you print.</li>
+  <li><strong>Compressed swap in RAM</strong>, the I/O scheduler rules and the sysctl values described in <a href="/tuning">Tuning</a>.</li>
+  <li><strong>Flatpak and Snap</strong>, both configured, so the <a href="/store">App Store</a>'s four sources all work immediately.</li>
+  <li><strong>Your browser</strong>, the one you chose during the install, pinned to the panel.</li>
+</ul>
+
+<h2>Worth doing</h2>
+
+<h3>Run the first update yourself</h3>
+<p>
+  The image was built at some point before you downloaded it. Open the Update
+  Center and install what is pending rather than waiting for 03:00, so you
+  start current. A restore point is taken first, as always.
+</p>
+
+<h3>Decide about the AUR</h3>
+<p>
+  It is off. If you want it, turn it on in Settings and read
+  <a href="/aur">The AUR</a> first, particularly the part about what the review
+  screen is showing you. If you do not need it, leaving it off is a real
+  security decision rather than a default nobody thought about.
+</p>
+
+<h3>Check the restore points exist</h3>
+<p>
+  Open the Update Center, History. There should be one from the installation
+  itself. It costs ten seconds and it tells you the safety net is real on your
+  machine specifically, rather than in principle.
+</p>
+
+<h3>Set up your backups</h3>
+<p>
+  Restore points are not backups. They live on the same disk and they protect
+  you from a bad update, not from a failed drive or a stolen laptop. Anything
+  you would be upset to lose needs a copy somewhere else.
+</p>
+
+<div class="note">
+  <p>
+    This is the one thing on this page that SakuraOS cannot do for you, and the
+    one most likely to matter.
+  </p>
+</div>
+
+<h3>If you use Secure Boot</h3>
+<p>
+  Check whether it was enrolled: if your firmware was not in setup mode during
+  the install, the installer completed with Secure Boot off and said so. See
+  <a href="/hardware">Hardware</a>.
+</p>
+
+<h2>Making it yours</h2>
+<p>
+  The accent colour, clock format, wallpaper and theme you chose during
+  installation are ordinary Plasma settings, and changing them later is done in
+  System Settings like anything else. Nothing about them is locked.
+</p>
+<p>
+  Sakura Settings holds the parts that are ours: the AUR switch, what Terminal
+  Assist does, when updates install, and whether Windows application support is
+  set up at all.
+</p>
+
+<h2>If something is already wrong</h2>
+<p>
+  Go to <a href="/troubleshooting">Troubleshooting</a>. If the machine will not
+  start, <a href="/recovery">Recovery</a> covers it and you do not need
+  anything else.
+</p>
