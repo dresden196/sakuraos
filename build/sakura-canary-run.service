@@ -1,0 +1,25 @@
+[Unit]
+Description=SakuraOS update canary (runs inside the container)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/sakura-canary
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PUBLISH=1
+ExecStart=/srv/sakura-canary/build/canary.sh
+# A run installs a machine, updates it, reboots it and re-checks it.
+TimeoutStartSec=2h
+# The VMs this starts are children of the script and must not be killed until
+# it is finished with them. Running under the container's own systemd rather
+# than through pct exec is what makes that hold: an exec'd command's process
+# tree gets torn down when the exec finishes, which killed qemu mid-run and
+# presented as the installed machine never coming up.
+KillMode=mixed
+Restart=no
+StandardOutput=append:/srv/sakura-canary/out/run.log
+StandardError=append:/srv/sakura-canary/out/run.log
+
+[Install]
+WantedBy=multi-user.target

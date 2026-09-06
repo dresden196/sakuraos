@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# Run the canary inside its container, from the host.
+# Start the nightly canary and wait for it, from the Proxmox host.
 #
-# The timer lives on the hypervisor rather than in the container so that the
-# container being down is itself reportable. A timer inside a stopped
-# container does not fire and does not complain, and a canary nobody knows
-# has stopped is worse than no canary: its last advisory keeps holding
-# packages until it ages out.
+# This does NOT run canary.sh through pct exec any more, which is what it used
+# to do and why every nightly run failed. An exec'd command's process tree is
+# torn down when the exec finishes, and the teardown is by cgroup, so setsid
+# does not save it either: qemu took a SIGTERM part-way through and the run
+# reported that the installed machine never came up. A manual run watched by a
+# human looked fine, because the human's session stayed open.
+#
+# So the work belongs to the container's own systemd, and this script only
+# starts that unit and waits. See sakura-canary-run.service inside 9002.
 set -uo pipefail
-
 CTID="${SAKURA_CANARY_CTID:-9002}"
+UNIT=sakura-canary-run.service
 NOTIFY=/usr/local/bin/sakura-canary-notify
+# A run installs a machine, updates it, reboots it and re-checks it.
+DEADLINE_MINUTES="${SAKURA_CANARY_DEADLINE:-180}"
 
-# Only the failures the canary itself cannot report. When the canary runs and
-# exits non-zero it has already sent its own alert, and a second one from out
-# here is two notifications for one fault -- which is how people learn to
-# swipe alerts away without reading them.
 fail_outer() {
     echo "canary-run: $*" >&2
     [[ -x "$NOTIFY" ]] && "$NOTIFY" stalled "$*" "" /dev/null || true
@@ -30,13 +32,32 @@ for _ in $(seq 30); do
     sleep 2
 done
 
-pct exec "$CTID" -- /usr/bin/env PUBLISH=1 PATH=/usr/local/bin:/usr/bin:/bin \
-    /srv/sakura-canary/build/canary.sh
-rc=$?
+# --no-block: the start returns as soon as systemd has accepted the job, so
+# this exec is short-lived by design and there is no long-running process tree
+# for its teardown to kill.
+pct exec "$CTID" -- systemctl reset-failed "$UNIT" >/dev/null 2>&1 || true
+pct exec "$CTID" -- systemctl start --no-block "$UNIT" \
+    || fail_outer "could not start $UNIT inside container $CTID"
 
-# 1 means the canary ran and reported for itself. Anything else means it never
-# got far enough to, so this is the only chance to say so.
-if [[ $rc -ne 0 && $rc -ne 1 ]]; then
-    fail_outer "the canary could not be started inside the container (exit $rc)"
+# Wait for it, polling from outside. Each poll is its own short exec.
+waited=0
+while :; do
+    state="$(pct exec "$CTID" -- systemctl is-active "$UNIT" 2>/dev/null | tr -d '[:space:]')"
+    [[ "$state" != "activating" ]] && break
+    sleep 30
+    waited=$(( waited + 30 ))
+    if (( waited > DEADLINE_MINUTES * 60 )); then
+        pct exec "$CTID" -- systemctl stop "$UNIT" >/dev/null 2>&1 || true
+        fail_outer "the canary was still running after $DEADLINE_MINUTES minutes and was stopped"
+    fi
+done
+
+rc="$(pct exec "$CTID" -- systemctl show "$UNIT" -p ExecMainStatus --value 2>/dev/null | tr -d '[:space:]')"
+rc="${rc:-2}"
+
+# 1 means the canary ran and published its own advisory and notification.
+# Anything else means it never got far enough to speak for itself.
+if [[ "$rc" != "0" && "$rc" != "1" ]]; then
+    fail_outer "the canary exited $rc inside the container; see /srv/sakura-canary/out/run.log"
 fi
-exit $rc
+exit "$rc"
