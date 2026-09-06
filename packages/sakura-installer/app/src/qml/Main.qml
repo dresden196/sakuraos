@@ -148,6 +148,27 @@ QQC2.ApplicationWindow {
     // question that did not need asking.
     property bool hour24Touched: false
 
+    // Whether this machine can reach a network right now. Re-read when the
+    // browser screen opens rather than held from the network screen, because
+    // a cable can be plugged in between the two and the answer decides which
+    // browsers can be installed at all.
+    property bool online: false
+    function refreshOnline() {
+        var st = backend.networkState()
+        online = !!(st && st.connected)
+        // A choice that cannot be installed must not stay selected. Falling
+        // back to the default is right here: it is the one that ships on the
+        // media, so it is always installable.
+        if (!online) {
+            for (var i = 0; i < 1; i++) {
+                if (answers.browser !== "zen-browser-bin" && answers.browser !== "none") {
+                    answers.browser = "zen-browser-bin"
+                    answersChanged()
+                }
+            }
+        }
+    }
+
     // Zones whose country writes the time on a 12-hour clock. A list rather
     // than a rule, because there is no rule: Brazil and Argentina are in the
     // Americas and write 24-hour, India and the Philippines are in Asia and
@@ -2538,10 +2559,15 @@ QQC2.ApplicationWindow {
         id: browserPage
         ColumnLayout {
             spacing: 14
+            // Asked when the screen opens, not carried over from the network
+            // screen: a cable can be plugged in between the two.
+            Component.onCompleted: root.refreshOnline()
             Item { Layout.preferredHeight: 34 }
             Heading {
                 title: "Pick a browser"
-                subtitle: "You can install any of the others later from the store. This just decides what is ready on first boot."
+                subtitle: root.online
+                    ? "You can install any of the others later from the store. This just decides what is ready on first boot."
+                    : "This machine is offline, so only the browser on the installation media can be installed. The others are available from the store once you are connected."
             }
             GridLayout {
                 Layout.fillWidth: true
@@ -2566,33 +2592,44 @@ QQC2.ApplicationWindow {
                     // build/check-browsers.sh fails the build if any name
                     // here stops resolving.
                     model: [
-                        { pkg: "zen-browser-bin", name: "Zen", icon: "zen",
+                        // needsNet marks the ones that are not on the media.
+                        // Zen ships on the installation media because it is
+                        // the default, and a default that cannot be installed
+                        // without a network is not a default. The rest are
+                        // fetched, so offline they are offered and then
+                        // silently skipped -- which is worse than not offering
+                        // them.
+                        { pkg: "zen-browser-bin", name: "Zen", icon: "zen", needsNet: false,
                           detail: "SakuraOS default. Firefox-based, built around tabs you actually keep." },
-                        { pkg: "firefox",         name: "Firefox", icon: "firefox",
+                        { pkg: "firefox",         name: "Firefox", icon: "firefox", needsNet: true,
                           detail: "Independent engine. Strong privacy defaults." },
-                        { pkg: "brave-bin",       name: "Brave", icon: "brave",
+                        { pkg: "brave-bin",       name: "Brave", icon: "brave", needsNet: true,
                           detail: "Chromium-based. Blocks ads and trackers by default." },
-                        { pkg: "vivaldi",         name: "Vivaldi", icon: "vivaldi",
+                        { pkg: "vivaldi",         name: "Vivaldi", icon: "vivaldi", needsNet: true,
                           detail: "Chromium-based. Heavily customisable, with tab tiling and stacking." },
-                        { pkg: "helium-browser-bin", name: "Helium", icon: "helium",
+                        { pkg: "helium-browser-bin", name: "Helium", icon: "helium", needsNet: true,
                           detail: "Chromium-based, stripped of the tracking. Minimal by design." },
                         // Named in full: "Chrome" alone reads as Chromium to
                         // exactly the audience most likely to confuse them.
-                        { pkg: "google-chrome",   name: "Google Chrome", icon: "chrome",
+                        { pkg: "google-chrome",   name: "Google Chrome", icon: "chrome", needsNet: true,
                           detail: "Chromium-based, by Google." }
                     ]
                     delegate: Rectangle {
                         required property var modelData
                         readonly property bool picked: root.answers.browser === modelData.pkg
+                        // Offered only when it can actually be installed.
+                        readonly property bool usable: root.online || !modelData.needsNet
 
                         Layout.fillWidth: true
                         Layout.preferredHeight: 148
                         radius: 14
+                        opacity: usable ? 1 : 0.45
                         color: picked ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.14)
                                       : root.card
                         border.width: picked ? 2 : 1
                         border.color: picked ? root.accent : root.line
                         Behavior on color { ColorAnimation { duration: 110 } }
+                        Behavior on opacity { NumberAnimation { duration: 140 } }
 
                         ColumnLayout {
                             anchors.fill: parent
@@ -2620,10 +2657,20 @@ QQC2.ApplicationWindow {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                             }
+                            // Said on the card rather than in a footnote: the
+                            // reason belongs next to the thing it explains.
+                            QQC2.Label {
+                                visible: !usable
+                                text: "Needs a network connection"
+                                color: root.accent
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                            }
                         }
                         MouseArea {
                             anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
+                            enabled: usable
+                            cursorShape: usable ? Qt.PointingHandCursor : Qt.ArrowCursor
                             onClicked: { root.answers.browser = modelData.pkg; root.answersChanged() }
                         }
                     }
