@@ -165,7 +165,11 @@ sakura_pending_rollback() {
     # sets it in the current shell, and whether the child process started
     # inside that function inherits it is not something to rely on.
     export SAKURA_ROLLBACK_TARGET="$want"
-    sakura_enter_recovery "restoring the point you chose"
+    # Reads as "Started because <reason>.", so the reason has to be a clause
+    # that finishes that sentence. "restoring the point you chose" produced
+    # "Started because restoring the point you chose.", which is not a
+    # sentence, on the one screen where a user is already worried.
+    sakura_enter_recovery "you asked to go back to an earlier restore point"
 }
 
 run_hook() {
