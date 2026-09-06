@@ -782,7 +782,18 @@ The disk would not boot, so the install has been stopped instead."
     # update after the machine is online will fill in the rest.
     if [[ "$HAVE_NET" != "yes" ]]; then
         info "no network: skipping graphics and extra packages"
-        info "the open drivers are already on this system; the first update will fill in the rest"
+        info "the open drivers are already on this system"
+        # Said separately and accurately. "The first update will fill in the
+        # rest" is true of the graphics drivers, whose open versions are
+        # already installed and only get upgraded, and false of anything that
+        # is not on this machine at all -- a browser above all. Nothing later
+        # goes and fetches it, so claiming otherwise leaves someone waiting
+        # for a package that is never coming.
+        if [[ -n "$EXTRA_PACKAGES" ]]; then
+            info "NOTE: these were not installed and nothing will install them"
+            info "      later on its own: $EXTRA_PACKAGES"
+            info "      install them from the App Store once this machine is online."
+        fi
     elif [[ -n "${GRAPHICS_PACKAGES}${EXTRA_PACKAGES}" ]]; then
         # Pick up the network databases the swap just pointed at. Without this
         # sakura-extra has no database in the target and everything in it looks
