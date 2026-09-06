@@ -549,8 +549,9 @@ code{
 
       <div class="cols two">
         <div class="card">
-          <h3>It can't be stepped around</h3>
-          <p class="dim">The checks live inside pacman itself, so they apply whether the command came from a terminal, a script, an AUR helper or the app store. The shell layer on top is the friendly warning, not the guard.</p>
+          <h3>The guard lives in pacman</h3>
+          <p class="dim">The important checks run inside pacman itself. That means they still apply whether a package operation starts in the terminal, a script, an AUR helper, or the App Store.</p>
+          <p class="dim">The shell layer is there to catch mistakes early and explain them. The pacman hook is what actually stops a dangerous transaction.</p>
         </div>
         <div class="card">
           <h3>It's not a nanny</h3>
