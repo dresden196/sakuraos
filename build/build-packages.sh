@@ -300,7 +300,7 @@ docker run --rm \
                 # is a browser an offline machine never gets -- which left the
                 # offline path producing a complete desktop with no way to
                 # reach the web at all.
-                zen-browser-bin-*) dest="$CORE" ;;
+                zen-browser-bin-*) dest="$EXTRA" ;;
                 # The rest are a few hundred megabytes each and an install uses
                 # exactly one of them. Putting four on every ISO to ship three
                 # nobody chose is the definition of what sakura-extra is for.
