@@ -36,6 +36,11 @@ class Backend : public QObject
     Q_PROPERTY(QString stage READ stage NOTIFY progressChanged)
     Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
     Q_PROPERTY(QString progressDetail READ progressDetail NOTIFY progressChanged)
+    // "48.0 MB of 96.0 MB", or empty when the engine has not told us a size.
+    // A percentage answers "how far", an amount answers "how much longer",
+    // and only the second is the question somebody staring at a download is
+    // actually asking.
+    Q_PROPERTY(QString downloadProgress READ downloadProgress NOTIFY progressChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY progressChanged)
     // Which application the running transaction is for, so a button can tell
     // "I started this" apart from "something is running somewhere".
@@ -94,6 +99,7 @@ public:
     QString stage() const { return m_stage; }
     int percent() const { return m_percent; }
     QString progressDetail() const { return m_detail; }
+    QString downloadProgress() const;
     bool busy() const { return m_busy; }
     QString busyId() const { return m_busyId; }
     bool reviewBusy() const { return m_reviewBusy; }
@@ -187,6 +193,8 @@ private:
     QString m_errorDetail;
     QString m_stage, m_detail, m_error;
     int m_percent = 0;
+    qint64 m_bytes = 0;
+    qint64 m_total = 0;
     bool m_searching = false, m_loadingApp = false, m_busy = false;
     QString m_busyId;
     bool m_reviewBusy = false;

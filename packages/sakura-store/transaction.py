@@ -130,6 +130,11 @@ def explain(text: str) -> str:
 
 def stream(args: list[str], stage: str, parse=None) -> int:
     """Run a command, turning its output into progress rather than swallowing it."""
+    # Each pacman run announces its own Total Download Size, and an install
+    # can be several runs (dependencies, then the package). Carrying the
+    # previous run's total into the next one would report the second download
+    # against the first one's size.
+    reset_download_total()
     proc = subprocess.Popen(args, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, bufsize=1)
     tail: list[str] = []
@@ -278,6 +283,26 @@ def _is_repo_package(name: str) -> bool:
                           stderr=subprocess.DEVNULL).returncode == 0
 
 
+# "Total Download Size:   123.45 MiB". pacman prints this once, before it
+# starts fetching, and it is the only place the whole size of the download
+# appears -- the per-file lines are per file. Kept so that a percentage can be
+# reported as an amount, because "48 MB of 96 MB" answers "how much longer"
+# and "50%" does not.
+_PACMAN_TOTAL = re.compile(
+    r"Total Download Size:\s*([0-9.]+)\s*([KMG])iB", re.I)
+_PACMAN_PCT = re.compile(r"(\d{1,3})%")
+_UNIT = {"K": 1024, "M": 1024 ** 2, "G": 1024 ** 3}
+
+# Module state, reset at the start of each transaction. The parser is called
+# once per output line and has nowhere else to remember the total.
+_dl_total = 0
+
+
+def reset_download_total() -> None:
+    global _dl_total
+    _dl_total = 0
+
+
 def _pacman_progress(line: str, main_stage: str = INSTALLING):
     """Which phase pacman is in.
 
@@ -289,9 +314,24 @@ def _pacman_progress(line: str, main_stage: str = INSTALLING):
     in hand -- installing for an install, removing for a removal. Hardcoding
     it made an uninstall report itself as an install halfway through.
     """
+    global _dl_total
     stripped = line.strip()
+
+    m = _PACMAN_TOTAL.search(stripped)
+    if m:
+        _dl_total = int(float(m.group(1)) * _UNIT[m.group(2).upper()])
+
     if stripped.startswith(":: Retrieving") or "downloading" in stripped:
-        return {"stage": DOWNLOADING, "detail": stripped[:160]}
+        out = {"stage": DOWNLOADING, "detail": stripped[:160]}
+        # pacman's percentage is of the whole retrieval, so against the total
+        # it announced up front it converts straight into an amount.
+        pm = _PACMAN_PCT.search(stripped)
+        if pm and _dl_total:
+            pct = min(100, int(pm.group(1)))
+            out["percent"] = pct
+            out["bytes"] = _dl_total * pct // 100
+            out["total"] = _dl_total
+        return out
     if (stripped.startswith(":: Processing package changes")
             or stripped.startswith(("installing ", "upgrading ",
                                     "reinstalling ", "removing "))):

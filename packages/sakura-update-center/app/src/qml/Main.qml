@@ -148,8 +148,8 @@ QQC2.ApplicationWindow {
                     // drawing the site, the installer and the boot screen use.
                     Image {
                         source: "qrc:/assets/sakura-mark.png"
-                        sourceSize: Qt.size(48, 48)
-                        width: 24; height: 24
+                        sourceSize: Qt.size(38, 38)
+                        width: 19; height: 19
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                     }

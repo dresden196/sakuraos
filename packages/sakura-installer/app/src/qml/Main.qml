@@ -856,10 +856,10 @@ QQC2.ApplicationWindow {
 
             Image {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 150
-                Layout.preferredHeight: 150
+                Layout.preferredWidth: 112
+                Layout.preferredHeight: 112
                 source: "qrc:/assets/sakura-mark.png"
-                sourceSize: Qt.size(264, 264)
+                sourceSize: Qt.size(224, 224)
                 fillMode: Image.PreserveAspectFit
             }
 
