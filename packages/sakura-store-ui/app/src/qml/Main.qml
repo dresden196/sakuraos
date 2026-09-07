@@ -189,11 +189,15 @@ QQC2.ApplicationWindow {
     // them and the card has 108px to give. The score was clipped mid-character
     // in every column that had a neighbour to clip against.
     //
-    // MIN is what a card needs before its footer stops fitting, measured
-    // rather than guessed: 30px of margins, a 52px icon, 13px of spacing, and
-    // roughly 150px for the widest badge ("SakuraOS") beside a rating.
+    // MIN is what a card needs before its footer stops fitting: 30px of
+    // margins, a 52px icon, 13px of spacing, and about 147px for the widest
+    // badge ("SakuraOS") beside a rating. 260 was tried first and cost a
+    // column at the default window size for the sake of 18 unused pixels.
+    //
+    // The rating carries its own guard as well, so this number decides how
+    // dense the grid looks rather than whether it renders correctly.
     function cellWidth(avail, cols, gap) {
-        var MIN = 260
+        var MIN = 242
         var n = Math.max(1, Math.min(cols, Math.floor((avail + gap) / (MIN + gap))))
         return Math.floor((avail - (n - 1) * gap) / n)
     }
@@ -474,9 +478,16 @@ QQC2.ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.minimumWidth: 0
                         horizontalAlignment: Text.AlignRight
-                        elide: Text.ElideRight
                         text: root.stars(appData.rating) + "  " + root.score(appData.rating)
                         color: root.accent; font.pixelSize: 11
+                        // Vanish rather than be cut in half. Eliding a rating
+                        // gives "★★★⯨", which reads as a rendering fault; no
+                        // rating at all reads as an app without one.
+                        //
+                        // opacity and not visible: visible would change the
+                        // space available, which would change the test, which
+                        // would change visible again.
+                        opacity: width >= implicitWidth ? 1 : 0
                     }
                     QQC2.Label {
                         visible: !!appData.installed
