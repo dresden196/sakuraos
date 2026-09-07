@@ -5,6 +5,7 @@
 QT_BEGIN_NAMESPACE
 class QTimer;
 QT_END_NAMESPACE
+#include <QFileInfo>
 #include <QProcess>
 #include <QVariantList>
 #include <QVariantMap>
@@ -23,6 +24,10 @@ class Backend : public QObject
     Q_PROPERTY(QString currentStep READ currentStep NOTIFY progressChanged)
     Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
     Q_PROPERTY(bool running READ running NOTIFY runningChanged)
+    // Whether this is the live medium rather than an installed system.
+    // "Try SakuraOS" only means anything here: on an installed machine there
+    // is nothing to drop out into.
+    Q_PROPERTY(bool liveMedia READ liveMedia CONSTANT)
     Q_PROPERTY(QString log READ log NOTIFY logChanged)
 
 public:
@@ -70,6 +75,9 @@ public:
     QString currentStep() const { return m_step; }
     int percent() const { return m_percent; }
     bool running() const { return m_running; }
+    // archiso mounts its own directory here and nothing else creates it, so
+    // its presence is the same test the install script itself uses.
+    bool liveMedia() const { return QFileInfo::exists(QStringLiteral("/run/archiso")); }
     QString log() const { return m_log; }
 
 Q_SIGNALS:

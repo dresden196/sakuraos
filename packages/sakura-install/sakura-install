@@ -573,7 +573,19 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
            /mnt/etc/systemd/system/serial-getty@ttyS0.service.d
 
     # The installer itself, and the thing that starts it.
+    #
+    # Removing only the autostart file was not enough. A copy install clones
+    # the live filesystem, and the live filesystem carries sakura-install and
+    # sakura-installer, so both arrived on the installed system with a visible
+    # menu entry: "Install SakuraOS" sitting in the launcher of a machine that
+    # is already installed, one click from a disk-erasing wizard. sakura-desktop
+    # deliberately does not depend on either of them for exactly this reason;
+    # the copy path was going around that intent.
+    #
+    # Anyone who wants to install again boots the media again.
     rm -f /mnt/etc/xdg/autostart/sakura-installer.desktop
+    arch-chroot /mnt pacman -Rns --noconfirm \
+        sakura-installer sakura-install 2>/dev/null || true
 
     # archiso's own machinery: boot hooks that look for a squashfs, the
     # services that only make sense on live media, and its mkinitcpio
