@@ -25,10 +25,20 @@ render() {
     rsvg-convert -w "$size" -h "$size" -o "$dest" "$TMP/m.svg"
 }
 
-echo ">> installer mark"
-# The installer reads an SVG out of its own qrc, so it gets the drawing rather
-# than a rendering of it.
-sed 's/__ROT__/0/' "$SRC" > "$REPO_ROOT/packages/sakura-installer/app/src/assets/sakura-mark.svg"
+echo ">> application marks"
+# These read an SVG out of their own qrc, so they get the drawing rather than a
+# rendering of it.
+#
+# The store and the update centre used to draw "✿" (U+273F) in a coloured
+# circle instead. That is a font glyph, not the mark: a different flower with a
+# different petal count, whose shape changes with whatever font is installed.
+# Three marks were in use at once -- the site and installer had this drawing,
+# those two had the florette, and the launcher icons are their own thing.
+for app in sakura-installer sakura-store-ui sakura-update-center; do
+    dest="$REPO_ROOT/packages/$app/app/src/assets/sakura-mark.svg"
+    mkdir -p "$(dirname "$dest")"
+    sed 's/__ROT__/0/' "$SRC" > "$dest"
+done
 
 echo ">> boot splash and throbber"
 PLY="$REPO_ROOT/packages/sakura-plymouth/theme"

@@ -940,7 +940,104 @@ QQC2.ApplicationWindow {
                     color: parent.down ? Qt.darker(root.accent, 1.15) : root.accent
                 }
             }
+
+            Item { Layout.preferredHeight: 14 }
+
+            // Looking before committing. Only on the live medium: on an
+            // installed system there is nothing to drop out into, and the
+            // installer should not be offering it at all.
+            QQC2.Button {
+                Layout.alignment: Qt.AlignHCenter
+                visible: backend.liveMedia
+                text: "Try SakuraOS"
+                flat: true
+                padding: 10
+                leftPadding: 26
+                rightPadding: 26
+                onClicked: tryLiveDialog.open()
+                contentItem: QQC2.Label {
+                    text: parent.text
+                    color: root.accent
+                    font.pixelSize: 14
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 9
+                    color: "transparent"
+                    border.width: 1
+                    border.color: parent.down ? root.accent
+                                              : Qt.rgba(root.accent.r, root.accent.g,
+                                                        root.accent.b, 0.45)
+                }
+            }
         }
+        }
+    }
+
+    // Leaving the installer for the live desktop.
+    //
+    // Worth a confirmation rather than a bare button: somebody who came here
+    // to install and lands on a desktop instead has no obvious way back, so
+    // the way back is the last thing the dialog says.
+    QQC2.Dialog {
+        id: tryLiveDialog
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(560, root.width - 80)
+        padding: 26
+        title: "Try SakuraOS first?"
+
+        background: Rectangle {
+            color: root.panel
+            radius: 14
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.08)
+        }
+
+        contentItem: QQC2.Label {
+            text: "This will close the SakuraOS installer and leave you in the live " +
+                  "environment. Not all features are available there, and nothing you " +
+                  "do is kept.\n\n" +
+                  "If you want to install after all, open the \u201cInstall SakuraOS\u201d " +
+                  "application again \u2014 you do not need to restart the machine."
+            color: root.dim
+            font.pixelSize: 14
+            lineHeight: 1.4
+            wrapMode: Text.WordWrap
+        }
+
+        footer: RowLayout {
+            spacing: 10
+            Item { Layout.fillWidth: true }
+            QQC2.Button {
+                text: "Cancel"
+                flat: true
+                onClicked: tryLiveDialog.close()
+                contentItem: QQC2.Label {
+                    text: parent.text; color: root.dim; font.pixelSize: 14
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            QQC2.Button {
+                text: "Try SakuraOS"
+                padding: 10
+                leftPadding: 20
+                rightPadding: 20
+                onClicked: Qt.quit()
+                contentItem: QQC2.Label {
+                    text: parent.text; color: root.accentText
+                    font.pixelSize: 14; font.weight: Font.DemiBold
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 9
+                    color: parent.down ? Qt.darker(root.accent, 1.15) : root.accent
+                }
+            }
+            Item { Layout.preferredWidth: 4 }
         }
     }
 
@@ -2751,12 +2848,18 @@ QQC2.ApplicationWindow {
                 Field {
                     id: updateTimeField
                     Layout.maximumWidth: 92
-                    // The mask follows the clock the user chose. It was always
-                    // "99:99", so a machine set to a 12-hour clock still asked
-                    // for the update time in 24-hour and offered no AM or PM --
-                    // the one place in the installer that contradicted an
-                    // answer the user had just given.
-                    inputMask: root.answers.hour24 ? "99:99" : "x9:99"
+                    // No input mask.
+                    //
+                    // It used to be "99:99" in 24-hour and "x9:99" in 12-hour.
+                    // The 12-hour mask needs exactly five characters, and a
+                    // 12-hour time before ten o'clock is four -- "3:00" -- so
+                    // the default of 03:00 could not be written into its own
+                    // field, and the AM/PM control beside it had nothing
+                    // coherent to toggle. setUpdateTimeFrom already refuses
+                    // anything it cannot parse and leaves the stored value
+                    // alone, which is the check that was actually doing the
+                    // work; the mask only decided what could be typed.
+                    inputMethodHints: Qt.ImhPreferNumbers
                     // Set once rather than bound: binding text to the answer
                     // while writing that answer back on every keystroke makes
                     // the binding re-evaluate itself.
@@ -2776,13 +2879,19 @@ QQC2.ApplicationWindow {
                 // AM/PM, and only when it means something.
                 QQC2.Button {
                     id: meridiem
-                    property string label: root.updateTimeMeridiem()
+                    // Derived, not stored. Assigning to a declared binding
+                    // replaces it, so the old code's first click detached the
+                    // label from the answer and every later reading of it was
+                    // whatever the button happened to say rather than what the
+                    // time actually was.
+                    readonly property string label: root.updateTimeMeridiem()
                     visible: !root.answers.hour24
                     text: label
                     implicitWidth: 54
                     onClicked: {
-                        label = (label === "AM") ? "PM" : "AM"
-                        root.setUpdateTimeFrom(updateTimeField.text, label)
+                        // Flip the stored time, and let the label follow it.
+                        root.setUpdateTimeFrom(updateTimeField.text,
+                                               label === "AM" ? "PM" : "AM")
                     }
                 }
                 QQC2.Label { text: "and only when plugged in"; color: root.dim; font.pixelSize: 13 }

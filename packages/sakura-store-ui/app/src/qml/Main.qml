@@ -528,10 +528,17 @@ QQC2.ApplicationWindow {
 
                 RowLayout {
                     spacing: 10
-                    Rectangle {
-                        width: 26; height: 26; radius: 13; color: root.accent
-                        QQC2.Label { anchors.centerIn: parent; text: "✿"
-                                     color: root.accentText; font.pixelSize: 15 }
+                    // The mark itself, not a florette from whatever font
+                    // happens to be installed. The site, the installer and the
+                    // boot screen all render build/make-logos.sh's one drawing
+                    // of the blossom, and "✿" is a different flower with a
+                    // different petal count that changes shape per font.
+                    Image {
+                        source: "qrc:/assets/sakura-mark.svg"
+                        sourceSize: Qt.size(52, 52)
+                        width: 26; height: 26
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
                     }
                     QQC2.Label { text: "Store"; color: root.text
                                  font.pixelSize: 17; font.weight: Font.DemiBold }

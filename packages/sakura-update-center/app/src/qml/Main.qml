@@ -144,9 +144,14 @@ QQC2.ApplicationWindow {
 
                 RowLayout {
                     spacing: 9
-                    Rectangle {
-                        width: 24; height: 24; radius: 12; color: root.accent
-                        QQC2.Label { anchors.centerIn: parent; text: "✿"; color: root.accentText; font.pixelSize: 16 }
+                    // The mark itself rather than the "✿" florette: the same
+                    // drawing the site, the installer and the boot screen use.
+                    Image {
+                        source: "qrc:/assets/sakura-mark.svg"
+                        sourceSize: Qt.size(48, 48)
+                        width: 24; height: 24
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
                     }
                     QQC2.Label { text: "Updates"; color: root.text; font.pixelSize: 16; font.weight: Font.DemiBold }
                 }
