@@ -330,7 +330,7 @@ QQC2.ApplicationWindow {
         // places to answer one question.
         property bool showsProgress: false
         property real progress: 0
-        padding: 12; leftPadding: 26; rightPadding: 26
+        padding: 10; leftPadding: 22; rightPadding: 22
         contentItem: QQC2.Label {
             text: parent.text
             color: act.showsProgress ? root.accentText
@@ -359,6 +359,13 @@ QQC2.ApplicationWindow {
             // Until the first percentage arrives the fill sweeps rather than
             // sitting at zero: a bar that has not moved in eight seconds is
             // indistinguishable from nothing having happened.
+            //
+            // It travels between the ends rather than through them. The old
+            // one ran from -width to the full width, relying on the parent's
+            // clip to hide the overshoot -- but clipping in Qt is to the
+            // bounding box, not to the rounded corners, so the sweep appeared
+            // outside the pill at both ends and read as a separate object
+            // sliding past the bar rather than something moving inside it.
             Rectangle {
                 id: sweep
                 visible: act.showsProgress && act.progress <= 0
@@ -367,8 +374,10 @@ QQC2.ApplicationWindow {
                 SequentialAnimation on x {
                     running: sweep.visible
                     loops: Animation.Infinite
-                    NumberAnimation { from: -sweep.width; to: act.width
-                                      duration: 1150; easing.type: Easing.InOutQuad }
+                    NumberAnimation { from: 0; to: sweep.parent.width - sweep.width
+                                      duration: 1000; easing.type: Easing.InOutQuad }
+                    NumberAnimation { from: sweep.parent.width - sweep.width; to: 0
+                                      duration: 1000; easing.type: Easing.InOutQuad }
                 }
             }
         }
@@ -535,8 +544,8 @@ QQC2.ApplicationWindow {
                     // different petal count that changes shape per font.
                     Image {
                         source: "qrc:/assets/sakura-mark.png"
-                        sourceSize: Qt.size(52, 52)
-                        width: 26; height: 26
+                        sourceSize: Qt.size(40, 40)
+                        width: 20; height: 20
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                     }
@@ -1662,7 +1671,15 @@ QQC2.ApplicationWindow {
                             Layout.minimumWidth: 196
                             showsProgress: mine
                             progress: backend.percent
-                            text: mine ? root.stageLabel(backend.stage)
+                            // While fetching, the amount rather than the
+                            // word: "Downloading" is true for the whole of a
+                            // long download and tells you nothing about how
+                            // much of it is left.
+                            text: mine
+                                 ? (backend.downloadProgress !== ""
+                                    ? root.stageLabel(backend.stage)
+                                      + "  " + backend.downloadProgress
+                                    : root.stageLabel(backend.stage))
                                  : blocked ? "AUR is switched off"
                                  : isAur ? "Review and install"
                                  : (pick && pick.installed ? "Reinstall" : "Install")

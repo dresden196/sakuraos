@@ -189,6 +189,7 @@ void Backend::applyUpdates(const QString &id, const QString &source)
     m_error.clear();
     m_errorDetail.clear();
     m_percent = 0;
+    m_bytes = m_total = 0;
     m_stage = QStringLiteral("resolving");
     Q_EMIT progressChanged();
 
@@ -221,6 +222,17 @@ void Backend::applyUpdates(const QString &id, const QString &source)
                 }
                 if (o.contains(QStringLiteral("percent"))) {
                     m_percent = o[QStringLiteral("percent")].toInt();
+                }
+                // Sizes only arrive while something is being fetched. Cleared
+                // on any other stage so that "48 MB of 96 MB" does not sit
+                // under a progress bar that has moved on to installing.
+                if (o.contains(QStringLiteral("total"))) {
+                    m_bytes = static_cast<qint64>(
+                        o[QStringLiteral("bytes")].toDouble());
+                    m_total = static_cast<qint64>(
+                        o[QStringLiteral("total")].toDouble());
+                } else if (stage != QLatin1String("downloading")) {
+                    m_bytes = m_total = 0;
                 }
             }
             Q_EMIT progressChanged();
@@ -452,6 +464,7 @@ void Backend::install(const QString &id, const QString &source)
     m_error.clear();
     m_errorDetail.clear();
     m_percent = 0;
+    m_bytes = m_total = 0;
     m_stage = QStringLiteral("resolving");
     m_detail.clear();
     Q_EMIT progressChanged();
@@ -476,6 +489,17 @@ void Backend::install(const QString &id, const QString &source)
                 m_stage = stage;
                 if (o.contains(QStringLiteral("percent"))) {
                     m_percent = o[QStringLiteral("percent")].toInt();
+                }
+                // Sizes only arrive while something is being fetched. Cleared
+                // on any other stage so that "48 MB of 96 MB" does not sit
+                // under a progress bar that has moved on to installing.
+                if (o.contains(QStringLiteral("total"))) {
+                    m_bytes = static_cast<qint64>(
+                        o[QStringLiteral("bytes")].toDouble());
+                    m_total = static_cast<qint64>(
+                        o[QStringLiteral("total")].toDouble());
+                } else if (stage != QLatin1String("downloading")) {
+                    m_bytes = m_total = 0;
                 }
                 const QString d = o[QStringLiteral("detail")].toString();
                 if (!d.isEmpty()) {
@@ -599,6 +623,7 @@ void Backend::installLocalAppImage(const QString &path)
     m_error.clear();
     m_errorDetail.clear();
     m_percent = 0;
+    m_bytes = m_total = 0;
     m_stage = QStringLiteral("resolving");
     m_detail.clear();
     Q_EMIT progressChanged();
@@ -683,6 +708,21 @@ void Backend::openPermissions(const QString &id)
 // From the password database, not from a SakuraOS account, because there is no
 // SakuraOS account. The store shows who you are on this machine so that "your
 // apps" means something concrete; it does not sign you in to anything.
+
+QString Backend::downloadProgress() const
+{
+    if (m_total <= 0 || m_stage != QLatin1String("downloading")) {
+        return QString();
+    }
+    // Decimal MB, matching what the package manager and every download
+    // dialogue the user has ever seen report.
+    const double mb = 1000.0 * 1000.0;
+    // One "MB", not two. This sits inside the button that is also the
+    // progress bar, and the button was asked to get smaller, not wider.
+    return tr("%1 of %2 MB")
+        .arg(m_bytes / mb, 0, 'f', 1)
+        .arg(m_total / mb, 0, 'f', 1);
+}
 
 QString Backend::userName() const
 {
