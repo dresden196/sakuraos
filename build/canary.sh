@@ -40,10 +40,19 @@ say() { printf '\n>> %s\n' "$*"; }
 # A canary that reports "everything is fine" because it never ran is worse
 # than no canary, so every early exit here is a hard failure rather than an
 # empty advisory file.
+# Which log the notification should quote. Each stage sets this before it can
+# fail: a notification that attaches the install log for a failure in the apply
+# step points the reader at the one file that shows nothing wrong, which is
+# exactly what happened on 2026-09-06.
+FAIL_LOG="$REPO_ROOT/out/canary-install.log"
+
 die() {
     echo "canary: $*" >&2
-    "$REPO_ROOT/build/canary-notify.sh" stalled "$*" "" \
-        "$REPO_ROOT/out/canary-install.log" 2>/dev/null || true
+    # No 2>/dev/null here. canary-notify.sh reports its own skips on stderr
+    # ("no GitHub token", "gh not installed"), and swallowing them is why a
+    # missing gh went unnoticed for as long as it did: no issue was ever
+    # opened and nothing said so.
+    "$REPO_ROOT/build/canary-notify.sh" stalled "$*" "" "$FAIL_LOG" || true
     exit 1
 }
 
@@ -120,8 +129,25 @@ COUNT=$(printf '%s\n' "$PENDING" | grep -c . || true)
 say "$COUNT updates pending"
 
 say "applying them"
-guest "pacman -Syu --noconfirm" >"$REPO_ROOT/out/canary-apply.log" 2>&1 \
-    || die "the update itself failed. See out/canary-apply.log"
+FAIL_LOG="$REPO_ROOT/out/canary-apply.log"
+if ! guest "pacman -Syu --noconfirm" >"$FAIL_LOG" 2>&1; then
+    # One retry, and only after clearing the package cache.
+    #
+    # A single corrupted download fails the whole transaction and the bad file
+    # stays in the cache, so retrying without clearing it fails again in
+    # exactly the same way. This cost a full night of coverage on 2026-09-06:
+    # sakura-store arrived with a bad checksum, was verifiably intact on the
+    # mirror, and the run was reported as a stall with no advisory published.
+    #
+    # The cache on a throwaway test machine is worth nothing, so there is no
+    # need to work out which file was the bad one.
+    say "the update failed; clearing the package cache and trying once more"
+    printf '\n--- retrying with a cleared package cache ---\n' >>"$FAIL_LOG"
+    guest "rm -f /var/cache/pacman/pkg/*.pkg.tar.zst /var/cache/pacman/pkg/*.part" \
+        >/dev/null 2>&1 || true
+    guest "pacman -Syu --noconfirm" >>"$FAIL_LOG" 2>&1 \
+        || die "the update failed twice, the second time with a cleared package cache. See out/canary-apply.log"
+fi
 
 say "rebooting"
 guest "systemctl reboot" >/dev/null 2>&1 || true
