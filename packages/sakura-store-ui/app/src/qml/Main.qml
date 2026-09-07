@@ -149,6 +149,13 @@ QQC2.ApplicationWindow {
         var full = Math.round(v)
         return "★★★★★".substring(0, full) + "☆☆☆☆☆".substring(0, 5 - full)
     }
+    // Always one decimal. A bare "3" next to a "3.7" is a different string
+    // width, which moves the stars in every card that has one, and a grid of
+    // ratings that do not line up reads as broken rather than as varied.
+    function score(v) {
+        if (!v) return ""
+        return Number(v).toFixed(1)
+    }
     function compact(n) {
         if (!n) return ""
         if (n >= 1000000) return (n / 1000000).toFixed(1) + "M"
@@ -416,6 +423,11 @@ QQC2.ApplicationWindow {
                 }
                 Item { Layout.fillHeight: true }
                 RowLayout {
+                    // Without fillWidth this row is sized by its children, and
+                    // a long enough badge-plus-rating pushes the whole card
+                    // content wider than the card -- the summary and the score
+                    // then run past the rounded corner with no right padding.
+                    Layout.fillWidth: true
                     spacing: 8
                     // Which source a result came from, before you click it --
                     // otherwise two identically-named rows are indistinguishable.
@@ -435,9 +447,12 @@ QQC2.ApplicationWindow {
                             font.pixelSize: 10; font.weight: Font.DemiBold
                         }
                     }
+                    // Ratings sit against the right edge so that they line up
+                    // down the grid instead of drifting with the badge width.
+                    Item { Layout.fillWidth: true }
                     QQC2.Label {
                         visible: !!appData.rating
-                        text: root.stars(appData.rating) + "  " + (appData.rating || "")
+                        text: root.stars(appData.rating) + "  " + root.score(appData.rating)
                         color: root.accent; font.pixelSize: 11
                     }
                     QQC2.Label {
@@ -911,7 +926,7 @@ QQC2.ApplicationWindow {
                                 }
                                 QQC2.Label {
                                     visible: !!modelData.rating
-                                    text: root.stars(modelData.rating) + "   " + (modelData.rating || "") +
+                                    text: root.stars(modelData.rating) + "   " + root.score(modelData.rating) +
                                           "  ·  " + (modelData.rating_count || 0) + " reviews"
                                     color: root.accent; font.pixelSize: 13
                                 }
@@ -1506,7 +1521,7 @@ QQC2.ApplicationWindow {
                         QQC2.Label {
                             visible: !!appRoot.a.rating
                             text: root.stars(appRoot.a.rating) + "  "
-                                  + (appRoot.a.rating || "")
+                                  + root.score(appRoot.a.rating)
                                   + "  ·  " + (appRoot.a.rating_count || 0)
                                   + " reviews"
                             color: root.dim; font.pixelSize: 14
