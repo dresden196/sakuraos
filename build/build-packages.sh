@@ -366,11 +366,15 @@ docker run --rm \
 echo
 echo ">> sakura-core now contains:"
 ls -1 "$REPO_DIR"/*.pkg.tar.zst 2>/dev/null | xargs -r -n1 basename
-exit $rc
 
 # Record whether these packages came from a clean tree. publish-repo.sh reads
 # it: a version number that does not identify its contents must not reach a
 # machine that cannot tell the difference.
+#
+# This has to happen before the exit. It used to sit after it, which made the
+# whole block unreachable: the marker was never written, so publish-repo.sh's
+# refusal to publish a dirty build could never fire, and the guard read as
+# working because nothing ever complained.
 if [[ -d "$REPO_ROOT/repo" ]]; then
     if (( BUILD_DIRTY )); then
         printf 'built from a dirty tree at commit %s\n' \
@@ -380,3 +384,5 @@ if [[ -d "$REPO_ROOT/repo" ]]; then
         rm -f "$REPO_ROOT/repo/.dirty-build"
     fi
 fi
+
+exit $rc
