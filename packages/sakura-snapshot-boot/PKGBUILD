@@ -11,7 +11,7 @@ pkgdesc="Snapshot rollback and boot menu generation for SakuraOS"
 arch=('any')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
-depends=('btrfs-progs' 'limine' 'snapper' 'mkinitcpio')
+depends=('btrfs-progs' 'limine' 'snapper' 'mkinitcpio' 'sakura-wallpapers')
 conflicts=('limine-snapper-sync' 'limine-entry-tool')
 source=(
     'lib.sh'
