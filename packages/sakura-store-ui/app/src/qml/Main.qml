@@ -179,8 +179,23 @@ QQC2.ApplicationWindow {
         })[stage] || stage
     }
 
+    // Pick a column count that fits, rather than always dividing by cols and
+    // clamping the width afterwards.
+    //
+    // The clamp was not a floor. It capped how small the arithmetic could go
+    // but never reduced the number of columns, so at the window's own minimum
+    // width three columns came out at 203px each, and a 203px card cannot hold
+    // its own footer: the source badge and the rating need about 150px between
+    // them and the card has 108px to give. The score was clipped mid-character
+    // in every column that had a neighbour to clip against.
+    //
+    // MIN is what a card needs before its footer stops fitting, measured
+    // rather than guessed: 30px of margins, a 52px icon, 13px of spacing, and
+    // roughly 150px for the widest badge ("SakuraOS") beside a rating.
     function cellWidth(avail, cols, gap) {
-        return Math.max(180, Math.floor((avail - (cols - 1) * gap) / cols))
+        var MIN = 260
+        var n = Math.max(1, Math.min(cols, Math.floor((avail + gap) / (MIN + gap))))
+        return Math.floor((avail - (n - 1) * gap) / n)
     }
 
     // Where a package comes from is the single most consequential fact about
@@ -447,11 +462,19 @@ QQC2.ApplicationWindow {
                             font.pixelSize: 10; font.weight: Font.DemiBold
                         }
                     }
-                    // Ratings sit against the right edge so that they line up
-                    // down the grid instead of drifting with the badge width.
-                    Item { Layout.fillWidth: true }
+                    // Right-aligned by filling the gap itself rather than by
+                    // being pushed there with a spacer. A spacer collapses to
+                    // nothing and then the label's own implicit width forces
+                    // the row wider than the card; filling the width lets the
+                    // label give ground instead, so a card too narrow for a
+                    // rating loses the rating rather than clipping it into the
+                    // card beside it.
                     QQC2.Label {
                         visible: !!appData.rating
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        horizontalAlignment: Text.AlignRight
+                        elide: Text.ElideRight
                         text: root.stars(appData.rating) + "  " + root.score(appData.rating)
                         color: root.accent; font.pixelSize: 11
                     }
