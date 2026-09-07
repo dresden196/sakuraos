@@ -195,6 +195,8 @@ private:
     int m_percent = 0;
     qint64 m_bytes = 0;
     qint64 m_total = 0;
+    int m_count = 0;
+    int m_countTotal = 0;
     bool m_searching = false, m_loadingApp = false, m_busy = false;
     QString m_busyId;
     bool m_reviewBusy = false;

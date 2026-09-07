@@ -190,6 +190,7 @@ void Backend::applyUpdates(const QString &id, const QString &source)
     m_errorDetail.clear();
     m_percent = 0;
     m_bytes = m_total = 0;
+    m_count = m_countTotal = 0;
     m_stage = QStringLiteral("resolving");
     Q_EMIT progressChanged();
 
@@ -231,8 +232,14 @@ void Backend::applyUpdates(const QString &id, const QString &source)
                         o[QStringLiteral("bytes")].toDouble());
                     m_total = static_cast<qint64>(
                         o[QStringLiteral("total")].toDouble());
-                } else if (stage != QLatin1String("downloading")) {
+                }
+                if (o.contains(QStringLiteral("count_total"))) {
+                    m_count = o[QStringLiteral("count")].toInt();
+                    m_countTotal = o[QStringLiteral("count_total")].toInt();
+                }
+                if (stage != QLatin1String("downloading")) {
                     m_bytes = m_total = 0;
+                    m_count = m_countTotal = 0;
                 }
             }
             Q_EMIT progressChanged();
@@ -498,8 +505,14 @@ void Backend::install(const QString &id, const QString &source)
                         o[QStringLiteral("bytes")].toDouble());
                     m_total = static_cast<qint64>(
                         o[QStringLiteral("total")].toDouble());
-                } else if (stage != QLatin1String("downloading")) {
+                }
+                if (o.contains(QStringLiteral("count_total"))) {
+                    m_count = o[QStringLiteral("count")].toInt();
+                    m_countTotal = o[QStringLiteral("count_total")].toInt();
+                }
+                if (stage != QLatin1String("downloading")) {
                     m_bytes = m_total = 0;
+                    m_count = m_countTotal = 0;
                 }
                 const QString d = o[QStringLiteral("detail")].toString();
                 if (!d.isEmpty()) {
@@ -711,17 +724,35 @@ void Backend::openPermissions(const QString &id)
 
 QString Backend::downloadProgress() const
 {
-    if (m_total <= 0 || m_stage != QLatin1String("downloading")) {
+    if (m_stage != QLatin1String("downloading")) {
         return QString();
     }
     // Decimal MB, matching what the package manager and every download
     // dialogue the user has ever seen report.
     const double mb = 1000.0 * 1000.0;
-    // One "MB", not two. This sits inside the button that is also the
-    // progress bar, and the button was asked to get smaller, not wider.
-    return tr("%1 of %2 MB")
-        .arg(m_bytes / mb, 0, 'f', 1)
-        .arg(m_total / mb, 0, 'f', 1);
+
+    // A real byte stream: the engine is reading a single file and counting
+    // what it has. Only the AppImage path can say this.
+    if (m_bytes > 0 && m_total > 0) {
+        // One "MB", not two. This sits inside the button that is also the
+        // progress bar, and the button was asked to get smaller, not wider.
+        return tr("%1 of %2 MB")
+            .arg(m_bytes / mb, 0, 'f', 1)
+            .arg(m_total / mb, 0, 'f', 1);
+    }
+
+    // Packages, which is what pacman actually reports when its output is a
+    // pipe: a total size up front and one line per package, no percentage.
+    // Saying "3 of 14" is true; converting that into megabytes would not be.
+    if (m_countTotal > 0) {
+        if (m_total > 0) {
+            return tr("%1 of %2  ·  %3 MB")
+                .arg(m_count).arg(m_countTotal)
+                .arg(m_total / mb, 0, 'f', 1);
+        }
+        return tr("%1 of %2").arg(m_count).arg(m_countTotal);
+    }
+    return QString();
 }
 
 QString Backend::userName() const
