@@ -17,6 +17,42 @@ TIMEOUT="${SAKURA_BOOT_TIMEOUT:-3}"
 [ -d "$ESP/$EFI_DIR" ] || { echo "no $ESP/$EFI_DIR -- is the ESP mounted?" >&2; exit 1; }
 [ -f "$ESP/$EFI_DIR/sakura.efi" ] || { echo "no sakura.efi in $ESP/$EFI_DIR" >&2; exit 1; }
 
+# The boot menu should look like the system it boots.
+#
+# Everything here is optional to Limine: if the wallpaper cannot be staged the
+# menu still comes up in Sakura's colours, and if the colours were somehow
+# rejected the menu still comes up. Nothing in this block can leave a machine
+# unbootable, which is the only reason it is safe to put decoration on an ESP.
+# A darkened, slightly blurred copy of the desktop wallpaper, not the wallpaper
+# itself. The photograph is busy enough that white help text over it is close to
+# unreadable, and Limine has no way to dim a background: the dimming has to be
+# in the file. Falls back to the desktop image if the boot variant is missing,
+# which still beats a black screen.
+WALLPAPER_SRC="${SAKURA_BOOT_WALLPAPER:-/usr/share/wallpapers/Sakura/contents/boot.jpg}"
+[ -r "$WALLPAPER_SRC" ] \
+    || WALLPAPER_SRC=/usr/share/wallpapers/Sakura/contents/images_dark/1920x1080.jpg
+WALLPAPER_ESP="$EFI_DIR/wallpaper.jpg"
+wallpaper_ref=""
+
+if [ -r "$WALLPAPER_SRC" ]; then
+    if ! cmp -s "$WALLPAPER_SRC" "$ESP/$WALLPAPER_ESP" 2>/dev/null; then
+        cp -f "$WALLPAPER_SRC" "$ESP/$WALLPAPER_ESP" 2>/dev/null || true
+    fi
+fi
+if [ -f "$ESP/$WALLPAPER_ESP" ]; then
+    wallpaper_ref="boot():/$WALLPAPER_ESP"
+    # Hashed, because under Secure Boot Limine ignores an unhashed path. It
+    # skips wallpapers silently rather than panicking, so the failure mode is a
+    # plain background rather than a machine that will not start -- but a plain
+    # background on every Secure Boot machine is most of them, so it is worth
+    # the hash. Computed from the copy on the ESP, after copying, so it cannot
+    # describe a different file than the one Limine will read.
+    if command -v b2sum >/dev/null 2>&1; then
+        wallpaper_hash=$(b2sum "$ESP/$WALLPAPER_ESP" 2>/dev/null | awk '{print $1}') || wallpaper_hash=""
+        [ -n "$wallpaper_hash" ] && wallpaper_ref="$wallpaper_ref#$wallpaper_hash"
+    fi
+fi
+
 tmp=$(mktemp "$CONF.XXXXXX")
 trap 'rm -f "$tmp"' EXIT
 
@@ -26,6 +62,30 @@ trap 'rm -f "$tmp"' EXIT
     echo
     echo "timeout: $TIMEOUT"
     echo "default_entry: 1"
+    echo
+
+    # Sakura's palette, so the first screen of the machine is recognisably the
+    # same system as the last one. Colours are the theme's own: the accent that
+    # the desktop, the installer and the applications all use, over the dark
+    # scheme's window background.
+    if [ -n "$wallpaper_ref" ]; then
+        echo "wallpaper: $wallpaper_ref"
+        echo "wallpaper_style: stretched"
+        echo "backdrop: 241f26"
+    fi
+    echo "interface_branding: SakuraOS"
+    echo "interface_branding_colour: ffb7c5"
+    echo "interface_help_colour: c9bfc6"
+    # TTRRGGBB. Semi-transparent so the blossom behind it still reads, and
+    # opaque enough that the entries stay legible over the bright parts of it.
+    echo "term_background: cc241f26"
+    echo "term_foreground: f0e6ea"
+    echo "term_background_bright: 3a323c"
+    echo "term_foreground_bright: fdf6f8"
+    echo "term_palette: 241f26;e26a8a;8fd3a4;e8c07d;7aa2d6;ffb7c5;8fd0d3;c9bfc6"
+    echo "term_palette_bright: 4a4048;ff8fa8;a8e6c0;f5d79a;9dbdea;ffd0da;aee4e6;fdf6f8"
+    echo "term_margin: 64"
+    echo "term_margin_gradient: 8"
     echo
     echo "/SakuraOS"
     echo "    protocol: efi"

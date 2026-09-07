@@ -9,6 +9,17 @@ license=('LicenseRef-Unsplash')
 source=()
 sha256sums=()
 
+# contents/boot.jpg is the limine boot menu background: the same photograph as
+# the dark desktop wallpaper, dimmed and slightly blurred so that white menu
+# text stays readable over it. Limine cannot dim a background itself, so the
+# dimming has to live in the file. Regenerate with:
+#
+#   magick contents/images_dark/1920x1080.jpg -blur 0x2 -fill black \
+#          -colorize 52% -quality 90 contents/boot.jpg
+#
+# Blending toward black rather than lowering brightness: reducing brightness
+# crushed the tonal range and the photograph came back as harsh saturated reds.
+
 package() {
     install -d "$pkgdir/usr/share/wallpapers"
     cp -r "$startdir/Sakura" "$pkgdir/usr/share/wallpapers/Sakura"
