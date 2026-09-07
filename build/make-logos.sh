@@ -51,6 +51,26 @@ for theme in SakuraDark SakuraLight; do
     done
 done
 
+echo ">> application icons"
+# The three application icons are their own drawings, not the mark, but they
+# have the same problem the mark had: a PNG at each of six sizes in each of two
+# themes is twelve copies to keep in step by hand. Each scalable SVG is the
+# source and every PNG beside it is output.
+#
+# This also fails loudly. Hand-rendering left an invalid SVG on disk once with
+# rsvg-convert erroring past it, and the stale PNGs stayed exactly where they
+# were, so the icon "did not change" with no indication why.
+for theme in SakuraDark SakuraLight; do
+    base="$REPO_ROOT/packages/sakura-theme/icons/$theme/apps"
+    for svg in "$base"/scalable/*.svg; do
+        name="$(basename "$svg" .svg)"
+        for size in 16 22 24 32 48 64; do
+            mkdir -p "$base/$size"
+            rsvg-convert -w "$size" -h "$size" -o "$base/$size/$name.png" "$svg"
+        done
+    done
+done
+
 echo ">> website"
 # Rewritten in place, between the markers, so the site cannot go back to
 # carrying its own copy of the drawing.
