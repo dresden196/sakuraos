@@ -147,7 +147,7 @@ QQC2.ApplicationWindow {
                     // The mark itself rather than the "✿" florette: the same
                     // drawing the site, the installer and the boot screen use.
                     Image {
-                        source: "qrc:/assets/sakura-mark.svg"
+                        source: "qrc:/assets/sakura-mark.png"
                         sourceSize: Qt.size(48, 48)
                         width: 24; height: 24
                         fillMode: Image.PreserveAspectFit

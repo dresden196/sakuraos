@@ -26,8 +26,16 @@ render() {
 }
 
 echo ">> application marks"
-# These read an SVG out of their own qrc, so they get the drawing rather than a
-# rendering of it.
+# Rendered to PNG with rsvg, not handed over as SVG.
+#
+# Qt's SVG renderer is not the one the rest of the project uses. Given this
+# drawing it produces noticeably fatter petals that nearly meet at the centre,
+# where rsvg keeps them narrow and separated -- close enough to pass a glance
+# at 26px and clearly a different flower at 150px, which is the size the
+# installer shows it at. The site (a browser) and the boot splash (rsvg) agreed
+# with each other and the three Qt applications did not.
+#
+# 512 is four times the largest on-screen use, so it stays sharp on hidpi.
 #
 # The store and the update centre used to draw "✿" (U+273F) in a coloured
 # circle instead. That is a font glyph, not the mark: a different flower with a
@@ -35,9 +43,10 @@ echo ">> application marks"
 # Three marks were in use at once -- the site and installer had this drawing,
 # those two had the florette, and the launcher icons are their own thing.
 for app in sakura-installer sakura-store-ui sakura-update-center; do
-    dest="$REPO_ROOT/packages/$app/app/src/assets/sakura-mark.svg"
+    dest="$REPO_ROOT/packages/$app/app/src/assets/sakura-mark.png"
     mkdir -p "$(dirname "$dest")"
-    sed 's/__ROT__/0/' "$SRC" > "$dest"
+    render 0 512 "$dest"
+    rm -f "$REPO_ROOT/packages/$app/app/src/assets/sakura-mark.svg"
 done
 
 echo ">> boot splash and throbber"

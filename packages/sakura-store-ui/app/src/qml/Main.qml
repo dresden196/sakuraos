@@ -534,7 +534,7 @@ QQC2.ApplicationWindow {
                     // of the blossom, and "✿" is a different flower with a
                     // different petal count that changes shape per font.
                     Image {
-                        source: "qrc:/assets/sakura-mark.svg"
+                        source: "qrc:/assets/sakura-mark.png"
                         sourceSize: Qt.size(52, 52)
                         width: 26; height: 26
                         fillMode: Image.PreserveAspectFit
