@@ -171,6 +171,10 @@ if port_taken "$SSH_PORT"; then
     fi
 fi
 
+# SAKURA_VM_RAM / SAKURA_VM_CPUS exist because this laptop also runs the
+# developer's browsers and a container stack, and a 6G guest alongside a
+# package build is enough to get the build killed for memory.
+
 # Capture the guest's serial console to out/console-$VM.log. Without it the
 # only record of a boot is qemu's own stderr, which says nothing about what
 # the guest did: establishing that a machine the canary called broken in fact
@@ -186,8 +190,8 @@ exec qemu-system-x86_64 \
     -enable-kvm \
     -machine q35,smm=on \
     -cpu "${SAKURA_VM_CPU:-host}" \
-    -smp 8 \
-    -m 6G \
+    -smp "${SAKURA_VM_CPUS:-8}" \
+    -m "${SAKURA_VM_RAM:-6G}" \
     -drive if=pflash,format=raw,unit=0,readonly=on,file="$CODE" \
     -drive if=pflash,format=raw,unit=1,file="$NVRAM" \
     -drive file="$DISK",if=virtio,format=qcow2 \
