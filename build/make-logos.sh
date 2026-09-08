@@ -58,6 +58,35 @@ for i in $(seq 0 35); do
     render "$(( i * 10 ))" 160 "$(printf '%s/throbber-%04d.png' "$PLY" "$i")"
 done
 
+echo ">> plymouth dialog images"
+# plymouth's two-step plugin loads these unconditionally, not only when it has
+# a passphrase to ask for. A theme without them fails at show_splash with
+# ENOENT and plymouth falls back to its text splash -- which is exactly what
+# happened here: the blossom never appeared and the boot scrolled systemd
+# messages instead, with everything else about the theme correct.
+#
+# Every stock two-step theme ships them. Sizes follow glow's, which is the
+# reference this was diagnosed against.
+ply_img() {
+    local dest="$1" w="$2" h="$3" body="$4"
+    printf '%s\n' \
+        "<svg xmlns='http://www.w3.org/2000/svg' width='$w' height='$h' viewBox='0 0 $w $h'>$body</svg>" \
+        > "$TMP/d.svg"
+    rsvg-convert -w "$w" -h "$h" -o "$dest" "$TMP/d.svg"
+}
+
+PLYD="$REPO_ROOT/packages/sakura-plymouth/theme"
+# The passphrase dialog: a panel, a field, a padlock and the dot that stands in
+# for each character typed.
+ply_img "$PLYD/box.png" 360 120 \
+    "<rect x='1' y='1' width='358' height='118' rx='14' fill='#241f26' fill-opacity='0.96' stroke='#ffb7c5' stroke-opacity='0.28'/>"
+ply_img "$PLYD/entry.png" 280 38 \
+    "<rect x='1' y='1' width='278' height='36' rx='9' fill='#1a1016' stroke='#ffb7c5' stroke-opacity='0.45'/>"
+ply_img "$PLYD/bullet.png" 12 12 \
+    "<circle cx='6' cy='6' r='4.5' fill='#ffb7c5'/>"
+ply_img "$PLYD/lock.png" 36 44 \
+    "<path d='M10 20V13a8 8 0 0 1 16 0v7' fill='none' stroke='#ffb7c5' stroke-width='3.4' stroke-linecap='round'/><rect x='5' y='19' width='26' height='21' rx='5' fill='#ffb7c5'/><circle cx='18' cy='28' r='3' fill='#241f26'/><rect x='16.6' y='29' width='2.8' height='7' rx='1.4' fill='#241f26'/>"
+
 echo ">> Plasma splash"
 for theme in dark light; do
     render 0 220 "$REPO_ROOT/packages/sakura-theme/look-and-feel/org.sakura.$theme.desktop/contents/splash/images/blossom.png"
