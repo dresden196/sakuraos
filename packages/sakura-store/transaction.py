@@ -339,20 +339,38 @@ def _pacman_progress(line: str, main_stage: str = INSTALLING):
         _dl_count = int(mc.group(1))
 
     if stripped.startswith(":: Retrieving") or "downloading" in stripped:
+        # Size only, and no count.
+        #
+        # Piped, pacman prints its per-package "downloading..." lines in a
+        # single burst once the whole retrieval has finished -- measured at
+        # thirty milliseconds apart, two seconds after retrieval began. They
+        # are a summary, not progress. Counting them put "0 of 14" on screen
+        # for the entire download and then "14 of 14" for about a second,
+        # which reads as a stall rather than as work.
+        #
+        # What is actually known here is the total size, which pacman
+        # announces up front. How far through it we are is not known, and an
+        # indeterminate ring is what not knowing looks like.
         out = {"stage": DOWNLOADING, "detail": stripped[:160]}
-        if _PACMAN_ONE.search(stripped):
-            _dl_seen += 1
-        if _dl_count:
-            out["count"] = min(_dl_seen, _dl_count)
-            out["count_total"] = _dl_count
-            out["percent"] = min(100, _dl_seen * 100 // _dl_count)
         if _dl_total:
             out["total"] = _dl_total
         return out
     if (stripped.startswith(":: Processing package changes")
             or stripped.startswith(("installing ", "upgrading ",
                                     "reinstalling ", "removing "))):
-        return {"stage": main_stage, "detail": stripped[:160]}
+        out = {"stage": main_stage, "detail": stripped[:160]}
+        # One line per package as it is written, which unlike the download
+        # lines really does arrive as the work happens. On a small
+        # transaction they land close together; on a large one this is the
+        # only honest progress in the whole operation.
+        if stripped.startswith(("installing ", "upgrading ",
+                                "reinstalling ", "removing ")):
+            _dl_seen += 1
+        if _dl_count and _dl_seen:
+            out["count"] = min(_dl_seen, _dl_count)
+            out["count_total"] = _dl_count
+            out["percent"] = min(100, _dl_seen * 100 // _dl_count)
+        return out
     if "transaction hooks" in stripped or stripped.startswith("("):
         return {"stage": CONFIGURING, "detail": stripped[:160]}
     return None
