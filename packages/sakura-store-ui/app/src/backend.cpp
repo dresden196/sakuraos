@@ -763,7 +763,15 @@ QString Backend::downloadProgress() const
     // transfer. Dropping the size the moment it says that would leave several
     // hundred megabytes of waiting with nothing on screen at all.
     if (m_total > 0) {
-        return tr("%1 MB").arg(m_total / mb, 0, 'f', 1);
+        // Pick the unit rather than always saying MB. A snap can be twenty
+        // kilobytes, and "0.0 MB" is a worse answer than no answer.
+        if (m_total >= 1000 * 1000 * 1000) {
+            return tr("%1 GB").arg(m_total / (mb * 1000), 0, 'f', 1);
+        }
+        if (m_total >= 1000 * 1000) {
+            return tr("%1 MB").arg(m_total / mb, 0, 'f', 1);
+        }
+        return tr("%1 kB").arg(m_total / 1000.0, 0, 'f', 1);
     }
     return QString();
 }

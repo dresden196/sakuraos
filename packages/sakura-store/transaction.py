@@ -223,9 +223,54 @@ def remove_flatpak(app_id: str, delete_data: bool = False) -> int:
     return stream(args + [app_id], REMOVING)
 
 
+# "  latest/stable:  3.0.20  2024-03-26 (3777) 337MB -" from `snap info`.
+# Case-insensitive: snap writes "337MB" for a big one and "20.5kB" for a
+# small one, and a uppercase-only match silently read the small ones as no
+# size at all.
+_SNAP_STABLE = re.compile(r"^\s*latest/stable:.*?([0-9.]+)([KMG])B", re.M | re.I)
+_SNAP_ANY = re.compile(r"^\s*\S+/\S+:.*?([0-9.]+)([KMG])B", re.M | re.I)
+
+
+def _snap_download_size(name: str) -> int:
+    """What snap says the stable channel weighs, in bytes.
+
+    snap is the third of three package tools that print nothing useful when
+    their output is a pipe. Measured on hello-world: three lines of "Waiting
+    for automatic snapd restart..." and then "installed". No percentage, no
+    size, nothing in between -- and unlike the others this path had no parser
+    at all, so a snap install showed the word "Downloading" and no more.
+
+    snap info lists a size per channel, so it is asked before starting.
+    """
+    try:
+        out = subprocess.run(["snap", "info", name],
+                             capture_output=True, text=True,
+                             timeout=30).stdout
+    except Exception:
+        return 0
+    m = _SNAP_STABLE.search(out) or _SNAP_ANY.search(out)
+    if not m:
+        return 0
+    return int(float(m.group(1)) * _SI[m.group(2).upper()])
+
+
+def _snap_progress(line: str):
+    """Snap's own noise, kept out of the detail line.
+
+    "Waiting for automatic snapd restart..." is printed once a second while
+    snapd updates itself, and it is not what the user asked about.
+    """
+    if "Waiting for automatic snapd restart" in line:
+        return None
+    return {"stage": DOWNLOADING, "detail": line[:160]}
+
+
 def install_snap(name: str) -> int:
     emit(RESOLVING, source="snap", app=name)
-    return stream(["snap", "install", name], DOWNLOADING)
+    total = _snap_download_size(name)
+    if total:
+        emit(DOWNLOADING, source="snap", app=name, total=total)
+    return stream(["snap", "install", name], DOWNLOADING, _snap_progress)
 
 
 def remove_snap(name: str) -> int:
