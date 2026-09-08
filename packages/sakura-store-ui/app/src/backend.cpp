@@ -552,6 +552,19 @@ void Backend::install(const QString &id, const QString &source)
             m_stage = QStringLiteral("failed");
         }
         m_busyId.clear();
+        // Say it is installed now, not when the lookup comes back.
+        //
+        // refreshApp re-runs the same app-page query, which takes several
+        // seconds. Until it returned, the page still held the data from
+        // before the install -- installed: false -- so the button came back
+        // reading "Install" for the whole of that wait, immediately after
+        // saying the install had finished. The transaction succeeded, so
+        // recording that is not a guess; the refresh then confirms it and
+        // fills in the version.
+        if (m_error.isEmpty() && !m_app.isEmpty()) {
+            m_app[QStringLiteral("installed")] = true;
+            Q_EMIT appChanged();
+        }
         Q_EMIT progressChanged();
         // Re-open the app, not the package. Installing GIMP from the
         // repositories passes "gimp", and asking the app page to load "gimp"
