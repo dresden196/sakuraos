@@ -266,18 +266,28 @@ def _snap_progress(line: str):
 
 
 def install_snap(name: str) -> int:
+    """Install a snap.
+
+    Through pkexec, for the same reason pacman is: snapd will not act for an
+    unprivileged caller. Without it every snap install in the store failed
+    with snap's own "error: access denied (try with sudo)" -- not a missing
+    progress bar, a source that could not install anything at all. flatpak is
+    the exception among the three; it carries its own polkit action and
+    elevates itself.
+    """
     emit(RESOLVING, source="snap", app=name)
     total = _snap_download_size(name)
     if total:
         emit(DOWNLOADING, source="snap", app=name, total=total)
-    return stream(["snap", "install", name], DOWNLOADING, _snap_progress)
+    return stream(["pkexec", "snap", "install", "--", name],
+                  DOWNLOADING, _snap_progress)
 
 
 def remove_snap(name: str) -> int:
     emit(REMOVING, source="snap", app=name, packages=[name])
     # snapd keeps a snapshot of the snap's data for 31 days by default, so
     # this is recoverable without us doing anything.
-    return stream(["snap", "remove", name], REMOVING)
+    return stream(["pkexec", "snap", "remove", "--", name], REMOVING)
 
 
 def install_appimage(url: str, name: str, sha256: str = "") -> int:
