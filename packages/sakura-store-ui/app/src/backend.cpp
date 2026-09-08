@@ -527,7 +527,7 @@ void Backend::install(const QString &id, const QString &source)
         }
     });
     connect(p, &QProcess::finished, this,
-            [this, p, id](int code, QProcess::ExitStatus status) {
+            [this, p, id, source](int code, QProcess::ExitStatus status) {
         // Anything the engine printed that was not a progress line. A crash
         // arrives as a traceback, which is not JSON, so nothing above sees it.
         const QString trailing = QString::fromUtf8(p->readAll()).trimmed();
@@ -559,10 +559,33 @@ void Backend::install(const QString &id, const QString &source)
         // before the install -- installed: false -- so the button came back
         // reading "Install" for the whole of that wait, immediately after
         // saying the install had finished. The transaction succeeded, so
-        // recording that is not a guess; the refresh then confirms it and
-        // fills in the version.
+        // recording that is not a guess; the refresh then confirms it.
+        //
+        // The source that was installed, not the first one on the page. The
+        // page's option list is the primary entry followed by also_from, and
+        // only the primary reads its flag from here. Marking the primary for
+        // an install that came from the repositories flagged the wrong
+        // source -- and since preferredIndex selects the first installed
+        // option, it also quietly moved the picker to Flatpak.
         if (m_error.isEmpty() && !m_app.isEmpty()) {
-            m_app[QStringLiteral("installed")] = true;
+            if (m_app.value(QStringLiteral("id")).toString() == id
+                    && m_app.value(QStringLiteral("source")).toString() == source) {
+                m_app[QStringLiteral("installed")] = true;
+            } else {
+                QVariantList alts =
+                    m_app.value(QStringLiteral("also_from")).toList();
+                for (int i = 0; i < alts.size(); ++i) {
+                    QVariantMap e = alts.at(i).toMap();
+                    if (e.value(QStringLiteral("id")).toString() == id
+                            && e.value(QStringLiteral("source")).toString()
+                                   == source) {
+                        e[QStringLiteral("installed")] = true;
+                        alts[i] = e;
+                        m_app[QStringLiteral("also_from")] = alts;
+                        break;
+                    }
+                }
+            }
             Q_EMIT appChanged();
         }
         Q_EMIT progressChanged();
