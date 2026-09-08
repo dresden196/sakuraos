@@ -961,21 +961,28 @@ fi
 #
 # vt.global_cursor_default=0 stops a cursor blinking on the otherwise blank
 # console; setterm -cursor on brings it back in a tty if anyone wants it.
-# console=tty0 is not decoration.
+# plymouth.ignore-serial-consoles, and deliberately not console=tty0.
 #
 # A UKI carries its own command line, and when that line has no console= at
-# all systemd-stub adds one for every serial or VirtIO console it can find.
-# Plymouth then sees a serial console and deliberately forces its text theme
-# -- "serial consoles detected, managing them with details forced", in its own
-# words -- so the splash never appears on any machine with a serial port.
-# Naming tty0 here stops the stub adding anything, which its own message
-# confirms: "command line already contains console=, not adding one".
+# all, systemd-stub adds one for every serial or VirtIO console it finds.
+# Plymouth then sees a serial console and forces its text theme by design --
+# "serial consoles detected, managing them with details forced", in its own
+# words -- so the splash never appeared on any machine with a serial port,
+# which includes every virtual machine somebody tries this in.
 #
-# Ubuntu does not need this because GRUB passes a plain command line; a UKI
-# is what makes it necessary.
+# Pinning console=tty0 also fixes it, by stopping the stub adding anything,
+# and was the first thing tried. It costs the serial console: no kernel or
+# systemd output on ttyS0 at all, which is how this project captures boot logs
+# from its own test machines, and how anybody debugs a machine that will not
+# come up. Telling plymouth to ignore serial consoles gets the splash without
+# giving that up -- verified both ways, splash on screen and the serial log
+# still being written.
+#
+# Ubuntu needs neither because GRUB passes a plain command line; booting a UKI
+# is what introduces this.
 echo "$CRYPT_ARG $ROOT_ARG rootflags=subvol=@ rw quiet splash" \
      "loglevel=3 systemd.show_status=auto rd.udev.log_level=3" \
-     "vt.global_cursor_default=0 console=tty0" \
+     "vt.global_cursor_default=0 plymouth.ignore-serial-consoles" \
     | tr -s ' ' > /mnt/etc/kernel/cmdline
 # Recovery never mounts a root filesystem: it mounts the btrfs top level,
 # swaps @, and reboots. So it gets no root= at all -- but it still needs the
