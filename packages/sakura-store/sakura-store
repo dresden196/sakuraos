@@ -26,6 +26,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+import concurrent.futures
 from functools import lru_cache
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
@@ -910,26 +911,39 @@ def find_elsewhere(app_id: str, name: str) -> list[dict]:
             matched_repo = True
             break
 
-    for src in SOURCES:
-        # Not every repository package has a reverse-DNS id -- Arch files
-        # Discord under "discord.desktop", which no normalisation can turn
-        # into com.discordapp.Discord -- so when the exact lookup misses, the
-        # repositories go through the same name heuristic as everything else.
-        if src.name == "flatpak" or (src.name == "repo" and matched_repo):
-            continue
-        if not src.available():
-            continue
+    # Not every repository package has a reverse-DNS id -- Arch files Discord
+    # under "discord.desktop", which no normalisation can turn into
+    # com.discordapp.Discord -- so when the exact lookup misses, the
+    # repositories go through the same name heuristic as everything else.
+    probes = [src for src in SOURCES
+              if src.name != "flatpak"
+              and not (src.name == "repo" and matched_repo)
+              and src.available()]
+
+    def probe(src):
         try:
             for hit in src.search(stem):
                 if hit.source_id.lower() in words or hit.name.lower() in words:
-                    found.append({"source": src.name, "id": hit.source_id,
-                                  "version": hit.version,
-                                  "installed": hit.installed,
-                                  "popularity": hit.popularity,
-                                  "exact": False})
-                    break
+                    return {"source": src.name, "id": hit.source_id,
+                            "version": hit.version,
+                            "installed": hit.installed,
+                            "popularity": hit.popularity,
+                            "exact": False}
         except Exception:
-            continue
+            return None
+        return None
+
+    # Concurrently, because each of these is a subprocess or a network round
+    # trip and none of them needs the others. Run one after another they came
+    # to 3.2 seconds, which was most of the several-second wait between
+    # clicking an application and seeing its page.
+    #
+    # ThreadPoolExecutor.map keeps the input order, so the sources are offered
+    # in the same order every time rather than in whichever finished first.
+    if probes:
+        with concurrent.futures.ThreadPoolExecutor(
+                max_workers=len(probes)) as ex:
+            found.extend(r for r in ex.map(probe, probes) if r)
     return found
 
 
@@ -1200,9 +1214,18 @@ def app_detail(app_id: str) -> dict:
 
     # The same lookup the search results use -- it was duplicated here with the
     # first-match bug, so the app page and the tile could disagree.
-    rating, count = rating_for(app_id)
-
-    installed_here = FlatpakSource().installed()
+    # The remaining lookups are independent of each other: what other sources
+    # offer, the ODRS rating, the ODRS reviews, and what flatpak already has.
+    # Serially they added up; together they cost whichever is slowest.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+        f_else = ex.submit(find_elsewhere, app_id, d.get("name") or "")
+        f_rating = ex.submit(rating_for, app_id)
+        f_reviews = ex.submit(odrs_reviews, app_id)
+        f_have = ex.submit(FlatpakSource().installed)
+        elsewhere = f_else.result()
+        rating, count = f_rating.result()
+        reviews = f_reviews.result()
+        installed_here = f_have.result()
 
     releases = d.get("releases") or []
     latest = releases[0] if releases else {}
@@ -1216,7 +1239,7 @@ def app_detail(app_id: str) -> dict:
         "version": latest.get("version") or "",
         "released": latest.get("timestamp") or 0,
         "source": (d.get("bundle") or {}).get("type") or "flatpak",
-        "also_from": find_elsewhere(app_id, d.get("name") or ""),
+        "also_from": elsewhere,
         "name": d.get("name") or app_id,
         "summary": d.get("summary") or "",
         # Flathub returns HTML; the interface renders it rather than showing
@@ -1230,7 +1253,7 @@ def app_detail(app_id: str) -> dict:
         "urls": d.get("urls") or {},
         "rating": rating,
         "rating_count": count,
-        "reviews": odrs_reviews(app_id),
+        "reviews": reviews,
     }
 
 
