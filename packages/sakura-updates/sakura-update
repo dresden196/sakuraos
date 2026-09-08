@@ -36,9 +36,42 @@ ADVISORY_MAX_AGE_DAYS = 7
 # A package whose upgrade means the running system no longer matches what is
 # on disk. Nothing here can take effect until a restart, so saying so is the
 # difference between a system that is updated and one that only looks it.
-NEEDS_RESTART = {"linux", "linux-lts", "linux-zen", "linux-hardened",
-                 "systemd", "glibc", "dbus", "dbus-broker",
-                 "nvidia-open", "nvidia-utils", "mesa"}
+NEEDS_RESTART = {"systemd", "glibc", "dbus", "dbus-broker", "mesa"}
+
+
+def needs_restart(name: str) -> bool:
+    """Whether upgrading this package leaves the running system behind.
+
+    Kernels are recognised by what they contain rather than what they are
+    called. This was a list of names -- linux, linux-lts, linux-zen,
+    linux-hardened -- and SakuraOS installs linux-cachyos on any CPU with
+    x86-64-v3 and the stock linux kernel on anything older. So the machines
+    that got the tuned kernel were exactly the machines never told to restart
+    after a kernel update, and which half of the fleet was warned depended on
+    its processor.
+
+    A kernel owns a vmlinuz. Headers, firmware and documentation do not, which
+    is the distinction that matters and the one a list of names kept missing.
+
+    The same applies to the graphics driver: the set named nvidia-open and
+    nvidia-utils, while what SakuraOS actually ships is nvidia-580xx-utils.
+    """
+    if name in NEEDS_RESTART or name.startswith("nvidia"):
+        return True
+    if not name.startswith("linux") or name.endswith(("-headers", "-docs")):
+        return False
+    if name.startswith("linux-firmware"):
+        return False
+    files = run(["pacman", "-Qlq", name])
+    if not files:
+        # Nothing came back: the package is not installed, or the query
+        # failed. Content cannot answer, and the safe direction for this
+        # particular question is yes. An unnecessary restart prompt is an
+        # annoyance; a missing one leaves somebody running last week's kernel
+        # believing they are up to date, which is the whole failure this
+        # function exists to prevent.
+        return True
+    return "/vmlinuz" in files
 
 # Arch announces breaking changes in prose, not in package metadata. These are
 # the phrases that have historically meant "do something by hand first".
@@ -121,7 +154,7 @@ def describe(ups: list[Update]) -> None:
         tree = run(["pactree", "-r", "-d1", "-u", u.name]).splitlines()[1:]
         named = [t.strip() for t in tree if t.strip() and t.strip() != u.name]
         u.needed_by = [n for n in named if not n.startswith("lib")][:4] or named[:3]
-        u.restart = u.name in NEEDS_RESTART
+        u.restart = needs_restart(u.name)
 
 
 def news_items() -> list[str]:
