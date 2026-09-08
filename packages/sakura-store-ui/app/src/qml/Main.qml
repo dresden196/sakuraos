@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import QtQuick.Effects
+import QtQuick.Shapes
 import QtQuick.Dialogs
 
 QQC2.ApplicationWindow {
@@ -380,6 +381,70 @@ QQC2.ApplicationWindow {
                                       duration: 1000; easing.type: Easing.InOutQuad }
                 }
             }
+        }
+    }
+
+    // A circular progress indicator, for the places where the shape of the
+    // thing matters more than the number on it.
+    //
+    // Determinate below is an arc; indeterminate is a short arc that spins,
+    // because an arc frozen at nothing says the same as no arc at all.
+    component Ring : Item {
+        id: ringRoot
+        property real progress: 0        // 0-100; at or below zero, spins
+        property int diameter: 40
+        property real thickness: 4
+        implicitWidth: diameter
+        implicitHeight: diameter
+
+        readonly property real _r: (diameter - thickness) / 2
+        readonly property bool spinning: progress <= 0
+
+        Shape {
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                strokeColor: root.card
+                strokeWidth: ringRoot.thickness
+                fillColor: "transparent"
+                PathAngleArc {
+                    centerX: ringRoot.diameter / 2
+                    centerY: ringRoot.diameter / 2
+                    radiusX: ringRoot._r; radiusY: ringRoot._r
+                    startAngle: 0; sweepAngle: 360
+                }
+            }
+        }
+
+        Shape {
+            id: arc
+            anchors.fill: parent
+            preferredRendererType: Shape.CurveRenderer
+            transformOrigin: Item.Center
+            ShapePath {
+                strokeColor: root.accent
+                strokeWidth: ringRoot.thickness
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                PathAngleArc {
+                    centerX: ringRoot.diameter / 2
+                    centerY: ringRoot.diameter / 2
+                    radiusX: ringRoot._r; radiusY: ringRoot._r
+                    // Twelve o'clock, clockwise, the way a clock and every
+                    // other progress ring anyone has seen goes.
+                    startAngle: -90
+                    sweepAngle: ringRoot.spinning
+                        ? 90
+                        : 360 * Math.max(0, Math.min(100, ringRoot.progress)) / 100
+                    Behavior on sweepAngle { NumberAnimation { duration: 240 } }
+                }
+            }
+            RotationAnimation on rotation {
+                running: ringRoot.spinning
+                loops: Animation.Infinite
+                from: 0; to: 360; duration: 1100
+            }
+            onVisibleChanged: if (!ringRoot.spinning) rotation = 0
         }
     }
 
@@ -1652,15 +1717,60 @@ QQC2.ApplicationWindow {
                     }
 
                     RowLayout {
+                        id: installRow
                         spacing: 12
                         Layout.topMargin: 6
+
+                        readonly property var pick: appRoot.options[appRoot.chosen] || null
+                        // Only this app's own row shows progress. An install
+                        // started here and then navigated away from must not
+                        // light up every other Install on screen.
+                        readonly property bool mine:
+                            backend.busy && !!pick && backend.busyId === pick.id
+
+                        // While work is running the button gives way to a
+                        // status line and a ring.
+                        //
+                        // The button used to become the bar, which meant it
+                        // changed width as its own label grew -- "Install" is
+                        // eight characters and "Downloading 3 of 14 · 8.5 MB"
+                        // is twenty-eight, so the primary control moved every
+                        // time the text did. The ring is a fixed size and the
+                        // text sits beside it, so nothing shifts.
+                        RowLayout {
+                            visible: installRow.mine
+                            spacing: 14
+                            Layout.minimumWidth: 196
+                            QQC2.Label {
+                                // Deliberately not fillWidth. A nested layout
+                                // inherits fillWidth from its children, so a
+                                // filling label made the whole status row fill
+                                // too, and the ring ended up against the far
+                                // edge of the page instead of beside the words
+                                // it belongs to.
+                                Layout.maximumWidth: 430
+                                text: backend.downloadProgress !== ""
+                                    ? root.stageLabel(backend.stage)
+                                      + "  ·  " + backend.downloadProgress
+                                    : root.stageLabel(backend.stage)
+                                color: root.text
+                                font.pixelSize: 15
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            Ring {
+                                Layout.alignment: Qt.AlignVCenter
+                                diameter: 34
+                                thickness: 3.5
+                                progress: backend.percent
+                            }
+                        }
+
                         Action {
-                            readonly property var pick: appRoot.options[appRoot.chosen] || null
-                            // Only this app's own button turns into a bar. An
-                            // install started here and then navigated away from
-                            // must not light up every other Install on screen.
-                            readonly property bool mine:
-                                backend.busy && !!pick && backend.busyId === pick.id
+                            visible: !installRow.mine
+                            readonly property var pick: installRow.pick
+                            readonly property bool mine: false
                             // An AUR package is not installed by this button.
                             // It opens the build script first, and the install
                             // happens on the far side of somebody having read
@@ -1669,18 +1779,7 @@ QQC2.ApplicationWindow {
                                 !!(pick && pick.source === "aur")
                             readonly property bool blocked: isAur && !root.aurEnabled
                             Layout.minimumWidth: 196
-                            showsProgress: mine
-                            progress: backend.percent
-                            // While fetching, the amount rather than the
-                            // word: "Downloading" is true for the whole of a
-                            // long download and tells you nothing about how
-                            // much of it is left.
-                            text: mine
-                                 ? (backend.downloadProgress !== ""
-                                    ? root.stageLabel(backend.stage)
-                                      + "  " + backend.downloadProgress
-                                    : root.stageLabel(backend.stage))
-                                 : blocked ? "AUR is switched off"
+                            text: blocked ? "AUR is switched off"
                                  : isAur ? "Review and install"
                                  : (pick && pick.installed ? "Reinstall" : "Install")
                             enabled: !backend.busy && !!pick && !blocked

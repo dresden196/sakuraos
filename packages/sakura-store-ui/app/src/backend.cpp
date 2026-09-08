@@ -237,7 +237,9 @@ void Backend::applyUpdates(const QString &id, const QString &source)
                     m_count = o[QStringLiteral("count")].toInt();
                     m_countTotal = o[QStringLiteral("count_total")].toInt();
                 }
-                if (stage != QLatin1String("downloading")) {
+                if (stage != QLatin1String("downloading")
+                        && stage != QLatin1String("installing")
+                        && stage != QLatin1String("removing")) {
                     m_bytes = m_total = 0;
                     m_count = m_countTotal = 0;
                 }
@@ -510,7 +512,9 @@ void Backend::install(const QString &id, const QString &source)
                     m_count = o[QStringLiteral("count")].toInt();
                     m_countTotal = o[QStringLiteral("count_total")].toInt();
                 }
-                if (stage != QLatin1String("downloading")) {
+                if (stage != QLatin1String("downloading")
+                        && stage != QLatin1String("installing")
+                        && stage != QLatin1String("removing")) {
                     m_bytes = m_total = 0;
                     m_count = m_countTotal = 0;
                 }
@@ -724,7 +728,10 @@ void Backend::openPermissions(const QString &id)
 
 QString Backend::downloadProgress() const
 {
-    if (m_stage != QLatin1String("downloading")) {
+    const bool downloading = m_stage == QLatin1String("downloading");
+    const bool installing = m_stage == QLatin1String("installing")
+                         || m_stage == QLatin1String("removing");
+    if (!downloading && !installing) {
         return QString();
     }
     // Decimal MB, matching what the package manager and every download
@@ -741,16 +748,17 @@ QString Backend::downloadProgress() const
             .arg(m_total / mb, 0, 'f', 1);
     }
 
-    // Packages, which is what pacman actually reports when its output is a
-    // pipe: a total size up front and one line per package, no percentage.
-    // Saying "3 of 14" is true; converting that into megabytes would not be.
-    if (m_countTotal > 0) {
-        if (m_total > 0) {
-            return tr("%1 of %2  ·  %3 MB")
-                .arg(m_count).arg(m_countTotal)
-                .arg(m_total / mb, 0, 'f', 1);
-        }
+    // Writing packages: one line per package as it lands, so the count is
+    // real progress rather than a summary printed at the end.
+    if (installing && m_countTotal > 0 && m_count > 0) {
         return tr("%1 of %2").arg(m_count).arg(m_countTotal);
+    }
+
+    // Fetching from a repository: the size is known and the position in it
+    // is not, so the size is all that gets said. The ring spins rather than
+    // filling, which is what not knowing looks like.
+    if (downloading && m_total > 0) {
+        return tr("%1 MB").arg(m_total / mb, 0, 'f', 1);
     }
     return QString();
 }
