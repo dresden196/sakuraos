@@ -950,7 +950,20 @@ else
     RECOVERY_ROOT="sakura.root=UUID=$ROOT_UUID"
 fi
 
+# quiet and splash are not enough on their own.
+#
+# With only those two the boot still scrolled systemd's [ OK ] lines: the
+# kernel log level is untouched, udev in the initramfs keeps reporting, and
+# systemd inside the initramfs does not reliably inherit the "auto" status
+# that quiet is supposed to imply. The Arch wiki's silent-boot set is the
+# combination that actually works, and it was measured here -- nineteen
+# consecutive frames of clean screen where there had been scrolling text.
+#
+# vt.global_cursor_default=0 stops a cursor blinking on the otherwise blank
+# console; setterm -cursor on brings it back in a tty if anyone wants it.
 echo "$CRYPT_ARG $ROOT_ARG rootflags=subvol=@ rw quiet splash" \
+     "loglevel=3 systemd.show_status=auto rd.udev.log_level=3" \
+     "vt.global_cursor_default=0" \
     | tr -s ' ' > /mnt/etc/kernel/cmdline
 # Recovery never mounts a root filesystem: it mounts the btrfs top level,
 # swaps @, and reboots. So it gets no root= at all -- but it still needs the
