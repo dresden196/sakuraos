@@ -754,10 +754,15 @@ QString Backend::downloadProgress() const
         return tr("%1 of %2").arg(m_count).arg(m_countTotal);
     }
 
-    // Fetching from a repository: the size is known and the position in it
-    // is not, so the size is all that gets said. The ring spins rather than
-    // filling, which is what not knowing looks like.
-    if (downloading && m_total > 0) {
+    // A known size with no position in it. The size is all that gets said,
+    // and the ring spins rather than filling, which is what not knowing looks
+    // like.
+    //
+    // Not restricted to the downloading stage, because flatpak reports one
+    // line -- "Installing app/..." -- and then works in silence for the whole
+    // transfer. Dropping the size the moment it says that would leave several
+    // hundred megabytes of waiting with nothing on screen at all.
+    if (m_total > 0) {
         return tr("%1 MB").arg(m_total / mb, 0, 'f', 1);
     }
     return QString();

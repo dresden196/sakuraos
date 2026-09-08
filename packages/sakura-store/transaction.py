@@ -161,6 +161,34 @@ def stream(args: list[str], stage: str, parse=None) -> int:
 # per-source install
 # --------------------------------------------------------------------------
 _FLATPAK_PCT = re.compile(r"(\d{1,3})%")
+# "Download Size: 217.4 MB" from `flatpak remote-info`. Decimal units, which
+# is what flatpak prints and what the store displays.
+_FLATPAK_SIZE = re.compile(r"Download Size:\s*([0-9.]+)\s*([KMG])B", re.I)
+_SI = {"K": 1000, "M": 1000 ** 2, "G": 1000 ** 3}
+
+
+def _flatpak_download_size(app_id: str) -> int:
+    """What flatpak says it is about to fetch, in bytes.
+
+    Piped, flatpak prints no progress whatsoever: one line reading
+    "Installing app/...", and then silence for however long a few hundred
+    megabytes takes. Measured on Brave, that is one line in sixty seconds.
+    So the size is asked for up front instead, the same way pacman is read
+    for its Total Download Size, and at least the scale of the wait is on
+    screen while it happens.
+    """
+    try:
+        out = subprocess.run(
+            ["flatpak", "remote-info", "flathub", app_id],
+            capture_output=True, text=True, timeout=30).stdout
+    except Exception:
+        # Never let asking about the size stop the install. Not knowing the
+        # size is a worse screen, not a failure.
+        return 0
+    m = _FLATPAK_SIZE.search(out)
+    if not m:
+        return 0
+    return int(float(m.group(1)) * _SI[m.group(2).upper()])
 
 
 def _flatpak_progress(line: str):
@@ -176,6 +204,9 @@ def _flatpak_progress(line: str):
 
 def install_flatpak(app_id: str) -> int:
     emit(RESOLVING, source="flatpak", app=app_id)
+    total = _flatpak_download_size(app_id)
+    if total:
+        emit(DOWNLOADING, source="flatpak", app=app_id, total=total)
     return stream(
         ["flatpak", "install", "--noninteractive", "--assumeyes",
          "flathub", app_id],
