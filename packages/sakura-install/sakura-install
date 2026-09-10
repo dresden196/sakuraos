@@ -414,16 +414,42 @@ KERNEL="linux"
 # keyring directory to have files in it. Both become true before the key is
 # trusted, so it waited and then failed anyway. Wait for the actual question
 # to have an actual answer instead of for something that correlates with it.
+#
+# Bounded twice over, because this loop runs before the disk is touched and a
+# hang here looks exactly like a hung installer. The sync inside it was
+# unbounded, which is fine online and is a hang offline for the same reason
+# the sync below is bounded: pacman works through every network mirror in the
+# list and one -Sy takes over twelve minutes with no route out. Forty-five of
+# those is not a wait. An offline install sat here writing nothing at all
+# until the harness killed it at thirty minutes.
+#
+# The wall-clock bound is the belt to that braces. Offline every iteration
+# spends its full timeout failing to reach the network mirrors even though
+# the file:// repository on the media synced in the first moment, so counting
+# iterations no longer tells us how long we have been here.
 if [[ -d /run/archiso ]]; then
     _said=0
+    _keyring_deadline=$(( SECONDS + 180 ))
     for _i in $(seq 1 45); do
-        pacman -Sy >/dev/null 2>&1 || true
+        if [[ "$HAVE_NET" == "yes" ]]; then
+            pacman -Sy >/dev/null 2>&1 || true
+        else
+            timeout 20 pacman -Sy >/dev/null 2>&1 || true
+            # timeout kills pacman mid-transaction and it leaves its lock
+            # behind. Without this every later iteration fails to take the
+            # lock, so the loop cannot succeed however long it waits.
+            rm -f /var/lib/pacman/db.lck
+        fi
         if pacman -Si linux-cachyos >/dev/null 2>&1; then
             break
         fi
         if [[ $_said -eq 0 ]]; then
             info "waiting for the live keyring before choosing a kernel"
             _said=1
+        fi
+        if (( SECONDS >= _keyring_deadline )); then
+            info "the live keyring is still not ready; choosing a kernel anyway"
+            break
         fi
         sleep 2
     done
@@ -624,6 +650,16 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # The live user's own service goes with the live user.
     rm -f /mnt/etc/systemd/system/sakura-live-user.service
     rm -f /mnt/etc/systemd/system/*.target.wants/sakura-live-user.service
+
+    # archiso enables systemd-time-wait-sync so the live image has a trustworthy
+    # clock before it checks any signature. A normal Arch install leaves it
+    # disabled, and the copy brings the enablement across with everything else,
+    # so every installed machine ended up with a unit upstream would not have
+    # given it. The unit waits with TimeoutStartSec=infinity, so on a machine
+    # with no network it never finishes and nothing ordered after
+    # time-sync.target ever runs. That is a strange thing to inherit from the
+    # installer media, and the machine has an RTC.
+    rm -f /mnt/etc/systemd/system/sysinit.target.wants/systemd-time-wait-sync.service
 
     # Anything else archiso left in /etc/systemd/system that belongs to the
     # live image. Named units above are the ones known to cause damage; this
