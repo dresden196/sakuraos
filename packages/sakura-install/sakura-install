@@ -839,6 +839,23 @@ The disk would not boot, so the install has been stopped instead."
             /mnt/etc/pacman.conf 2>/dev/null || true
         grep -q 'sakura-core.conf' /mnt/etc/pacman.conf \
             || echo 'Include = /etc/pacman.d/sakura-core.conf' >> /mnt/etc/pacman.conf
+
+        # The cached database goes with the source it came from. Both sources
+        # serve a file called sakura-core.db and pacman tells them apart only
+        # by modification time, so after the swap it kept the database it had
+        # from the media and fetched the signature from the network. They are
+        # different builds whenever the image is newer than the published
+        # repository, and a mismatched pair fails as
+        #
+        #   error: sakura-core: signature from "..." is invalid
+        #
+        # which aborts the whole sync -- so every network repository looks
+        # empty and the graphics driver and browser are all "not available in
+        # any repository". Nothing is wrong with either signature; they are
+        # simply signatures of two different files. Dropping the cached pair
+        # costs one download and makes the next sync internally consistent.
+        rm -f /mnt/var/lib/pacman/sync/sakura-core.db \
+              /mnt/var/lib/pacman/sync/sakura-core.db.sig
     fi
 
     # Graphics and extras, now that the target can see the network repositories.

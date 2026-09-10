@@ -65,7 +65,10 @@ for arg in "$@"; do
     esac
 done
 
-ISO="$(ls -t "$REPO_ROOT"/out/*.iso 2>/dev/null | head -1 || true)"
+# Newest by default. SAKURA_ISO names one explicitly, which is what makes an
+# A/B against an earlier image possible -- otherwise "did my change cause this"
+# can only be answered by rebuilding the old one.
+ISO="${SAKURA_ISO:-$(ls -t "$REPO_ROOT"/out/*.iso 2>/dev/null | head -1 || true)}"
 if (( ! installed )); then
     [[ -n "$ISO" ]] || { echo "no ISO in out/ — run build/build-iso.sh first" >&2; exit 1; }
 fi
