@@ -769,8 +769,25 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
         fi
     fi
 
+    # Offline the kernel has to be installed from the file on the media rather
+    # than through a repository. pacman -S prepares a transaction, and that
+    # requires every registered sync database to exist -- offline only
+    # sakura-core's does, because core and extra were never fetched -- so it
+    # fails with "could not find database" before it ever looks at where the
+    # package would have come from. The package is sitting right there on the
+    # media the whole time. pacman -U reads the file and resolves against what
+    # is installed, which is the situation a copy install is already in.
+    _media_pkg=""
+    if [[ "$HAVE_NET" != "yes" ]]; then
+        _media_pkg=$({ ls -1 /mnt/usr/share/sakura/repo/sakura-core/os/*/"${KERNEL}"-[0-9]*.pkg.tar.zst \
+                       2>/dev/null || true; } | head -1)
+    fi
+
     if [[ -r "$_kernel_image" ]]; then
         info "$KERNEL is already in place"
+    elif [[ -n "$_media_pkg" ]] \
+         && arch-chroot /mnt pacman -U --noconfirm "${_media_pkg#/mnt}" 2>&1 | tail -3; then
+        info "installed $KERNEL from the installation media"
     elif arch-chroot /mnt pacman -S --noconfirm "$KERNEL" 2>&1 | tail -3; then
         info "installed $KERNEL"
     else
