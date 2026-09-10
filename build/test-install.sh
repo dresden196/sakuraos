@@ -65,7 +65,15 @@ CRYPTPASS=diskpass
 # lives in sakura-extra and is fetched over the network, so this also proves
 # the target can reach that repository -- which it could not, for a while,
 # because the extras were installed before the repository was configured.
-BROWSER_PKG="${SAKURA_TEST_BROWSER:-vivaldi}"
+# Offline the extras are never fetched, so the browser to assert on is the one
+# the live filesystem already carries and the copy brings across -- which is
+# exactly why zen-browser-bin is on the ISO. Asking for vivaldi here would test
+# nothing but the harness's own wrong expectation.
+if [[ "$OFFLINE" == "1" ]]; then
+    BROWSER_PKG="${SAKURA_TEST_BROWSER:-zen-browser-bin}"
+else
+    BROWSER_PKG="${SAKURA_TEST_BROWSER:-vivaldi}"
+fi
 
 run() { "$REPO_ROOT/build/guest-run.sh" "$@"; }
 
@@ -140,6 +148,23 @@ if (( ! verify_only )); then
     vm_must_be_running clean "$REPO_ROOT/out/live-boot.log"
     "$REPO_ROOT/build/vm-ready.sh"
 
+    # A development affordance, off unless asked for. The installer ships on
+    # the ISO, so testing a one-line change to it otherwise means rebuilding
+    # the image: forty minutes to find out whether a timeout is in the right
+    # place. With this, the working copy is pushed over the one on the media
+    # and the run takes minutes. It is deliberately loud, because a green run
+    # against a patched guest is not evidence about the ISO and must never be
+    # mistaken for one.
+    if [[ -n "${SAKURA_INSTALLER_OVERRIDE:-}" ]]; then
+        echo ">> OVERRIDE: replacing the installer on the media with"
+        echo ">>           $SAKURA_INSTALLER_OVERRIDE"
+        echo ">>           this run does NOT test the ISO as built"
+        "$REPO_ROOT/build/guest-push.sh" "$SAKURA_INSTALLER_OVERRIDE" /usr/bin/sakura-install
+        run "chmod +x /usr/bin/sakura-install" >/dev/null 2>&1 || true
+        run "bash -n /usr/bin/sakura-install" >/dev/null || {
+            echo "the pushed installer does not parse in the guest" >&2; exit 1; }
+    fi
+
     echo ">> installing to /dev/vda"
     # Detached, with the exit status left in a file. guest-run gives up after
     # 60s, and an install takes many minutes -- waiting on it directly means
@@ -213,13 +238,34 @@ if (( ! verify_only )); then
         exit 1
     fi
 
+    # Pull the installer's log out of the guest while the guest still exists.
+    # Called on the failure paths below as well as after a clean finish: the
+    # trap destroys the VM on exit, so a run that times out used to take the
+    # only record of why it timed out down with it, leaving 119 progress dots
+    # as the entire diagnosis. That is the same mistake this file warns about
+    # everywhere else -- keep the failing thing's own words.
+    save_guest_log() {
+        run "cat /tmp/install.log" > "$REPO_ROOT/out/install-guest.log" 2>/dev/null || true
+        if [[ -s "$REPO_ROOT/out/install-guest.log" ]]; then
+            echo ">> full installer log saved to out/install-guest.log ($(wc -l < "$REPO_ROOT/out/install-guest.log") lines)"
+        fi
+    }
+
     echo -n ">> installing"
     deadline=$(( SECONDS + 1800 ))
     until run "test -f /tmp/install.rc" >/dev/null 2>&1; do
-        (( SECONDS < deadline )) || { echo; echo "install did not finish" >&2; exit 1; }
+        if (( SECONDS >= deadline )); then
+            echo; echo "install did not finish" >&2
+            save_guest_log
+            echo "-- last 25 lines of the installer log:" >&2
+            run "tail -25 /tmp/install.log" >&2 2>/dev/null || true
+            exit 1
+        fi
         # A VM that died halfway through an install is not going to produce
         # the file being waited on, and waiting the remaining twenty-odd
         # minutes to say so helps nobody.
+        # No save_guest_log here: the VM is gone, so there is nothing left to
+        # read the log out of. The boot log on the host is what survives.
         vm_running clean || { echo; echo "the VM stopped during the install" >&2
             tail -n 15 "$REPO_ROOT/out/live-boot.log" >&2 2>/dev/null || true; exit 1; }
         echo -n .
@@ -234,10 +280,7 @@ if (( ! verify_only )); then
     # skipped for lack of a network -- is announced well before the end. Three
     # separate diagnoses in this project stalled on a log that no longer
     # existed by the time anyone wanted to read it.
-    run "cat /tmp/install.log" > "$REPO_ROOT/out/install-guest.log" 2>/dev/null || true
-    if [[ -s "$REPO_ROOT/out/install-guest.log" ]]; then
-        echo ">> full installer log saved to out/install-guest.log ($(wc -l < "$REPO_ROOT/out/install-guest.log") lines)"
-    fi
+    save_guest_log
     run "tail -15 /tmp/install.log" || true
     [[ "$rc" == "0" ]] || { echo "installer exited $rc" >&2; exit 1; }
 
@@ -437,6 +480,11 @@ check "the kernel matches what the CPU supports" \
        else \
            pacman -Q linux; \
        fi"
+# The live image enables this so it has a trustworthy clock before checking a
+# signature; a normal Arch install does not have it at all. It waits forever
+# when there is no network, and the copy used to bring the enablement across.
+check "the live clock-wait unit did not come across" \
+      "! test -e /etc/systemd/system/sysinit.target.wants/systemd-time-wait-sync.service"
 check "the KWin rule for Dolphin shipped"  "grep -q dolphin /etc/xdg/kwinrulesrc"
 check "user feedback was configured"       "grep -q FeedbackLevel /home/$USER_NAME/.config/PlasmaUserFeedback"
 
