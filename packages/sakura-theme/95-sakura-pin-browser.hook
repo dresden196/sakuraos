@@ -1,0 +1,21 @@
+# Reapply the browser pin after anything replaces the panel layout.
+#
+# A Path trigger rather than a Package one: what matters is the file being
+# rewritten, which is what loses the installer's edit. Targeting the package
+# would also fire on transactions that leave the layout alone.
+#
+# The paths are listed rather than globbed across the theme name because
+# libalpm matches these against the files in the transaction, without the
+# leading slash.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Path
+Target = usr/share/plasma/look-and-feel/org.sakura.dark.desktop/contents/layouts/org.kde.plasma.desktop-layout.js
+Target = usr/share/plasma/look-and-feel/org.sakura.light.desktop/contents/layouts/org.kde.plasma.desktop-layout.js
+
+[Action]
+Description = Restoring the chosen browser on the task bar...
+When = PostTransaction
+Exec = /usr/bin/sakura-pin-browser
+Depends = python

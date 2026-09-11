@@ -1476,6 +1476,13 @@ CHROOT
 # and google-chrome ships com.google.Chrome.desktop, and a table of those would
 # be wrong the first time any of them renamed a file.
 if [[ -n "$BROWSER" ]]; then
+    # Recorded before it is applied, because the edit below does not survive.
+    # The layout is a file sakura-theme ships and is not in its backup array,
+    # so pacman replaces it on every theme upgrade and the pin goes with it --
+    # which is exactly what the upgrade test caught. sakura-theme ships a hook
+    # that reads this file and puts the launcher back afterwards.
+    install -Dm644 /dev/stdin /mnt/etc/sakura/browser <<<"$BROWSER"
+
     _desktop="$(arch-chroot /mnt pacman -Ql "$BROWSER" 2>/dev/null \
         | awk '$2 ~ /\/usr\/share\/applications\/.*\.desktop$/ {print $2}' \
         | head -1)" || true

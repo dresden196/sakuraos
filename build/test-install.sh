@@ -133,11 +133,37 @@ vm_must_be_running() {
     exit 1
 }
 
+# DUALBOOT=1 installs into the free space on a disk that already carries
+# somebody else's UEFI system, which is what --mode alongside is for. Every
+# other run here starts from a blank disk, so none of that code has ever run.
+# The fixture is rebuilt each time: the point is an untouched other system, and
+# a fixture left over from a previous run has already been installed onto.
+# UPGRADE=1 installs, then updates the installed system against the published
+# repository before running the checks. The canary already updates a running
+# machine every night, but always one built from the current image -- the jump
+# from an older image to the current packages is the thing a real user makes
+# and the thing nothing here has ever done. Pair it with SAKURA_ISO to choose
+# how far back to start.
+UPGRADE="${UPGRADE:-0}"
+DUALBOOT="${DUALBOOT:-0}"
+INSTALL_MODE="${INSTALL_MODE:-wipe}"
+if [[ "$DUALBOOT" == "1" ]]; then
+    INSTALL_MODE=alongside
+fi
+
 if (( ! verify_only )); then
-    echo ">> booting the installer media on a blank disk"
-    rm -f "$REPO_ROOT/out/sakura-clean.qcow2" \
-          "$REPO_ROOT/out/sakura-clean-2.qcow2" \
-          "$REPO_ROOT/out/OVMF_VARS-clean.fd"
+    if [[ "$INSTALL_MODE" == "alongside" ]]; then
+        echo ">> building a disk that already has another UEFI system on it"
+        rm -f "$REPO_ROOT/out/sakura-clean-2.qcow2" \
+              "$REPO_ROOT/out/OVMF_VARS-clean.fd"
+        "$REPO_ROOT/build/make-dualboot-disk.sh" \
+            "$REPO_ROOT/out/sakura-clean.qcow2" >/dev/null
+    else
+        echo ">> booting the installer media on a blank disk"
+        rm -f "$REPO_ROOT/out/sakura-clean.qcow2" \
+              "$REPO_ROOT/out/sakura-clean-2.qcow2" \
+              "$REPO_ROOT/out/OVMF_VARS-clean.fd"
+    fi
     # setsid, and keep the output. A plain background job shares this
     # session, so qemu takes a SIGTERM whenever whatever started the harness
     # tears its session down -- which pct exec does. The symptom is a live
@@ -209,6 +235,7 @@ if (( ! verify_only )); then
         --clock 12
         --fullname "Test User"
         --method "$METHOD"
+        --mode "$INSTALL_MODE"
         --yes
     )
     (( encrypt )) && install_args+=(--encrypt on --encryption-password-stdin)
@@ -364,6 +391,58 @@ if (( ! verify_only )); then
 fi
 
 echo
+if [[ "$UPGRADE" == "1" ]]; then
+    echo ">> updating the installed system against the published repository"
+    # What is on offer, before taking it: an upgrade that finds nothing to do
+    # would pass every check below while proving nothing at all.
+    before=$(run "sakura-update check" 2>&1 || true)
+    printf '%s\n' "$before" | tail -6 | sed 's/^/   | /'
+    # "old → new" is what an available update looks like in this output, and it
+    # is the one part of the format that cannot be missed by looking at the
+    # wrong end of a long list. Counting the summary line failed here for
+    # exactly that reason: tail -20 landed in the middle of the package list.
+    # Counted once, into a variable, and never with grep -q. Under pipefail a
+    # short-circuiting consumer is a trap: grep -q exits on the first match,
+    # printf dies with SIGPIPE, the pipeline returns 141, and "if ! pipeline"
+    # takes the failure branch on input that plainly matched. That printed
+    # "(210 packages on offer)" and "nothing to upgrade" on consecutive lines.
+    arrows=$(printf '%s' "$before" | grep -c '→' || true)
+    echo "   | ($arrows packages on offer)"
+    if (( arrows == 0 )); then
+        echo "test-install: the older image had nothing to upgrade -- either it is" >&2
+        echo "              not old enough or the repository was not published." >&2
+        exit 1
+    fi
+    # Long: this downloads and installs a whole release worth of packages, and
+    # the guest agent's default ceiling is nowhere near it.
+    SAKURA_GUEST_TIMEOUT=1800 run "sakura-update apply" 2>&1 | tail -15 \
+        || { echo "the update failed" >&2; exit 1; }
+    echo ">> rebooting into the updated system"
+    run "systemctl reboot" >/dev/null 2>&1 || true
+    # Wait for the guest agent, not for a session: an installed system does not
+    # autologin, so there is never a session to wait for and vm-ready.sh -- which
+    # waits for the live one -- times out on a machine that rebooted perfectly.
+    # Sleep first, or the agent still answering from before the reboot reads as
+    # the machine already being back.
+    sleep 20
+    echo -n ">> waiting for the updated system"
+    deadline=$(( SECONDS + 420 ))
+    until run "true" >/dev/null 2>&1; do
+        if (( SECONDS >= deadline )); then
+            echo
+            echo "the system did not come back after updating" >&2
+            echo "-- this is the interesting failure: the update regenerated the" >&2
+            echo "   boot image, so a machine that does not return is one the" >&2
+            echo "   update made unbootable." >&2
+            tail -n 15 "$REPO_ROOT/out/installed-boot.log" >&2 2>/dev/null || true
+            exit 1
+        fi
+        echo -n .
+        sleep 5
+    done
+    echo " up"
+fi
+
 echo ">> checking the installed system"
 # The meta package is what holds the desktop together: without it nothing at
 # the pacman level stops a removal taking Plasma with it.
@@ -480,6 +559,27 @@ check "the kernel matches what the CPU supports" \
        else \
            pacman -Q linux; \
        fi"
+# What alongside mode is for: the system that was already on the disk is still
+# there afterwards. These are the checks that would have caught reformatting
+# somebody's ESP, which is the way a dual-boot install destroys the thing it
+# was supposed to sit beside.
+if [[ "$INSTALL_MODE" == "alongside" ]]; then
+    check "the other system's ESP was reused, not reformatted" \
+          "test -f /boot/EFI/otheros/grubx64.efi"
+    check "the other system's fallback bootloader survived" \
+          "test -f /boot/EFI/BOOT/BOOTX64.EFI"
+    check "our own boot files live beside theirs" \
+          "test -f /boot/EFI/sakura/sakura.efi"
+    check "the other system's root partition still has its label" \
+          "blkid -L OTHER_ROOT"
+    check "the other system's files are intact" \
+          "mkdir -p /mnt/other && mount -o ro \$(blkid -L OTHER_ROOT) /mnt/other \
+           && grep -q 'not touched' /mnt/other/etc/keepme; rc=\$?; \
+           umount /mnt/other 2>/dev/null; exit \$rc"
+    check "nothing was renumbered: we are partition 3" \
+          "test \"\$(lsblk -lnpo NAME,PARTLABEL /dev/vda | awk '\$2 == \"SAKURA_ROOT\" {print \$1}')\" = /dev/vda3"
+fi
+
 # The live image enables this so it has a trustworthy clock before checking a
 # signature; a normal Arch install does not have it at all. It waits forever
 # when there is no network, and the copy used to bring the enablement across.

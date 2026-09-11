@@ -4,6 +4,7 @@ pkgver=0.1.0
 pkgrel=1
 pkgdesc="Desktop tuning defaults: memory management and I/O scheduling"
 arch=('any')
+install="$pkgname.install"
 url="https://sakuraos.org"
 license=('GPL2')
 backup=('etc/sysctl.d/99-sakura.conf'
