@@ -395,7 +395,11 @@ if [[ "$UPGRADE" == "1" ]]; then
     echo ">> updating the installed system against the published repository"
     # What is on offer, before taking it: an upgrade that finds nothing to do
     # would pass every check below while proving nothing at all.
-    before=$(run "sakura-update check" 2>&1 || true)
+    # Not the default 60s: the check syncs databases and fetches the advisory
+    # list first, and when it overran, guest-run's timeout message became the
+    # whole of "$before" -- so the count below was zero and the run aborted
+    # claiming there was nothing to upgrade on a machine 210 packages behind.
+    before=$(SAKURA_GUEST_TIMEOUT=300 run "sakura-update check" 2>&1 || true)
     printf '%s\n' "$before" | tail -6 | sed 's/^/   | /'
     # "old → new" is what an available update looks like in this output, and it
     # is the one part of the format that cannot be missed by looking at the

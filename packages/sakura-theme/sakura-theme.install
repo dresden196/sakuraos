@@ -1,0 +1,46 @@
+# Work out this machine's browser before the layout that names it is replaced.
+#
+# This has to be a scriptlet rather than a PreTransaction hook. A hook cannot
+# run on the transaction that installs it -- pacman lists the hook directory
+# before it extracts anything, so a new PreTransaction hook is invisible on the
+# very upgrade that adds it, which is exactly the upgrade where the old layout
+# still holds the answer. (PostTransaction is different: the hook directory is
+# read again by then, so 95- does fire on its own upgrade. It just had nothing
+# to restore, because this had not run.) A scriptlet comes from the incoming
+# package and pre_upgrade runs before the files land, which is what is needed.
+#
+# Machines installed from 1.234 onward have the choice recorded by the
+# installer and never reach the loop below.
+_record_browser() {
+    [ -s etc/sakura/browser ] && return 0
+
+    for _layout in usr/share/plasma/look-and-feel/org.sakura.*.desktop/contents/layouts/org.kde.plasma.desktop-layout.js; do
+        [ -f "$_layout" ] || continue
+        # Every launcher the layout names, in order.
+        for _entry in $(sed -n 's/.*"applications:\([^"]*\.desktop\)".*/\1/p' "$_layout"); do
+            [ -f "usr/share/applications/$_entry" ] || continue
+            # The desktop entry says whether it is a browser. That is what the
+            # category is for; matching names against the browsers we happen to
+            # ship today would be wrong the first time that list changes.
+            grep -q '^Categories=.*WebBrowser' "usr/share/applications/$_entry" || continue
+            _pkg=$(pacman -Qoq "/usr/share/applications/$_entry" 2>/dev/null | head -1)
+            [ -n "$_pkg" ] || continue
+            install -d etc/sakura
+            printf '%s\n' "$_pkg" > etc/sakura/browser
+            echo ">>> noted $_pkg as this machine's browser, so the task bar"
+            echo "    keeps it across theme updates."
+            return 0
+        done
+    done
+    return 0
+}
+
+pre_upgrade() {
+    _record_browser
+}
+
+post_upgrade() {
+    # The hook does this too. Harmless twice: it checks for the launcher before
+    # adding it, and on a fresh install there is nothing recorded yet anyway.
+    [ -x usr/bin/sakura-pin-browser ] && usr/bin/sakura-pin-browser || true
+}
