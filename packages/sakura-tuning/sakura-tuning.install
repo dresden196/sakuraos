@@ -1,0 +1,33 @@
+# One-time cleanups for systems installed before the fix that made them
+# unnecessary. Every one of these is idempotent and safe to run on a machine
+# that never had the problem.
+
+_drop_live_clock_wait() {
+    # archiso enables systemd-time-wait-sync so the live image has a
+    # trustworthy clock before it verifies any signature. A normal Arch install
+    # leaves it disabled, and our installer copies the live filesystem onto the
+    # disk -- so until the installer learned to remove it, every installed
+    # machine inherited it.
+    #
+    # It waits with TimeoutStartSec=infinity. On a machine with no network it
+    # therefore never finishes, and nothing ordered after time-sync.target ever
+    # runs. The installer handles this for new installs; existing ones only get
+    # it from here, because nothing else ever revisits that symlink.
+    #
+    # Only the enablement symlink, never the unit: somebody who deliberately
+    # enabled this with systemctl gets the same symlink, so this is written to
+    # be a no-op the second time and leaves a real file alone.
+    if [ -L etc/systemd/system/sysinit.target.wants/systemd-time-wait-sync.service ]; then
+        rm -f etc/systemd/system/sysinit.target.wants/systemd-time-wait-sync.service
+        echo ">>> removed the live image's clock-wait unit, which does not"
+        echo "    finish on a machine with no network."
+    fi
+}
+
+post_install() {
+    _drop_live_clock_wait
+}
+
+post_upgrade() {
+    _drop_live_clock_wait
+}

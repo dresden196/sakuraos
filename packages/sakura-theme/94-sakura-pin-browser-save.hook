@@ -1,0 +1,19 @@
+# Work out this machine's browser before the layout that names it is replaced.
+#
+# The companion to 95-, and only for machines installed before the choice was
+# recorded in /etc/sakura/browser: on those the layout is the only place the
+# browser is written down, so by the time the PostTransaction hook runs it is
+# already gone. This reads it while it is still there and does nothing at all
+# once the file exists.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Path
+Target = usr/share/plasma/look-and-feel/org.sakura.dark.desktop/contents/layouts/org.kde.plasma.desktop-layout.js
+Target = usr/share/plasma/look-and-feel/org.sakura.light.desktop/contents/layouts/org.kde.plasma.desktop-layout.js
+
+[Action]
+Description = Noting which browser is on the task bar...
+When = PreTransaction
+Exec = /usr/bin/sakura-pin-browser --migrate
+Depends = python

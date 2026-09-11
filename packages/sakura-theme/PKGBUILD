@@ -19,11 +19,23 @@ url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
 depends=('sddm' 'plasma-desktop' 'sakura-wallpapers' 'breeze' 'breeze-icons')
 backup=('etc/sddm.conf.d/20-sakura.conf')
-source=('20-sakura.conf' 'kdeglobals' 'kdeglobals-dark' 'kdeglobals-light' 'kwinrulesrc' 'sddm-breeze-theme.conf.user')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+source=('20-sakura.conf' 'kdeglobals' 'kdeglobals-dark' 'kdeglobals-light' 'kwinrulesrc' 'sddm-breeze-theme.conf.user'
+        'sakura-pin-browser' '95-sakura-pin-browser.hook'
+        '94-sakura-pin-browser-save.hook')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm644 "$srcdir/20-sakura.conf" "$pkgdir/etc/sddm.conf.d/20-sakura.conf"
+
+    # The layout this package ships carries the browser the installer pinned,
+    # and pacman replaces the file on upgrade. Putting it in backup= would
+    # strand every future theme change behind a .pacnew, so the choice is
+    # recorded in /etc/sakura/browser and reapplied by this hook instead.
+    install -Dm755 "$srcdir/sakura-pin-browser" "$pkgdir/usr/bin/sakura-pin-browser"
+    install -Dm644 "$srcdir/95-sakura-pin-browser.hook" \
+        "$pkgdir/usr/share/libalpm/hooks/95-sakura-pin-browser.hook"
+    install -Dm644 "$srcdir/94-sakura-pin-browser-save.hook" \
+        "$pkgdir/usr/share/libalpm/hooks/94-sakura-pin-browser-save.hook"
     # The greeter's own background. See the file for why it lives here.
     install -Dm644 "$srcdir/sddm-breeze-theme.conf.user" \
         "$pkgdir/usr/share/sddm/themes/breeze/theme.conf.user"
