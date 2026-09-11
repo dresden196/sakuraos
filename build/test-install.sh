@@ -419,8 +419,20 @@ if [[ "$UPGRADE" == "1" ]]; then
     fi
     # Long: this downloads and installs a whole release worth of packages, and
     # the guest agent's default ceiling is nowhere near it.
-    SAKURA_GUEST_TIMEOUT=1800 run "sakura-update apply" 2>&1 | tail -15 \
-        || { echo "the update failed" >&2; exit 1; }
+    # Kept whole, not tailed. pre_upgrade scriptlets run early in a two-hundred
+    # package transaction, so the only evidence that the browser-pin migration
+    # ran at all was scrolling off the end of a tail -15 -- which left the pin
+    # check passing with no way to tell whether the mechanism did it.
+    if ! SAKURA_GUEST_TIMEOUT=1800 run "sakura-update apply" \
+            > "$REPO_ROOT/out/update-guest.log" 2>&1; then
+        echo "the update failed" >&2
+        tail -25 "$REPO_ROOT/out/update-guest.log" >&2
+        exit 1
+    fi
+    echo ">> full update log saved to out/update-guest.log ($(wc -l < "$REPO_ROOT/out/update-guest.log") lines)"
+    grep -E 'noted .* as this machine|restored .* on [0-9]+ layout|removed the live' \
+        "$REPO_ROOT/out/update-guest.log" | sed 's/^/   | /' || true
+    tail -6 "$REPO_ROOT/out/update-guest.log"
     echo ">> rebooting into the updated system"
     run "systemctl reboot" >/dev/null 2>&1 || true
     # Wait for the guest agent, not for a session: an installed system does not
@@ -499,6 +511,10 @@ check "the launcher write is committed" \
       "grep -q 'reloadConfig' /usr/share/plasma/look-and-feel/org.sakura.dark.desktop/contents/layouts/org.kde.plasma.desktop-layout.js"
 check "the chosen browser is installed" \
       "pacman -Q $BROWSER_PKG"
+# Proves the migration actually ran, rather than the pin surviving for some
+# other reason. Without this the check below passes either way.
+check "the browser choice is on record for future upgrades" \
+      "test -s /etc/sakura/browser"
 check "the browser is pinned to the task bar" \
       "grep -q \"\$(pacman -Ql $BROWSER_PKG | awk '\$2 ~ /applications\\/.*desktop\$/ {print \"applications:\" substr(\$2, match(\$2, /[^\\/]*\$/))}' | head -1)\" /usr/share/plasma/look-and-feel/org.sakura.dark.desktop/contents/layouts/org.kde.plasma.desktop-layout.js"
 # The answers the installer collects and used to drop on the floor.
