@@ -36,7 +36,17 @@ done
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE=sakura-build
 CACHE_VOLUME=sakura-pkgcache
-GPGHOME="${SAKURA_GPGHOME:-$REPO_ROOT/keys/dev-gnupg}"
+# Production key if this machine has one, development key otherwise, and it
+# says which out loud. Defaulting to the dev key on a machine holding the real
+# one is how a release gets signed with a throwaway key that keys/README.md says
+# must never reach a user -- silently, because both paths succeed.
+if [[ -n "${SAKURA_GPGHOME:-}" ]]; then
+    GPGHOME="$SAKURA_GPGHOME"
+elif [[ -d "$REPO_ROOT/keys/prod-gnupg" ]]; then
+    GPGHOME="$REPO_ROOT/keys/prod-gnupg"
+else
+    GPGHOME="$REPO_ROOT/keys/dev-gnupg"
+fi
 REPO_DIR="$REPO_ROOT/repo/sakura-core/os/x86_64"
 
 cd "$REPO_ROOT"
@@ -54,7 +64,18 @@ fi
 SIGNER="$(gpg --homedir "$GPGHOME" --list-secret-keys --with-colons \
           | awk -F: '/^sec:/ {print $5; exit}')"
 [[ -n "$SIGNER" ]] || { echo "no secret key in $GPGHOME" >&2; exit 1; }
-echo ">> signing with $SIGNER"
+# Named, not just identified. "signing with <hex>" reads the same whichever key
+# it is, and which key signed a release is the one thing worth never having to
+# guess about afterwards.
+SIGNER_UID="$(gpg --homedir "$GPGHOME" --list-secret-keys --with-colons \
+              | awk -F: '/^uid:/ {print $10; exit}')"
+echo ">> signing with $SIGNER  ($SIGNER_UID)"
+case "$SIGNER_UID" in
+    *"NOT FOR PRODUCTION"*)
+        echo ">> NOTE: this is the development key. Nothing it signs may be"
+        echo ">>       published; see keys/README.md."
+        ;;
+esac
 
 mkdir -p "$REPO_DIR"
 docker volume create "$CACHE_VOLUME" >/dev/null
@@ -333,6 +354,29 @@ docker run --rm \
             # Trailing && under set -e: a package without a signature would
             # otherwise make the whole build report failure after succeeding.
             [ -f "$pkg.sig" ] && cp -f "$pkg.sig" "$dest/" || true
+
+            # Re-sign anything whose signature this keyring cannot verify.
+            #
+            # Packages carried in from out/kernel and from a previous --skip-aur
+            # run were signed whenever they were built, which may have been with
+            # a different key. Copying that signature into a repository whose
+            # database is signed by the current key produces a repo that looks
+            # complete and fails on one package: pacman rejects the kernel with
+            # "invalid or corrupted package (PGP signature)". Rotating from the
+            # development key to the production one hits exactly this, and the
+            # kernel takes hours to rebuild, so it is re-signed rather than
+            # remade -- signatures are detached files, which is what makes that
+            # possible.
+            _base=$(basename "$pkg")
+            if ! su builder -c "GNUPGHOME=/home/builder/.gnupg gpg --verify \
+                    '$dest/$_base.sig' '$dest/$_base'" >/dev/null 2>&1; then
+                echo "   re-signing $_base with $SIGNER"
+                rm -f "$dest/$_base.sig"
+                chown builder "$dest/$_base"
+                su builder -c "GNUPGHOME=/home/builder/.gnupg gpg --batch --yes \
+                    --detach-sign --local-user $SIGNER \
+                    -o '$dest/$_base.sig' '$dest/$_base'"
+            fi
         # $REUSE holds AUR packages carried over from a previous run under
         # --skip-aur; without it here the repo would be published with our
         # packages alone and every AUR dependency silently missing.
