@@ -62,7 +62,7 @@ echo "==> Adding the build signing subkey (2 years, no passphrase)."
 # The master passphrase is needed once more here to certify the subkey.
 gpg --homedir "$BUILD_HOME" --quick-add-key "$FPR" rsa4096 sign 2y
 
-echo "==> Exporting the pieces."
+echo "==> Exporting the master copy before anything is stripped."
 gpg --homedir "$BUILD_HOME" --armor --export "$FPR" > "$STAGE/sakura-public.asc"
 # Everything, master included: this is the copy that goes to removable media.
 gpg --homedir "$BUILD_HOME" --armor --export-secret-keys "$FPR" \
@@ -74,6 +74,23 @@ gpg --homedir "$BUILD_HOME" --armor --export-secret-subkeys "$FPR" \
 if [[ -f "$BUILD_HOME/openpgp-revocs.d/$FPR.rev" ]]; then
     cp "$BUILD_HOME/openpgp-revocs.d/$FPR.rev" "$STAGE/sakura-revocation.rev"
 fi
+
+echo
+echo "==> Taking the passphrase off the build signing subkey."
+echo "    gpg will ask for the passphrase you just chose, then for a new one."
+echo "    Leave the new one EMPTY and confirm the warning: this subkey has to"
+echo "    sign packages in an automated build, which cannot type anything, and"
+echo "    it is the half you are allowed to lose -- revoke it with the master"
+echo "    and issue another without users having to trust a new key."
+echo
+# --quick-add-key protects a new subkey with the master's passphrase, so without
+# this the build keyring cannot sign unattended: makepkg --sign fails with
+# "signing failed: No passphrase given" at the first package.
+gpg --homedir "$BUILD_HOME" --passwd "$FPR" || {
+    echo "could not clear the subkey passphrase; rerun:" >&2
+    echo "    gpg --homedir $BUILD_HOME --passwd $FPR" >&2
+    exit 1
+}
 
 echo "==> Removing the master secret from the build keyring."
 # The point of the whole exercise. Delete the master's secret half locally and

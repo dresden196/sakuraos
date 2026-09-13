@@ -4,6 +4,22 @@ work/
 *.qcow2
 *.fd
 keys/dev-gnupg/
+# Every key directory, by shape rather than by name.
+#
+# .gitignore listed only keys/dev-gnupg, so the production key generated on
+# 2026-09-13 was untracked-but-not-ignored: the next `git add -A` would have
+# committed the master secret, into a repository that is about to be made
+# public. Match anything key-shaped instead of naming directories one at a
+# time, because the next one will be named something else again.
+keys/*-gnupg/
+keys/*-staging/
+keys/**/*.key
+keys/**/*.rev
+*.asc
+!packages/**/*.asc
+*-SECRET*
+private-keys-v1.d/
+openpgp-revocs.d/
 repo/
 iso/airootfs/usr/share/sakura/
 iso/airootfs/etc/pacman.conf
