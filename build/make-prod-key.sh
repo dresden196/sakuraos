@@ -75,29 +75,52 @@ if [[ -f "$BUILD_HOME/openpgp-revocs.d/$FPR.rev" ]]; then
     cp "$BUILD_HOME/openpgp-revocs.d/$FPR.rev" "$STAGE/sakura-revocation.rev"
 fi
 
-echo
-echo "==> Taking the passphrase off the build signing subkey."
-echo "    gpg will ask for the passphrase you just chose, then for a new one."
-echo "    Leave the new one EMPTY and confirm the warning: this subkey has to"
-echo "    sign packages in an automated build, which cannot type anything, and"
-echo "    it is the half you are allowed to lose -- revoke it with the master"
-echo "    and issue another without users having to trust a new key."
-echo
-# --quick-add-key protects a new subkey with the master's passphrase, so without
-# this the build keyring cannot sign unattended: makepkg --sign fails with
-# "signing failed: No passphrase given" at the first package.
-gpg --homedir "$BUILD_HOME" --passwd "$FPR" || {
-    echo "could not clear the subkey passphrase; rerun:" >&2
-    echo "    gpg --homedir $BUILD_HOME --passwd $FPR" >&2
-    exit 1
-}
-
 echo "==> Removing the master secret from the build keyring."
 # The point of the whole exercise. Delete the master's secret half locally and
 # re-import only the subkeys, so this machine can sign packages and cannot
 # certify anything or issue a new subkey.
 gpg --homedir "$BUILD_HOME" --batch --yes --delete-secret-keys "$FPR"
 gpg --homedir "$BUILD_HOME" --batch --import "$STAGE/sakura-subkeys-SECRET.asc"
+
+echo
+echo "==> Taking the passphrase off the build signing subkey."
+echo "    gpg will ask for the passphrase you chose, then for a new one."
+echo "    Leave the new one EMPTY and confirm the warning."
+echo
+# Three things had to be got right here, and the first two attempts got them
+# wrong.
+#
+# It has to happen AFTER the master secret is deleted and the subkeys are
+# re-imported. Done before, `gpg --passwd <master-fpr>` strips the passphrase
+# from the master as well -- leaving an unprotected master on a networked
+# machine, which is the one outcome this whole design exists to prevent -- and
+# the re-import above then restores the subkey's protection anyway, from an
+# export taken before the change.
+#
+# And it targets the subkey by KEYGRIP, not the key by fingerprint. With the
+# master secret gone, `gpg --passwd <fingerprint>` addresses the primary key and
+# fails with "error changing passphrase: No secret key", which reads like the
+# key is broken when it is simply not the thing being asked about. The agent's
+# PASSWD command operates on one secret key, which is exactly the granularity
+# wanted: the subkey unprotected for automated signing, the master untouched.
+SUBGRIP=$(gpg --homedir "$BUILD_HOME" --with-keygrip --list-secret-keys "$FPR" 2>/dev/null \
+    | awk '/^ssb/{f=1} f && /Keygrip/{print $3; exit}')
+[[ -n "$SUBGRIP" ]] || { echo "could not find the signing subkey's keygrip" >&2; exit 1; }
+gpg-connect-agent --homedir "$BUILD_HOME" "PASSWD $SUBGRIP" /bye || {
+    echo "could not clear the subkey passphrase; rerun:" >&2
+    echo "    gpg-connect-agent --homedir $BUILD_HOME \"PASSWD $SUBGRIP\" /bye" >&2
+    exit 1
+}
+
+# Prove it, rather than assume: an unattended build is the first thing that
+# would discover otherwise, at the first package.
+if echo test | gpg --homedir "$BUILD_HOME" --batch --yes --local-user "$FPR" \
+        --detach-sign -o /dev/null 2>/dev/null; then
+    echo "    the subkey signs unattended, which is what the build needs."
+else
+    echo "    WARNING: the subkey still cannot sign without a passphrase." >&2
+    echo "    Automated builds will fail until it can." >&2
+fi
 
 echo
 echo "==> Build keyring now holds:"
