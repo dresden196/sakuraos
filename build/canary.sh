@@ -25,8 +25,22 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export SAKURA_VM=clean
 OUT="$REPO_ROOT/out/advisories.json"
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-REPO_HOST="${REPO_HOST:-root@173.233.87.167}"
-REPO_PORT="${REPO_PORT:-37156}"
+# An ssh alias, not an address. Where the repo host is and how to reach it is
+# the operator's configuration, and belongs in ~/.ssh/config on the machine
+# doing the publishing -- not in a repository that anyone can read. Hardcoding
+# root@<ip>:<port> here published a map of the deploy path to every reader for
+# no benefit at all: the scripts only need to know which host to talk to.
+#
+#   Host sakura-repo
+#       HostName <address>
+#       Port <port>
+#       User sakura
+#       IdentityFile ~/.ssh/id_ed25519_advisory
+#
+# Nothing about the port or the user is secret in itself. It simply has no
+# reason to be written down here, and leaving it out means rotating either one
+# never touches the code.
+REPO_HOST="${REPO_HOST:-sakura-repo}"
 REPO_PATH="${REPO_PATH:-/srv/sakura/repo/advisories.json}"
 # The destination lives in the forced command on the repo host now; this key
 # is the whole of the canary's access there.
@@ -241,7 +255,7 @@ if [[ "${PUBLISH:-0}" == "1" ]]; then
     # advisory file and nothing else. The receiving end validates the JSON
     # before it replaces anything, because this file decides what every
     # SakuraOS machine holds back.
-    if ssh -p "$REPO_PORT" -i "$ADVISORY_KEY" \
+    if ssh -i "$ADVISORY_KEY" \
            -o BatchMode=yes -o ConnectTimeout=15 \
            "$REPO_HOST" < "$OUT"; then
         say "published"

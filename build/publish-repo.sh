@@ -23,9 +23,10 @@ if [[ -f "$REPO_ROOT/repo/.dirty-build" && "${SAKURA_PUBLISH_DIRTY:-0}" != "1" ]
     exit 1
 fi
 
-HOST="${SAKURA_REPO_HOST:-repo.sakuraos.org}"
-PORT="${SAKURA_REPO_PORT:-37156}"
-USER="${SAKURA_REPO_USER:-sakura}"
+# An ssh alias for the upload, and the public name only for the closing message.
+# See the note in canary.sh: the address and port are operator configuration.
+SSH_TARGET="${SAKURA_REPO_SSH:-sakura-repo}"
+PUBLIC_NAME="${SAKURA_REPO_PUBLIC:-repo.sakuraos.org}"
 DEST="${SAKURA_REPO_PATH:-/srv/sakura/repo}"
 
 [[ -d "$REPO_ROOT/repo" ]] || { echo "nothing built -- run build/build-packages.sh first" >&2; exit 1; }
@@ -39,12 +40,12 @@ for r in sakura-core sakura-extra; do
 
     # Packages first, database after: a database is only meaningful once the
     # files it names are already fetchable.
-    rsync -az --info=stats1 -e "ssh -p $PORT" \
+    rsync -az --info=stats1 \
         --include='*/' --include='*.pkg.tar.zst' --include='*.pkg.tar.zst.sig' --exclude='*' \
-        "$src/" "$USER@$HOST:$DEST/$r/" | sed 's/^/     /'
-    rsync -az --delete-after --info=stats1 -e "ssh -p $PORT" \
-        "$src/" "$USER@$HOST:$DEST/$r/" | sed 's/^/     /'
+        "$src/" "$SSH_TARGET:$DEST/$r/" | sed 's/^/     /'
+    rsync -az --delete-after --info=stats1 \
+        "$src/" "$SSH_TARGET:$DEST/$r/" | sed 's/^/     /'
 done
 
 echo
-echo ">> published to https://$HOST/"
+echo ">> published to https://$PUBLIC_NAME/"
