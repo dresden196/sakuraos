@@ -116,6 +116,30 @@ wait_for_agent \
     || die "the installed machine did not come up before any updates were applied"
 
 guest() { SAKURA_VM=clean "$REPO_ROOT/build/guest-run.sh" "$1"; }
+# Guest work measured in minutes rather than seconds, with the ceiling stated
+# at the call site. guest-run defaults to 60s, which is right for a status
+# query and wrong for a system upgrade.
+guest_long() { SAKURA_VM=clean SAKURA_GUEST_TIMEOUT="$1" "$REPO_ROOT/build/guest-run.sh" "$2"; }
+
+# Wait for any pacman still working inside the guest, then take the lock only
+# if nothing holds it.
+#
+# Both halves matter. Walking away from a transaction does not stop it, so the
+# retry used to meet a database locked by the attempt we had abandoned and
+# report "the update failed twice" -- on nights when the update had never been
+# given the time to finish at all. And clearing the package cache under a live
+# pacman is how a real transaction gets corrupted, which is a worse problem
+# than the one the retry exists to fix.
+settle_guest_pacman() {
+    guest "for _ in \$(seq 1 180); do pgrep -x pacman >/dev/null 2>&1 || break; sleep 5; done" \
+        >/dev/null 2>&1 || true
+    if guest "pgrep -x pacman >/dev/null 2>&1" >/dev/null 2>&1; then
+        say "a pacman is still running in the guest; not touching its cache or lock"
+        return 1
+    fi
+    guest "rm -f /var/lib/pacman/db.lck" >/dev/null 2>&1 || true
+    return 0
+}
 
 say "what is pending"
 PENDING=$(guest "checkupdates 2>/dev/null || true" || true)
@@ -130,7 +154,13 @@ say "$COUNT updates pending"
 
 say "applying them"
 FAIL_LOG="$REPO_ROOT/out/canary-apply.log"
-if ! guest "pacman -Syu --noconfirm" >"$FAIL_LOG" 2>&1; then
+# Two hundred and fifty packages is a normal night here, and that is minutes of
+# downloading and installing. At the default 60s the call was abandoned every
+# time the backlog grew past about a minute's work, which is what failed the
+# runs on 2026-09-11 and 2026-09-12: the install passed 38/38 and the update was
+# never actually given a chance to run.
+APPLY_TIMEOUT="${SAKURA_CANARY_APPLY_TIMEOUT:-2400}"
+if ! guest_long "$APPLY_TIMEOUT" "pacman -Syu --noconfirm" >"$FAIL_LOG" 2>&1; then
     # One retry, and only after clearing the package cache.
     #
     # A single corrupted download fails the whole transaction and the bad file
@@ -141,11 +171,15 @@ if ! guest "pacman -Syu --noconfirm" >"$FAIL_LOG" 2>&1; then
     #
     # The cache on a throwaway test machine is worth nothing, so there is no
     # need to work out which file was the bad one.
-    say "the update failed; clearing the package cache and trying once more"
+    say "the update failed; letting the guest settle, then clearing the cache and trying once more"
     printf '\n--- retrying with a cleared package cache ---\n' >>"$FAIL_LOG"
+    if ! settle_guest_pacman; then
+        printf '\nthe first attempt was still running; did not retry\n' >>"$FAIL_LOG"
+        die "the update was still running when the harness gave up on it. See out/canary-apply.log"
+    fi
     guest "rm -f /var/cache/pacman/pkg/*.pkg.tar.zst /var/cache/pacman/pkg/*.part" \
         >/dev/null 2>&1 || true
-    guest "pacman -Syu --noconfirm" >>"$FAIL_LOG" 2>&1 \
+    guest_long "$APPLY_TIMEOUT" "pacman -Syu --noconfirm" >>"$FAIL_LOG" 2>&1 \
         || die "the update failed twice, the second time with a cleared package cache. See out/canary-apply.log"
 fi
 
