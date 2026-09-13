@@ -155,6 +155,48 @@ settle_guest_pacman() {
     return 0
 }
 
+# Evidence about a corrupted download, captured while the bad file still exists.
+#
+# "invalid or corrupted package (checksum)" has now happened twice on the same
+# package, sakura-store, and both times the copy on the mirror was verifiably
+# byte-correct against the database. So the interesting question is not whether
+# the mirror is wrong -- it is what the guest actually received, and from where.
+# The retry clears the cache, which destroys the only copy of the evidence, so
+# this runs first.
+#
+# Three numbers decide it between a bad transfer and a mismatched publish: what
+# is in the cache, what the database expects, and what a fresh fetch of the same
+# URL gives right now. The URL also says whether it came over HTTPS or the
+# plain-HTTP IP fallback, which is a difference nobody has ruled out yet.
+capture_corrupt_evidence() {
+    local log="$1" files
+    files=$(grep -oE '/var/cache/pacman/pkg/[^ ]+\.pkg\.tar\.zst' "$log" 2>/dev/null \
+            | sort -u | tr '\n' ' ')
+    [[ -n "${files// /}" ]] || return 0
+    say "capturing evidence about the corrupted download"
+    {
+        printf '\n--- corrupted package evidence (%s) ---\n' "$(date -u +%FT%TZ)"
+        guest "for f in $files; do
+  echo \"file: \$f\"
+  ls -l \"\$f\" 2>/dev/null || echo '  no longer present'
+  echo \"  cached sha256:  \$(sha256sum \"\$f\" 2>/dev/null | cut -d' ' -f1)\"
+  b=\$(basename \"\$f\" .pkg.tar.zst); n=\${b%-*-*-*}
+  echo \"  package name:   \$n\"
+  echo \"  db expects:     \$(pacman -Si \"\$n\" 2>/dev/null | awk -F': +' '/SHA-256/{print \$2}')\"
+  echo \"  db size:        \$(pacman -Si \"\$n\" 2>/dev/null | awk -F': +' '/Download Size/{print \$2}')\"
+  u=\$(pacman -Sp \"\$n\" 2>/dev/null | head -1)
+  echo \"  served from:    \${u:-unknown}\"
+  if [ -n \"\$u\" ]; then
+    curl -sS --max-time 120 -o /tmp/refetch.pkg \"\$u\" 2>/dev/null || true
+    echo \"  refetch size:   \$(stat -c %s /tmp/refetch.pkg 2>/dev/null)\"
+    echo \"  refetch sha256: \$(sha256sum /tmp/refetch.pkg 2>/dev/null | cut -d' ' -f1)\"
+    rm -f /tmp/refetch.pkg
+  fi
+  echo \"  partial files:  \$(ls -1 /var/cache/pacman/pkg/*.part 2>/dev/null | wc -l)\"
+done" 2>&1
+    } >> "$log"
+}
+
 say "what is pending"
 PENDING=$(guest "checkupdates 2>/dev/null || true" || true)
 if [[ -z "${PENDING//[[:space:]]/}" ]]; then
@@ -185,6 +227,8 @@ if ! guest_long "$APPLY_TIMEOUT" "pacman -Syu --noconfirm" >"$FAIL_LOG" 2>&1; th
     #
     # The cache on a throwaway test machine is worth nothing, so there is no
     # need to work out which file was the bad one.
+    # Before the cache is cleared, while the bad file is still there to look at.
+    capture_corrupt_evidence "$FAIL_LOG"
     say "the update failed; letting the guest settle, then clearing the cache and trying once more"
     printf '\n--- retrying with a cleared package cache ---\n' >>"$FAIL_LOG"
     if ! settle_guest_pacman; then
