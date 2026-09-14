@@ -367,15 +367,18 @@ docker run --rm \
             # kernel takes hours to rebuild, so it is re-signed rather than
             # remade -- signatures are detached files, which is what makes that
             # possible.
+            # No single quotes anywhere below: this whole block runs inside a
+            # single-quoted bash -c string, so one of them ends the string and
+            # hands the remainder to the outer shell. That is what "line 117:
+            # dest: unbound variable" was -- a quoting error reported as a
+            # missing variable, at a line number in the wrong file.
             _base=$(basename "$pkg")
-            if ! su builder -c "GNUPGHOME=/home/builder/.gnupg gpg --verify \
-                    '$dest/$_base.sig' '$dest/$_base'" >/dev/null 2>&1; then
+            _tgt="$dest/$_base"
+            if ! su builder -c "GNUPGHOME=/home/builder/.gnupg gpg --verify $_tgt.sig $_tgt" >/dev/null 2>&1; then
                 echo "   re-signing $_base with $SIGNER"
-                rm -f "$dest/$_base.sig"
-                chown builder "$dest/$_base"
-                su builder -c "GNUPGHOME=/home/builder/.gnupg gpg --batch --yes \
-                    --detach-sign --local-user $SIGNER \
-                    -o '$dest/$_base.sig' '$dest/$_base'"
+                rm -f "$_tgt.sig"
+                chown builder "$_tgt"
+                su builder -c "GNUPGHOME=/home/builder/.gnupg gpg --batch --yes --detach-sign --local-user $SIGNER -o $_tgt.sig $_tgt"
             fi
         # $REUSE holds AUR packages carried over from a previous run under
         # --skip-aur; without it here the repo would be published with our
