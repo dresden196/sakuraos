@@ -98,39 +98,42 @@ KCM.SimpleKCM {
             text: i18n("The AUR is build scripts written by other users. Nobody reviews them before publication.")
         }
 
-        // The review flow and the campaign scanner are designed but not
-        // built. They stay visible, because hiding planned work makes the
-        // roadmap invisible, but they are switched off and labelled -- a
-        // checkbox headed "Security scanning" that scans nothing is worse
-        // than no checkbox at all, and the note under the old one warned
-        // against exactly the complacency the control itself was creating.
+        // Both of these were built after this screen was written, and the
+        // screen went on saying they were not: the store has shown the build
+        // script and recorded what was accepted for a while now, and the
+        // campaign scanner ships as a package with a hook and a timer. A
+        // settings page that reports working features as missing is worse
+        // than one that is merely out of date -- it teaches people not to
+        // believe it, including about the things it says are switched on.
         QQC2.CheckBox {
             Kirigami.FormData.label: i18n("Before installing:")
             text: i18n("Review packages before they build")
-            enabled: false
-            checked: false
+            enabled: cfg.aurEnabled
+            checked: cfg.aurReview
+            onToggled: cfg.aurReview = checked
         }
 
         QQC2.Label {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            text: i18n("Not built yet. Until it is, the store will not install from the AUR at all. It refuses rather than building an unreviewed script without showing it to you first. AUR packages are searchable, so you can see what exists.")
+            text: i18n("The store shows you the build script before it builds anything, and shows what changed since the last time you accepted one. Turning this off builds AUR packages without asking, which is what an unattended AUR helper does.")
         }
 
         QQC2.CheckBox {
             id: campaignScan
             Kirigami.FormData.label: i18n("Security scanning:")
             text: i18n("Check for known compromised packages")
-            enabled: false
-            checked: false
+            enabled: cfg.aurEnabled
+            checked: cfg.aurCampaignScanning
+            onToggled: cfg.aurCampaignScanning = checked
         }
 
         QQC2.Label {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            text: i18n("Not built yet. When it exists it will compare what you have installed against published attack campaigns. It still will not detect an attack nobody has reported, so it will not be a substitute for reading what you install.")
+            text: i18n("Compares what you have installed against published attack campaigns, after every transaction and once a day. It cannot detect an attack nobody has reported yet, so it is not a substitute for reading what you install.")
         }
 
         QQC2.ComboBox {
@@ -271,23 +274,23 @@ KCM.SimpleKCM {
             text: i18n("A snapshot is taken before every update. If one causes a problem, you can go back to the previous state from the boot menu.")
         }
 
-        // The canary fleet does not exist yet. Nothing holds an update back
-        // for want of evidence, so this switch would describe infrastructure
-        // rather than control it. Visible because it is genuinely planned;
-        // off because the alternative is a promise about updates that is not
-        // kept.
+        // The canary exists now: it installs a machine from scratch every
+        // night, applies the day's updates, restarts it and re-checks it, and
+        // publishes what failed. sakura-update reads that list and holds those
+        // packages back, so this switch controls something real -- it was
+        // written when it did not, and stayed that way after it did.
         QQC2.CheckBox {
             Kirigami.FormData.label: i18n("Only install:")
             text: i18n("Updates that have been tested first")
-            enabled: false
-            checked: false
+            checked: cfg.updatesRequireCanary
+            onToggled: cfg.updatesRequireCanary = checked
         }
 
         QQC2.Label {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            text: i18n("Not built yet. When it is, SakuraOS will install and restart each update on its own machines before offering it to yours, and hold back anything that fails. Today an update is held back only when Arch publishes a notice saying it needs a manual step.")
+            text: i18n("Every night a machine is installed from scratch, the day's updates are applied to it and it is restarted and checked. Anything that fails is held back from your machine until it is fixed, as is anything Arch publishes a manual step for. Turning this off installs updates as soon as they are published.")
         }
 
         QQC2.TextField {
