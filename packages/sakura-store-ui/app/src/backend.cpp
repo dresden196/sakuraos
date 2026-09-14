@@ -16,7 +16,29 @@
 #include <unistd.h>
 
 namespace {
-constexpr auto ENGINE = "/usr/bin/sakura-store";
+// Overridable so the queue can be exercised against a stub engine that emits
+// scripted progress. The queue's whole job is deciding what may run beside what
+// and what must wait, and that is not observable by installing one package by
+// hand -- it needs several transactions, with known timing, run repeatedly.
+// Nothing in a package ever sets this; the default is the real engine.
+// A function holding a QString, not a const char* taken from a temporary.
+//
+// The first version of this was
+//     const auto ENGINE = ... ? qgetenv(...).constData() : "/usr/bin/...";
+// which is a dangling pointer: qgetenv returns a QByteArray by value, the
+// temporary dies at the end of the expression, and ENGINE is left pointing at
+// freed memory. Every QProcess::start then failed to launch, every job failed,
+// and because failed jobs stay in the queue on purpose the whole thing looked
+// like a queue that never drained. Nine tests caught it at once, which is
+// precisely what they were written for.
+static QString enginePath()
+{
+    static const QString path =
+        qEnvironmentVariableIsSet("SAKURA_STORE_ENGINE")
+            ? QString::fromLocal8Bit(qgetenv("SAKURA_STORE_ENGINE"))
+            : QStringLiteral("/usr/bin/sakura-store");
+    return path;
+}
 
 QVariantMap toMap(const QJsonObject &o)
 {
@@ -31,7 +53,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     // fault the category list was deliberately built to avoid.
     {
         QProcess p;
-        p.start(QString::fromLatin1(ENGINE),
+        p.start(enginePath(),
                 {QStringLiteral("sources"), QStringLiteral("--json")});
         if (p.waitForFinished(6000)) {
             const QJsonArray rows =
@@ -46,7 +68,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     // that it applies to Flatpak and the repositories but not to the AUR.
     {
         QProcess p;
-        p.start(QString::fromLatin1(ENGINE),
+        p.start(enginePath(),
                 {QStringLiteral("categories"), QStringLiteral("--json")});
         if (p.waitForFinished(4000)) {
             const QJsonArray rows =
@@ -61,7 +83,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
 QProcess *Backend::run(const QStringList &args)
 {
     auto *p = new QProcess(this);
-    p->start(QString::fromLatin1(ENGINE), args);
+    p->start(enginePath(), args);
     return p;
 }
 
@@ -182,87 +204,25 @@ void Backend::checkUpdates()
 
 void Backend::applyUpdates(const QString &id, const QString &source)
 {
-    if (m_busy) {
-        return;
-    }
-    m_busy = true;
-    m_error.clear();
-    m_errorDetail.clear();
-    m_percent = 0;
-    m_bytes = m_total = 0;
-    m_count = m_countTotal = 0;
-    m_stage = QStringLiteral("resolving");
-    Q_EMIT progressChanged();
-
-    QStringList args{QStringLiteral("update")};
+    Job j;
+    // An update of everything has no id of its own, so it gets a stable one:
+    // two "update everything" presses are one job, not two, and the queue can
+    // find it again like any other.
+    j.id = id.isEmpty() ? QStringLiteral("*") : id;
+    j.source = source;
+    j.kind = QStringLiteral("update");
+    j.stage = QStringLiteral("queued");
+    j.name = id.isEmpty() ? tr("All updates") : id;
+    j.args = QStringList{QStringLiteral("update")};
     if (!id.isEmpty()) {
-        args << QStringLiteral("--id") << id;
+        j.args << QStringLiteral("--id") << id;
     }
     if (!source.isEmpty()) {
-        args << QStringLiteral("--source") << source;
+        j.args << QStringLiteral("--source") << source;
     }
-
-    auto *p = run(args);
-    p->setProcessChannelMode(QProcess::MergedChannels);
-    connect(p, &QProcess::readyReadStandardOutput, this, [this, p] {
-        while (p->canReadLine()) {
-            const QJsonObject o =
-                QJsonDocument::fromJson(p->readLine()).object();
-            if (o.isEmpty()) {
-                continue;
-            }
-            const QString stage = o[QStringLiteral("stage")].toString();
-            if (stage == QLatin1String("failed")) {
-                m_error = o[QStringLiteral("error")].toString();
-                m_errorDetail = o[QStringLiteral("detail")].toString();
-            } else {
-                m_stage = stage;
-                const QString d = o[QStringLiteral("detail")].toString();
-                if (!d.isEmpty()) {
-                    m_detail = d;
-                }
-                if (o.contains(QStringLiteral("percent"))) {
-                    m_percent = o[QStringLiteral("percent")].toInt();
-                }
-                // Sizes only arrive while something is being fetched. Cleared
-                // on any other stage so that "48 MB of 96 MB" does not sit
-                // under a progress bar that has moved on to installing.
-                if (o.contains(QStringLiteral("total"))) {
-                    m_bytes = static_cast<qint64>(
-                        o[QStringLiteral("bytes")].toDouble());
-                    m_total = static_cast<qint64>(
-                        o[QStringLiteral("total")].toDouble());
-                }
-                if (o.contains(QStringLiteral("count_total"))) {
-                    m_count = o[QStringLiteral("count")].toInt();
-                    m_countTotal = o[QStringLiteral("count_total")].toInt();
-                }
-                if (stage != QLatin1String("downloading")
-                        && stage != QLatin1String("installing")
-                        && stage != QLatin1String("removing")) {
-                    m_bytes = m_total = 0;
-                    m_count = m_countTotal = 0;
-                }
-            }
-            Q_EMIT progressChanged();
-        }
-    });
-    connect(p, &QProcess::finished, this,
-            [this, p](int code, QProcess::ExitStatus status) {
-        const QString trailing = QString::fromUtf8(p->readAll()).trimmed();
-        p->deleteLater();
-        m_busy = false;
-        if (m_error.isEmpty() && (code != 0 || status != QProcess::NormalExit)) {
-            m_error = trailing.isEmpty() ? tr("Some updates did not finish.")
-                                         : trailing.section(QLatin1Char('\n'), -1);
-        }
-        m_stage = m_error.isEmpty() ? QStringLiteral("done")
-                                    : QStringLiteral("failed");
-        Q_EMIT progressChanged();
-        // The list has changed either way, and what is left is what failed.
-        checkUpdates();
-        loadInstalled();
-    });
+    m_error.clear();
+    m_errorDetail.clear();
+    enqueue(j);
 }
 
 void Backend::loadInstalled()
@@ -457,148 +417,375 @@ void Backend::submitReview(const QString &id, int rating,
     });
 }
 
-void Backend::install(const QString &id, const QString &source)
+// ---------------------------------------------------------------- the queue
+
+QString Backend::laneOf(const QString &source)
 {
-    if (m_busy) {
+    // What actually serialises, rather than what the user picked. pacman takes
+    // an exclusive lock on its database, and an AUR build ends in pacman -U, so
+    // those two share a lane and everything else gets one of its own. Two
+    // flatpaks in a row is a queue; a flatpak beside a pacman install is two
+    // things happening at once, which is the whole point.
+    if (source.isEmpty() || source == QLatin1String("pacman")
+            || source == QLatin1String("aur")) {
+        return QStringLiteral("pacman");
+    }
+    return source;
+}
+
+int Backend::indexOfJob(const QString &id, const QString &source) const
+{
+    for (int i = 0; i < m_jobs.size(); ++i) {
+        if (m_jobs.at(i).id == id && m_jobs.at(i).source == source) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+QVariantMap Backend::jobToMap(const Job &j) const
+{
+    QVariantMap m;
+    m.insert(QStringLiteral("id"), j.id);
+    m.insert(QStringLiteral("source"), j.source);
+    m.insert(QStringLiteral("name"), j.name.isEmpty() ? j.id : j.name);
+    m.insert(QStringLiteral("kind"), j.kind);
+    m.insert(QStringLiteral("stage"), j.stage);
+    m.insert(QStringLiteral("detail"), j.detail);
+    m.insert(QStringLiteral("error"), j.error);
+    m.insert(QStringLiteral("errorDetail"), j.errorDetail);
+    m.insert(QStringLiteral("percent"), j.percent);
+    m.insert(QStringLiteral("running"), j.proc != nullptr);
+    m.insert(QStringLiteral("queued"),
+             j.proc == nullptr && j.stage == QLatin1String("queued"));
+    m.insert(QStringLiteral("failed"), j.stage == QLatin1String("failed"));
+    m.insert(QStringLiteral("progress"), formatProgress(j.bytes, j.total,
+                                                        j.count, j.countTotal,
+                                                        j.stage));
+    return m;
+}
+
+QVariantList Backend::jobs() const
+{
+    QVariantList out;
+    out.reserve(m_jobs.size());
+    for (const Job &j : m_jobs) {
+        out.append(jobToMap(j));
+    }
+    return out;
+}
+
+QVariantMap Backend::jobFor(const QString &id, const QString &source) const
+{
+    const int k = indexOfJob(id, source);
+    return k < 0 ? QVariantMap() : jobToMap(m_jobs.at(k));
+}
+
+void Backend::cancelJob(const QString &id, const QString &source)
+{
+    const int k = indexOfJob(id, source);
+    if (k < 0 || m_jobs.at(k).proc) {
+        // Running jobs are left alone deliberately. Killing pacman part way
+        // through a transaction leaves a half-installed package and a stale
+        // lock, and the person who pressed cancel would then own a problem
+        // considerably larger than the one they were trying to avoid.
         return;
     }
-    m_busy = true;
-    m_busyId = id;
-    // The display name if the page knows one, so the notification can say
-    // "Sober has been installed" rather than an application id.
-    m_busyName = m_app.value(QStringLiteral("name")).toString();
-    if (m_busyName.isEmpty()) {
-        m_busyName = id;
+    m_jobs.remove(k);
+    Q_EMIT jobsChanged();
+    syncCurrentFromJobs();
+}
+
+void Backend::dismissJob(const QString &id, const QString &source)
+{
+    const int k = indexOfJob(id, source);
+    if (k < 0 || m_jobs.at(k).proc) {
+        return;
     }
+    m_jobs.remove(k);
+    Q_EMIT jobsChanged();
+    syncCurrentFromJobs();
+}
+
+void Backend::enqueue(const Job &job)
+{
+    // Asking twice for the same thing is a double click, not a second install.
+    if (indexOfJob(job.id, job.source) >= 0) {
+        return;
+    }
+    m_jobs.append(job);
+    Q_EMIT jobsChanged();
+    pump();
+}
+
+void Backend::pump()
+{
+    QSet<QString> busyLanes;
+    for (const Job &j : m_jobs) {
+        if (j.proc) {
+            busyLanes.insert(laneOf(j.source));
+        }
+    }
+
+    for (int i = 0; i < m_jobs.size(); ++i) {
+        if (m_jobs.at(i).proc
+                || m_jobs.at(i).stage == QLatin1String("failed")
+                || m_jobs.at(i).stage == QLatin1String("done")) {
+            continue;
+        }
+        const QString lane = laneOf(m_jobs.at(i).source);
+        if (busyLanes.contains(lane)) {
+            continue;
+        }
+        busyLanes.insert(lane);
+
+        const QString id = m_jobs.at(i).id;
+        const QString src = m_jobs.at(i).source;
+        auto *proc = new QProcess(this);
+        proc->setProcessChannelMode(QProcess::MergedChannels);
+        m_jobs[i].proc = proc;
+        m_jobs[i].stage = QStringLiteral("resolving");
+
+        // The job is found again by id rather than captured by index: the
+        // vector moves as jobs finish and are removed, and an index captured
+        // here would be pointing at somebody else's work by the time a line
+        // arrives.
+        connect(proc, &QProcess::readyReadStandardOutput, this,
+                [this, proc, id, src] {
+            while (proc->canReadLine()) {
+                const QJsonObject o =
+                    QJsonDocument::fromJson(proc->readLine()).object();
+                if (o.isEmpty()) {
+                    continue;
+                }
+                const int k = indexOfJob(id, src);
+                if (k < 0) {
+                    continue;
+                }
+                onJobLine(k, o);
+            }
+        });
+        connect(proc, &QProcess::finished, this,
+                [this, proc, id, src](int code, QProcess::ExitStatus status) {
+            const QString trailing = QString::fromUtf8(proc->readAll()).trimmed();
+            proc->deleteLater();
+            const int k = indexOfJob(id, src);
+            if (k >= 0) {
+                m_jobs[k].proc = nullptr;
+                finishJob(k, code, status != QProcess::NormalExit, trailing);
+            }
+            // Whatever was waiting on this lane can start now.
+            pump();
+        });
+        proc->start(enginePath(), m_jobs.at(i).args);
+    }
+
+    Q_EMIT jobsChanged();
+    syncCurrentFromJobs();
+}
+
+void Backend::onJobLine(int index, const QJsonObject &o)
+{
+    Job &j = m_jobs[index];
+    const QString stage = o[QStringLiteral("stage")].toString();
+    if (stage == QLatin1String("failed")) {
+        j.error = o[QStringLiteral("error")].toString();
+        j.errorDetail = o[QStringLiteral("detail")].toString();
+    } else {
+        j.stage = stage;
+        if (o.contains(QStringLiteral("percent"))) {
+            j.percent = o[QStringLiteral("percent")].toInt();
+        }
+        if (o.contains(QStringLiteral("total"))) {
+            j.bytes = static_cast<qint64>(o[QStringLiteral("bytes")].toDouble());
+            j.total = static_cast<qint64>(o[QStringLiteral("total")].toDouble());
+        }
+        if (o.contains(QStringLiteral("count_total"))) {
+            j.count = o[QStringLiteral("count")].toInt();
+            j.countTotal = o[QStringLiteral("count_total")].toInt();
+        }
+        // Sizes belong to fetching. Left standing they sit under a bar that has
+        // moved on to installing, describing a download that finished.
+        if (stage != QLatin1String("downloading")
+                && stage != QLatin1String("installing")
+                && stage != QLatin1String("removing")) {
+            j.bytes = j.total = 0;
+            j.count = j.countTotal = 0;
+        }
+        const QString d = o[QStringLiteral("detail")].toString();
+        if (!d.isEmpty()) {
+            j.detail = d;
+        }
+    }
+    Q_EMIT jobsChanged();
+    syncCurrentFromJobs();
+}
+
+void Backend::finishJob(int index, int code, bool crashed, const QString &trailing)
+{
+    Job j = m_jobs.at(index);
+
+    if (j.error.isEmpty() && (code != 0 || crashed)) {
+        // A process that failed must never render as done. It did exactly
+        // that once: the engine died with a PermissionError, emitted no failed
+        // event because a traceback is not JSON, and the store showed a
+        // completed install that had not happened.
+        const QString last = trailing.section(QLatin1Char('\n'), -1).trimmed();
+        j.error = last.isEmpty()
+            ? tr("The job did not finish (exit code %1).").arg(code)
+            : last;
+    }
+
+    if (j.error.isEmpty()) {
+        j.stage = QStringLiteral("done");
+        j.percent = 100;
+        if (j.kind == QLatin1String("remove")) {
+            notify(tr("%1 has been removed").arg(j.name));
+        } else if (j.kind == QLatin1String("update")) {
+            notify(tr("Updates have been installed"));
+        } else {
+            notify(tr("%1 has been installed").arg(j.name));
+        }
+    } else {
+        j.stage = QStringLiteral("failed");
+    }
+    m_jobs[index] = j;
+
+    if (j.error.isEmpty()) {
+        // Record the outcome now rather than when the lookup returns. The app
+        // page re-query takes several seconds, and until it came back the page
+        // still said "Install" -- immediately after saying the install had
+        // finished.
+        if (j.kind == QLatin1String("install")) {
+            markInstalled(j.id, j.source, true);
+        } else if (j.kind == QLatin1String("remove")) {
+            markInstalled(j.id, j.source, false);
+            Q_EMIT removed(j.id, j.source);
+        }
+        // Succeeded jobs leave the queue; there is nothing further to say
+        // about them and a list of completed work is not what the panel is
+        // for. Failures stay until dismissed, because a failure nobody sees
+        // is the same as one that did not happen.
+        m_jobs.remove(index);
+    }
+
+    Q_EMIT jobsChanged();
+    syncCurrentFromJobs();
+
+    if (j.error.isEmpty()) {
+        loadInstalled();
+        const QString shown = m_app.value(QStringLiteral("id")).toString();
+        if (!shown.isEmpty()) {
+            refreshApp(shown);
+        }
+    }
+}
+
+void Backend::markInstalled(const QString &id, const QString &source, bool state)
+{
+    if (m_app.isEmpty()) {
+        return;
+    }
+    // The entry that was actually acted on, not the first one on the page.
+    // The option list is the primary followed by also_from, and only the
+    // primary reads its flag from the top level. Marking the primary for an
+    // install that came from the repositories flagged the wrong source -- and
+    // since the picker selects the first installed option, it also quietly
+    // moved the page to Flatpak.
+    if (m_app.value(QStringLiteral("id")).toString() == id
+            && m_app.value(QStringLiteral("source")).toString() == source) {
+        m_app[QStringLiteral("installed")] = state;
+        Q_EMIT appChanged();
+        return;
+    }
+    QVariantList alts = m_app.value(QStringLiteral("also_from")).toList();
+    for (int i = 0; i < alts.size(); ++i) {
+        QVariantMap e = alts.at(i).toMap();
+        if (e.value(QStringLiteral("id")).toString() == id
+                && e.value(QStringLiteral("source")).toString() == source) {
+            e[QStringLiteral("installed")] = state;
+            alts[i] = e;
+            m_app[QStringLiteral("also_from")] = alts;
+            Q_EMIT appChanged();
+            return;
+        }
+    }
+}
+
+void Backend::syncCurrentFromJobs()
+{
+    // The single set of progress fields still exists, and still means what it
+    // always did -- except that "the transaction" is now "the job belonging to
+    // the application on screen". A transaction for something else no longer
+    // drives this page's bar, and no longer greys out its button.
+    const QString appId = m_app.value(QStringLiteral("id")).toString();
+    int k = -1;
+    if (!appId.isEmpty()) {
+        for (int i = 0; i < m_jobs.size(); ++i) {
+            if (m_jobs.at(i).id == appId) {
+                k = i;
+                break;
+            }
+        }
+        if (k < 0) {
+            const QVariantList alts =
+                m_app.value(QStringLiteral("also_from")).toList();
+            for (const QVariant &v : alts) {
+                const QVariantMap e = v.toMap();
+                const int c = indexOfJob(e.value(QStringLiteral("id")).toString(),
+                                         e.value(QStringLiteral("source")).toString());
+                if (c >= 0) {
+                    k = c;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (k < 0) {
+        // Nothing running for this page. The last stage is left standing on
+        // purpose: a finished install should keep saying so rather than
+        // blanking the moment its job leaves the queue.
+        m_busy = false;
+        m_busyId.clear();
+    } else {
+        const Job &j = m_jobs.at(k);
+        m_busy = j.stage != QLatin1String("failed");
+        m_busyId = j.id;
+        m_stage = j.stage;
+        m_percent = j.percent;
+        m_detail = j.detail;
+        m_bytes = j.bytes;
+        m_total = j.total;
+        m_count = j.count;
+        m_countTotal = j.countTotal;
+        m_error = j.error;
+        m_errorDetail = j.errorDetail;
+    }
+    Q_EMIT progressChanged();
+}
+
+void Backend::install(const QString &id, const QString &source)
+{
+    Job j;
+    j.id = id;
+    j.source = source;
+    j.kind = QStringLiteral("install");
+    j.stage = QStringLiteral("queued");
+    // The display name if the page knows one, so a notification can say
+    // "Sober has been installed" rather than an application id.
+    const QString shownId = m_app.value(QStringLiteral("id")).toString();
+    j.name = (shownId == id)
+        ? m_app.value(QStringLiteral("name")).toString()
+        : QString();
+    if (j.name.isEmpty()) {
+        j.name = id;
+    }
+    j.args = QStringList{QStringLiteral("install"), id,
+                         QStringLiteral("--source"), source};
     m_error.clear();
     m_errorDetail.clear();
-    m_percent = 0;
-    m_bytes = m_total = 0;
-    m_stage = QStringLiteral("resolving");
-    m_detail.clear();
-    Q_EMIT progressChanged();
-
-    auto *p = new QProcess(this);
-    p->setProcessChannelMode(QProcess::MergedChannels);
-
-    connect(p, &QProcess::readyReadStandardOutput, this, [this, p] {
-        // The engine emits one JSON object per line so progress can be read
-        // as it happens rather than after the process ends.
-        while (p->canReadLine()) {
-            const QJsonObject o =
-                QJsonDocument::fromJson(p->readLine()).object();
-            if (o.isEmpty()) {
-                continue;
-            }
-            const QString stage = o[QStringLiteral("stage")].toString();
-            if (stage == QLatin1String("failed")) {
-                m_error = o[QStringLiteral("error")].toString();
-                m_errorDetail = o[QStringLiteral("detail")].toString();
-            } else {
-                m_stage = stage;
-                if (o.contains(QStringLiteral("percent"))) {
-                    m_percent = o[QStringLiteral("percent")].toInt();
-                }
-                // Sizes only arrive while something is being fetched. Cleared
-                // on any other stage so that "48 MB of 96 MB" does not sit
-                // under a progress bar that has moved on to installing.
-                if (o.contains(QStringLiteral("total"))) {
-                    m_bytes = static_cast<qint64>(
-                        o[QStringLiteral("bytes")].toDouble());
-                    m_total = static_cast<qint64>(
-                        o[QStringLiteral("total")].toDouble());
-                }
-                if (o.contains(QStringLiteral("count_total"))) {
-                    m_count = o[QStringLiteral("count")].toInt();
-                    m_countTotal = o[QStringLiteral("count_total")].toInt();
-                }
-                if (stage != QLatin1String("downloading")
-                        && stage != QLatin1String("installing")
-                        && stage != QLatin1String("removing")) {
-                    m_bytes = m_total = 0;
-                    m_count = m_countTotal = 0;
-                }
-                const QString d = o[QStringLiteral("detail")].toString();
-                if (!d.isEmpty()) {
-                    m_detail = d;
-                }
-            }
-            Q_EMIT progressChanged();
-        }
-    });
-    connect(p, &QProcess::finished, this,
-            [this, p, id, source](int code, QProcess::ExitStatus status) {
-        // Anything the engine printed that was not a progress line. A crash
-        // arrives as a traceback, which is not JSON, so nothing above sees it.
-        const QString trailing = QString::fromUtf8(p->readAll()).trimmed();
-        p->deleteLater();
-        m_busy = false;
-        if (m_error.isEmpty()
-            && (code != 0 || status != QProcess::NormalExit)) {
-            // A process that failed must never render as "done". It did
-            // exactly that: the engine died with a PermissionError, emitted no
-            // failed event because the traceback was not JSON, and the store
-            // showed a completed install that had not happened.
-            const QString last = trailing.section(QLatin1Char('\n'), -1).trimmed();
-            m_error = last.isEmpty()
-                ? tr("The install did not finish (exit code %1).").arg(code)
-                : last;
-        }
-        if (m_error.isEmpty()) {
-            m_stage = QStringLiteral("done");
-            m_percent = 100;
-            notify(tr("%1 has been installed").arg(m_busyName));
-        } else {
-            m_stage = QStringLiteral("failed");
-        }
-        m_busyId.clear();
-        // Say it is installed now, not when the lookup comes back.
-        //
-        // refreshApp re-runs the same app-page query, which takes several
-        // seconds. Until it returned, the page still held the data from
-        // before the install -- installed: false -- so the button came back
-        // reading "Install" for the whole of that wait, immediately after
-        // saying the install had finished. The transaction succeeded, so
-        // recording that is not a guess; the refresh then confirms it.
-        //
-        // The source that was installed, not the first one on the page. The
-        // page's option list is the primary entry followed by also_from, and
-        // only the primary reads its flag from here. Marking the primary for
-        // an install that came from the repositories flagged the wrong
-        // source -- and since preferredIndex selects the first installed
-        // option, it also quietly moved the picker to Flatpak.
-        if (m_error.isEmpty() && !m_app.isEmpty()) {
-            if (m_app.value(QStringLiteral("id")).toString() == id
-                    && m_app.value(QStringLiteral("source")).toString() == source) {
-                m_app[QStringLiteral("installed")] = true;
-            } else {
-                QVariantList alts =
-                    m_app.value(QStringLiteral("also_from")).toList();
-                for (int i = 0; i < alts.size(); ++i) {
-                    QVariantMap e = alts.at(i).toMap();
-                    if (e.value(QStringLiteral("id")).toString() == id
-                            && e.value(QStringLiteral("source")).toString()
-                                   == source) {
-                        e[QStringLiteral("installed")] = true;
-                        alts[i] = e;
-                        m_app[QStringLiteral("also_from")] = alts;
-                        break;
-                    }
-                }
-            }
-            Q_EMIT appChanged();
-        }
-        Q_EMIT progressChanged();
-        // Re-open the app, not the package. Installing GIMP from the
-        // repositories passes "gimp", and asking the app page to load "gimp"
-        // finds nothing on Flathub -- so a successful install left the page
-        // blank. The canonical id is whatever the page was already showing.
-        const QString shown = m_app.value(QStringLiteral("id")).toString();
-        refreshApp(shown.isEmpty() ? id : shown);
-    });
-
-    p->start(QString::fromLatin1(ENGINE),
-             {QStringLiteral("install"), id, QStringLiteral("--source"), source});
+    enqueue(j);
 }
 
 void Backend::planRemoval(const QString &id, const QString &source)
@@ -636,93 +823,47 @@ void Backend::clearRemovalPlan()
 
 void Backend::remove(const QString &id, const QString &source, bool deleteData)
 {
-    if (m_busy) {
-        return;
+    Job j;
+    j.id = id;
+    j.source = source;
+    j.kind = QStringLiteral("remove");
+    j.stage = QStringLiteral("queued");
+    j.deleteData = deleteData;
+    const QString shownId = m_app.value(QStringLiteral("id")).toString();
+    j.name = (shownId == id)
+        ? m_app.value(QStringLiteral("name")).toString()
+        : QString();
+    if (j.name.isEmpty()) {
+        j.name = id;
     }
-    m_busy = true;
+    j.args = QStringList{QStringLiteral("remove"), id,
+                         QStringLiteral("--source"), source};
+    if (deleteData) {
+        j.args << QStringLiteral("--delete-data");
+    }
     m_error.clear();
     m_errorDetail.clear();
-    m_stage = QStringLiteral("removing");
-    m_detail = tr("removing");
-    Q_EMIT progressChanged();
-    clearRemovalPlan();
-
-    QStringList args{QStringLiteral("remove"), id,
-                     QStringLiteral("--source"), source};
-    if (deleteData) {
-        args << QStringLiteral("--delete-data");
-    }
-    auto *p = run(args);
-    connect(p, &QProcess::finished, this, [this, p, id, source] {
-        p->deleteLater();
-        m_busy = false;
-        m_stage = QStringLiteral("done");
-        Q_EMIT progressChanged();
-        // The view decides what to refresh. Re-opening the app page here was
-        // wrong for a removal started from the Installed list, and impossible
-        // for a repository-only or AUR application, which has no Flathub
-        // entry for that page to load.
-        const QString shown = m_app.value(QStringLiteral("id")).toString();
-        Q_EMIT removed(shown.isEmpty() ? id : shown, source);
-    });
+    enqueue(j);
 }
 
 void Backend::installLocalAppImage(const QString &path)
 {
-    if (m_busy) {
-        return;
-    }
-    m_busy = true;
+    // Through the queue like everything else. Left on the old single-flag path
+    // it fought the queue for the same variable: any job event re-derived
+    // m_busy from the job list, which knew nothing about this install, so the
+    // flag flicked off under a transaction that was still running.
+    Job j;
+    j.id = QFileInfo(path).fileName();
+    j.source = QStringLiteral("appimage");
+    j.kind = QStringLiteral("install");
+    j.stage = QStringLiteral("queued");
+    j.name = j.id;
+    j.args = QStringList{QStringLiteral("install"), QStringLiteral("--source"),
+                         QStringLiteral("appimage"), QStringLiteral("--file"),
+                         path};
     m_error.clear();
     m_errorDetail.clear();
-    m_percent = 0;
-    m_bytes = m_total = 0;
-    m_stage = QStringLiteral("resolving");
-    m_detail.clear();
-    Q_EMIT progressChanged();
-
-    auto *p = new QProcess(this);
-    p->setProcessChannelMode(QProcess::MergedChannels);
-    connect(p, &QProcess::readyReadStandardOutput, this, [this, p] {
-        while (p->canReadLine()) {
-            const QJsonObject o =
-                QJsonDocument::fromJson(p->readLine()).object();
-            if (o.isEmpty()) {
-                continue;
-            }
-            const QString stage = o[QStringLiteral("stage")].toString();
-            if (stage == QLatin1String("failed")) {
-                m_error = o[QStringLiteral("error")].toString();
-                m_errorDetail = o[QStringLiteral("detail")].toString();
-            } else {
-                m_stage = stage;
-                const QString d = o[QStringLiteral("detail")].toString();
-                if (!d.isEmpty()) {
-                    m_detail = d;
-                }
-            }
-            Q_EMIT progressChanged();
-        }
-    });
-    connect(p, &QProcess::finished, this,
-            [this, p](int code, QProcess::ExitStatus status) {
-        const QString trailing = QString::fromUtf8(p->readAll()).trimmed();
-        p->deleteLater();
-        m_busy = false;
-        if (m_error.isEmpty() && (code != 0 || status != QProcess::NormalExit)) {
-            m_error = trailing.isEmpty()
-                ? tr("The AppImage could not be installed.")
-                : trailing.section(QLatin1Char('\n'), -1);
-        }
-        m_stage = m_error.isEmpty() ? QStringLiteral("done")
-                                    : QStringLiteral("failed");
-        m_percent = m_error.isEmpty() ? 100 : 0;
-        Q_EMIT progressChanged();
-        loadInstalled();
-    });
-    p->start(QString::fromLatin1(ENGINE),
-             {QStringLiteral("install"), QStringLiteral("--source"),
-              QStringLiteral("appimage"), QStringLiteral("--file"), path});
+    enqueue(j);
 }
 
 void Backend::clearError()
@@ -762,8 +903,18 @@ void Backend::openPermissions(const QString &id)
 // SakuraOS account. The store shows who you are on this machine so that "your
 // apps" means something concrete; it does not sign you in to anything.
 
-QString Backend::downloadProgress() const
+QString Backend::formatProgress(qint64 bytesIn, qint64 totalIn,
+                                int countIn, int countTotalIn,
+                                const QString &stageIn) const
 {
+    // Same words for one job as for the app on screen: the queue panel
+    // and the app page were formatting the same numbers two ways, and the
+    // two drifted the moment either was touched.
+    const qint64 m_bytes = bytesIn;
+    const qint64 m_total = totalIn;
+    const int m_count = countIn;
+    const int m_countTotal = countTotalIn;
+    const QString m_stage = stageIn;
     const bool downloading = m_stage == QLatin1String("downloading");
     const bool installing = m_stage == QLatin1String("installing")
                          || m_stage == QLatin1String("removing");
@@ -812,6 +963,11 @@ QString Backend::downloadProgress() const
     return QString();
 }
 
+QString Backend::downloadProgress() const
+{
+    return formatProgress(m_bytes, m_total, m_count, m_countTotal, m_stage);
+}
+
 QString Backend::userName() const
 {
     const struct passwd *pw = getpwuid(getuid());
@@ -858,15 +1014,19 @@ void Backend::exportAppList(const QString &path)
     if (file.startsWith(QStringLiteral("file://"))) {
         file = QUrl(file).toLocalFile();
     }
+    // Not m_busy: that is derived from the job queue now, so any transaction
+    // event would have re-computed it mid-export and cleared a flag this had
+    // set. Writing a list is not a transaction and does not belong in the
+    // queue either -- it takes no lock and blocks nothing.
     m_stage = QStringLiteral("Writing the list");
-    m_busy = true;
+    m_exporting = true;
     Q_EMIT progressChanged();
 
     auto *p = run({QStringLiteral("export-list"), QStringLiteral("--output"), file});
     connect(p, &QProcess::finished, this, [this, p, file] {
         const QJsonObject o = QJsonDocument::fromJson(p->readAllStandardOutput()).object();
         p->deleteLater();
-        m_busy = false;
+        m_exporting = false;
         m_stage.clear();
         if (o.contains(QStringLiteral("written"))) {
             m_stage = tr("Saved %1 applications to %2")
