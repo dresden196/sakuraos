@@ -138,25 +138,32 @@ KCM.SimpleKCM {
 
         QQC2.ComboBox {
             Kirigami.FormData.label: i18n("Command-line helper:")
-            // Nothing installs or removes a helper in response to this yet,
-            // so it would be a stored string pretending to be an action.
-            enabled: false
+            // This installs and removes now, so it follows the machine rather
+            // than a stored string: the dropdown shows what is actually on the
+            // system, and somebody who removes yay with pacman sees that here.
+            enabled: cfg.aurEnabled && !cfg.aurHelperBusy
             textRole: "label"
             valueRole: "value"
             model: [
-                { label: i18n("yay"),                       value: "yay"  },
+                { label: i18n("yay"),                      value: "yay"  },
+                { label: i18n("paru"),                     value: "paru" },
                 { label: i18n("None, use the store only"), value: "none" },
             ]
             Layout.minimumWidth: Kirigami.Units.gridUnit * 15
-            currentIndex: indexOfValue(cfg.aurHelper)
-            onActivated: cfg.aurHelper = currentValue
+            currentIndex: indexOfValue(cfg.aurHelperInstalled || "none")
+            onActivated: {
+                cfg.aurHelper = currentValue
+                cfg.applyAurHelper(currentValue)
+            }
         }
 
         QQC2.Label {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            text: i18n("Not wired up yet: choosing a helper here does not install or remove one. The AUR is reachable through the store, and on the command line through whatever you install yourself.")
+            text: cfg.aurHelperStatus !== ""
+                ? cfg.aurHelperStatus
+                : i18n("A terminal tool for the AUR. Choosing one installs it and removes the other; both are built and signed by SakuraOS rather than compiled on this machine. The store reaches the AUR without either of them.")
         }
 
         // ---- Windows programs ---------------------------------------------
@@ -176,7 +183,12 @@ KCM.SimpleKCM {
             // a failed one puts the switch back where it was rather than
             // leaving it showing something that is not true.
             onToggled: cfg.setWineEnabled(checked)
-            Component.onCompleted: cfg.refreshWine()
+            Component.onCompleted: {
+                cfg.refreshWine()
+                // The helper dropdown shows what is installed, so it has to
+                // ask before it can show anything.
+                cfg.refreshAurHelper()
+            }
         }
 
         QQC2.Label {

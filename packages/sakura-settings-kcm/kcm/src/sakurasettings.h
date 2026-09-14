@@ -37,6 +37,13 @@ class SakuraSettings : public KQuickConfigModule
     Q_PROPERTY(bool wineEnabled READ wineEnabled NOTIFY wineChanged)
     Q_PROPERTY(bool wineBusy READ wineBusy NOTIFY wineChanged)
     Q_PROPERTY(QString wineStatus READ wineStatus NOTIFY wineChanged)
+
+    // Which helper is actually on the machine, which is not the same question
+    // as which one the setting names: somebody can remove yay with pacman, and
+    // the page should show the machine rather than the preference.
+    Q_PROPERTY(QString aurHelperInstalled READ aurHelperInstalled NOTIFY aurHelperChanged)
+    Q_PROPERTY(bool aurHelperBusy READ aurHelperBusy NOTIFY aurHelperChanged)
+    Q_PROPERTY(QString aurHelperStatus READ aurHelperStatus NOTIFY aurHelperChanged)
     // The Windows programs that have actually been run, each in its own
     // prefix. Read from the same place the guard writes it.
     Q_PROPERTY(QVariantList windowsApps READ windowsApps NOTIFY windowsAppsChanged)
@@ -74,8 +81,14 @@ public:
     bool wineEnabled() const { return m_wineEnabled; }
     bool wineBusy() const { return m_wineBusy; }
     QString wineStatus() const { return m_wineStatus; }
+    QString aurHelperInstalled() const { return m_aurHelperInstalled; }
+    bool aurHelperBusy() const { return m_aurHelperBusy; }
+    QString aurHelperStatus() const { return m_aurHelperStatus; }
     Q_INVOKABLE void setWineEnabled(bool value);
     Q_INVOKABLE void refreshWine();
+    // "none" removes whichever helper is installed and installs nothing.
+    Q_INVOKABLE void applyAurHelper(const QString &name);
+    Q_INVOKABLE void refreshAurHelper();
     QVariantList windowsApps() const { return m_windowsApps; }
     Q_INVOKABLE void refreshWindowsApps();
     Q_INVOKABLE void removeWindowsApp(const QString &slug);
@@ -100,6 +113,7 @@ public:
 Q_SIGNALS:
     void changed();
     void wineChanged();
+    void aurHelperChanged();
     void windowsAppsChanged();
     void saveErrorChanged();
 
@@ -117,6 +131,9 @@ private:
     bool m_wineEnabled = false;
     bool m_wineBusy = false;
     QString m_wineStatus;
+    QString m_aurHelperInstalled;
+    bool m_aurHelperBusy = false;
+    QString m_aurHelperStatus;
     QVariantList m_windowsApps;
     bool m_updatesRequireCanary = true;
     bool m_updatesRequireAC = true;

@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""Install and remove the command-line AUR helper Settings offers.
+
+Three verbs, a fixed set of packages, and nothing that can be pointed at a
+package the caller chose. That is deliberate: this runs as root behind pkexec,
+and a helper that installed whatever it was handed would be a way to install
+anything as root from a settings page.
+
+    sakura-aur-helper status
+    sakura-aur-helper install yay|paru
+    sakura-aur-helper remove  yay|paru
+
+Why this installs from our own repository rather than building from the AUR:
+
+  yay and paru are AUR packages, and installing an AUR package means running a
+  build script nobody has read. The store refuses to do that without showing
+  the script first, which is correct and is a strange thing to demand of a
+  dropdown in a settings page. Both are rebuilt into sakura-core by
+  packages/aur/manifest.txt, so this is an ordinary signed package install --
+  the same upstream PKGBUILD, built once by us instead of separately on every
+  machine, with no compiler toolchain dragged onto the user's system.
+
+Switching helpers removes the previous one. Leaving both installed is how a
+machine ends up with two tools that do the same job and disagree about which
+one owns the build cache.
+"""
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+
+HELPERS = ("yay", "paru")
+
+
+def run(args: list[str]) -> int:
+    return subprocess.run(args).returncode
+
+
+def installed(name: str) -> bool:
+    return subprocess.run(["pacman", "-Q", name],
+                          stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode == 0
+
+
+def status() -> int:
+    # What is true now, not what was asked for last. The setting and the
+    # machine can disagree -- somebody can remove yay with pacman -- and the
+    # page should show the machine.
+    print(json.dumps({
+        "installed": [h for h in HELPERS if installed(h)],
+        "available": list(HELPERS),
+    }))
+    return 0
+
+
+def install(name: str) -> int:
+    if name not in HELPERS:
+        print(f"unknown helper: {name}", file=sys.stderr)
+        return 2
+    if not installed(name):
+        rc = run(["pacman", "-S", "--needed", "--noconfirm", name])
+        if rc != 0:
+            print(f"{name} could not be installed", file=sys.stderr)
+            return rc
+    # Only after the new one is in place. Removing first would leave a machine
+    # with no helper at all if the install then failed.
+    for other in HELPERS:
+        if other != name and installed(other):
+            run(["pacman", "-Rns", "--noconfirm", other])
+    return 0
+
+
+def remove(name: str) -> int:
+    if name not in HELPERS:
+        print(f"unknown helper: {name}", file=sys.stderr)
+        return 2
+    if not installed(name):
+        return 0
+    return run(["pacman", "-Rns", "--noconfirm", name])
+
+
+def main() -> int:
+    if len(sys.argv) < 2:
+        return 2
+    verb = sys.argv[1]
+    if verb == "status":
+        return status()
+    if verb in ("install", "remove"):
+        if len(sys.argv) < 3:
+            return 2
+        return install(sys.argv[2]) if verb == "install" else remove(sys.argv[2])
+    print(f"unknown verb: {verb}", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
