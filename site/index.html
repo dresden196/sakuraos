@@ -233,6 +233,22 @@ td:first-child{font-weight:500; white-space:nowrap}
 /* Icon-only, so the glyph is the whole affordance: square padding keeps the
    hit area round rather than a wide pill around a small mark. */
 .topbar nav a.icon{padding:.4rem}
+/* The one action among a row of destinations, so it is filled where the others
+   are not. Same pill, same metrics -- a different button language here would
+   make the bar look assembled from two designs. */
+.topbar nav a.get{
+  background:var(--accent); color:#2a1119; font-weight:600;
+  border-color:transparent;
+}
+.topbar nav a.get:hover{background:var(--accent); border-color:transparent; filter:brightness(1.06)}
+.topbar nav a.get svg{width:18px; height:18px}
+/* Below this the bar has to hold a brand, three destinations and an action.
+   The word goes, the arrow stays: the affordance survives, the row stops
+   wrapping onto two lines. */
+@media (max-width:560px){
+  .topbar nav a.get .label{display:none}
+  .topbar nav a.get{padding:.45rem .6rem}
+}
 
 /* Positioned against .screen, which has an aspect-ratio and therefore a real
    height. Sizing against .inner does not work: that box is sized by its
@@ -344,6 +360,10 @@ code{
       <span>SakuraOS</span>
     </a>
     <nav>
+      <a class="get" href="https://repo.sakuraos.org/iso/sakura-latest-x86_64.iso">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+        <span class="label">Download</span>
+      </a>
       <a href="https://blog.sakuraos.org/">Blog</a>
       <a href="https://wiki.sakuraos.org/">Wiki</a>
       <!-- Icons inline rather than fetched: the page is served with a strict
@@ -800,8 +820,41 @@ code{
         </p>
       </div>
       <div style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:center">
-        <a class="btn" href="#">Download · x86_64</a>
-        <span class="dim" style="font-size:.9rem">3.3 GB · verify the signature</span>
+        <a class="btn" href="https://repo.sakuraos.org/iso/sakura-latest-x86_64.iso">Download · x86_64</a>
+        <span class="dim" style="font-size:.9rem">3.2&nbsp;GB&nbsp;· <a href="#verify" style="color:inherit">verify it</a></span>
+      </div>
+      <p class="dim" style="font-size:.85rem;margin-top:.2rem">
+        Written to a USB stick with
+        <a href="https://etcher.balena.io/" rel="noopener" target="_blank">balenaEtcher</a>,
+        <a href="https://rufus.ie/" rel="noopener" target="_blank">Rufus</a>, or
+        <code>dd</code>. 8&nbsp;GB or larger.
+      </p>
+
+      <!-- The checksum and the signature answer different questions, and saying
+           so is the difference between a ritual and a check somebody can act on.
+           Both files sit on the same host as the image, so the checksum alone
+           proves only that the download finished intact; the signature is what
+           ties it to the key. -->
+      <div id="verify" style="margin-top:1.6rem;max-width:var(--measure)">
+        <p class="eyebrow">Verifying the download</p>
+        <p class="dim" style="font-size:.9rem;margin-bottom:.6rem">
+          The checksum tells you the file arrived in one piece. The signature
+          tells you we made it — it is the one that matters, and it needs our
+          key, which ships in every release and is published here.
+        </p>
+        <pre style="overflow-x:auto;padding:.9rem 1rem;border-radius:.6rem;background:rgba(0,0,0,.25);font-size:.82rem;line-height:1.5"><code>curl -LO https://repo.sakuraos.org/iso/sakura-latest-x86_64.iso
+curl -LO https://repo.sakuraos.org/iso/sakura-latest-x86_64.iso.sha256
+curl -LO https://repo.sakuraos.org/iso/sakura-latest-x86_64.iso.sig
+curl -LO https://repo.sakuraos.org/sakura-signing-key.asc
+
+sha256sum -c sakura-latest-x86_64.iso.sha256
+gpg --import sakura-signing-key.asc
+gpg --verify sakura-latest-x86_64.iso.sig sakura-latest-x86_64.iso</code></pre>
+        <p class="dim" style="font-size:.85rem;margin-top:.6rem">
+          A good signature names
+          <strong>SakuraOS Signing Key &lt;packages@sakuraos.org&gt;</strong>,
+          fingerprint <code style="font-size:.8rem">6F45 296E DBF1 C57A E762&nbsp; 26E7 131E 22D5 8CBD 7EE6</code>.
+        </p>
       </div>
     </div>
   </div>
