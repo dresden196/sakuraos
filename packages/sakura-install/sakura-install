@@ -432,9 +432,12 @@ if [[ -d /run/archiso ]]; then
     _keyring_deadline=$(( SECONDS + 180 ))
     for _i in $(seq 1 45); do
         if [[ "$HAVE_NET" == "yes" ]]; then
-            pacman -Sy >/dev/null 2>&1 || true
+            # --noconfirm and a bound for the same reason as the sync in the
+            # target: an unexpected signature turns this into a question asked
+            # of a pipe, and the installer waits for an answer forever.
+            timeout 120 pacman -Sy --noconfirm >/dev/null 2>&1 || true
         else
-            timeout 20 pacman -Sy >/dev/null 2>&1 || true
+            timeout 20 pacman -Sy --noconfirm >/dev/null 2>&1 || true
             # timeout kills pacman mid-transaction and it leaves its lock
             # behind. Without this every later iteration fails to take the
             # lock, so the loop cannot succeed however long it waits.
@@ -461,9 +464,9 @@ fi
 # repository on the media syncs in well under a second, so the short bound
 # still gets what this check actually needs.
 if [[ "$HAVE_NET" == "yes" ]]; then
-    pacman -Sy >/dev/null 2>&1 || true
+    timeout 120 pacman -Sy --noconfirm >/dev/null 2>&1 || true
 else
-    timeout 30 pacman -Sy >/dev/null 2>&1 || true
+    timeout 30 pacman -Sy --noconfirm >/dev/null 2>&1 || true
     # timeout kills pacman mid-transaction and pacman leaves its lock behind,
     # so the next pacman call fails with "could not lock database". Nothing
     # else is using it here: we started it and we killed it.
@@ -889,7 +892,27 @@ The disk would not boot, so the install has been stopped instead."
         # Pick up the network databases the swap just pointed at. Without this
         # sakura-extra has no database in the target and everything in it looks
         # missing.
-        arch-chroot /mnt pacman -Sy >/dev/null 2>&1 || true
+        # --noconfirm, bounded, and the output kept. All three matter, and this
+        # line had none of them.
+        #
+        # Without --noconfirm pacman asks a question whenever a repository
+        # signature is not what it expected -- an unknown key, a corrupted
+        # database, a key that has rotated. stdin here is a pipe from the
+        # installer that nobody ever writes to, so the question is never
+        # answered and the install stops dead. With the output sent to
+        # /dev/null the question is invisible as well, so what a person sees is
+        # an installer frozen on the step *before* this one, with no error, for
+        # as long as they are willing to wait. That is precisely what happened
+        # on the first hands-on install: pacman sat blocked on a read of stdin
+        # for eight minutes before anyone looked.
+        #
+        # Bounded too, because a mirror that accepts the connection and then
+        # stops talking hangs just as completely and says just as little.
+        _syout=$(timeout 180 arch-chroot /mnt pacman -Sy --noconfirm 2>&1) || {
+            info "WARNING: could not refresh the package databases:"
+            printf '%s\n' "$_syout" | tail -3 | sed 's/^/  /'
+            info "anything that had to be fetched may be missing below."
+        }
         rm -f /mnt/var/lib/pacman/db.lck
 
         # Drop extras that cannot be resolved rather than letting one of them
