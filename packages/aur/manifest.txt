@@ -68,3 +68,22 @@ zen-browser-bin
 brave-bin
 google-chrome
 helium-browser-bin
+
+# The two command-line AUR helpers, offered by Settings.
+#
+# Same reasoning as snapd above, and it matters more here. Installing yay from
+# the AUR means building an unreviewed script, and the store refuses to do that
+# without showing it to somebody first -- which is right, and is a strange
+# thing to demand from a dropdown in a settings page. Rebuilt here, choosing a
+# helper is an ordinary signed package install: no makepkg on the user's
+# machine, no build toolchain pulled in, and it works with no network beyond
+# our own repository.
+#
+# It is the same upstream PKGBUILD either way. The difference is who ran it:
+# us once, on a build box, or every user separately on their own machine.
+#
+# A standing commitment, like snapd: both are AUR packages that move, and a
+# stale helper in our repo is worse than no helper. yay is Go and paru is Rust,
+# so each costs a compiler in the build container and a few minutes a build.
+yay
+paru

@@ -216,6 +216,7 @@ void SakuraSettings::setUpdatesWindow(const QString &value)
 
 namespace {
 const char WINE_HELPER[] = "/usr/lib/sakura/wine/sakura-wine";
+const char AUR_HELPER[] = "/usr/lib/sakura/settings/sakura-aur-helper";
 const char WINE_GUARD[] = "/usr/lib/sakura/wine/sakura-windows-app";
 }
 
@@ -268,6 +269,78 @@ void SakuraSettings::removeWindowsApp(const QString &slug)
             {QStringLiteral("--remove"), slug});
     p.waitForFinished(30000);
     refreshWindowsApps();
+}
+
+void SakuraSettings::refreshAurHelper()
+{
+    // Ask the machine, not the setting. status prints what is installed now,
+    // which is the only thing worth showing under a control that claims to
+    // install something.
+    QProcess p;
+    p.start(QString::fromLatin1(AUR_HELPER), {QStringLiteral("status")});
+    p.waitForFinished(10000);
+    const QJsonObject o =
+        QJsonDocument::fromJson(p.readAllStandardOutput()).object();
+    const QJsonArray inst = o.value(QStringLiteral("installed")).toArray();
+    m_aurHelperInstalled = inst.isEmpty()
+        ? QString()
+        : inst.first().toString();
+    if (!m_aurHelperBusy) {
+        m_aurHelperStatus = m_aurHelperInstalled.isEmpty()
+            ? i18n("No helper is installed.")
+            : i18n("%1 is installed.", m_aurHelperInstalled);
+    }
+    Q_EMIT aurHelperChanged();
+}
+
+void SakuraSettings::applyAurHelper(const QString &name)
+{
+    if (m_aurHelperBusy) {
+        return;
+    }
+    // Already the case: say so rather than asking for a password to do nothing.
+    if (name == m_aurHelperInstalled
+            || (name == QLatin1String("none") && m_aurHelperInstalled.isEmpty())) {
+        refreshAurHelper();
+        return;
+    }
+    m_aurHelperBusy = true;
+    m_aurHelperStatus = name == QLatin1String("none")
+        ? i18n("Removing the helper.")
+        : i18n("Installing %1.", name);
+    Q_EMIT aurHelperChanged();
+
+    QStringList args;
+    if (name == QLatin1String("none")) {
+        args << QStringLiteral("remove") << m_aurHelperInstalled;
+    } else {
+        // install also removes the other one: two helpers on one machine
+        // disagree about who owns the build cache.
+        args << QStringLiteral("install") << name;
+    }
+
+    auto *proc = new QProcess(this);
+    proc->setProcessChannelMode(QProcess::MergedChannels);
+    connect(proc, &QProcess::finished, this,
+            [this, proc, name](int code, QProcess::ExitStatus status) {
+        const QString out = QString::fromUtf8(proc->readAll()).trimmed();
+        proc->deleteLater();
+        m_aurHelperBusy = false;
+        if (code != 0 || status != QProcess::NormalExit) {
+            m_aurHelperStatus = (code == 126 || code == 127)
+                ? i18n("Authentication was cancelled; nothing has changed.")
+                : (out.isEmpty()
+                    ? i18n("That did not work.")
+                    : out.section(QLatin1Char('\n'), -1).trimmed());
+        } else {
+            m_aurHelperStatus.clear();
+        }
+        // Either way, ask the machine what is true now rather than assuming
+        // the operation did what it was asked.
+        refreshAurHelper();
+    });
+    proc->start(QStringLiteral("pkexec"),
+                QStringList{QString::fromLatin1(AUR_HELPER)} + args);
 }
 
 void SakuraSettings::setWineEnabled(bool value)

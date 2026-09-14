@@ -32,4 +32,14 @@ build() {
 
 package() {
     DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+
+    # The privileged half of the AUR helper dropdown, and the policy that says
+    # what it is allowed to do. Installed from $startdir rather than listed in
+    # source=(): the rest of this package is already built that way, and a
+    # source array of one file beside a tree that is copied would be two
+    # conventions in one PKGBUILD.
+    install -Dm755 "$startdir/sakura-aur-helper" \
+        "$pkgdir/usr/lib/sakura/settings/sakura-aur-helper"
+    install -Dm644 "$startdir/org.sakuraos.aurhelper.policy" \
+        "$pkgdir/usr/share/polkit-1/actions/org.sakuraos.aurhelper.policy"
 }
