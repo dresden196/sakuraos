@@ -20,7 +20,7 @@ SITE="https://blog.sakuraos.org"
 # prefix on the file keeps the directory in order on disk, and the URL stays
 # clean.
 POSTS=(
-"sakuraos-1-0-cherry-blossom|2026-09-06|Release|SakuraOS 1.0 Cherry Blossom|Arch Linux with the parts that usually take a weekend already decided, and a way back when an update goes wrong."
+"sakuraos-1-0-cherry-blossom|2026-09-14|Release|SakuraOS 1.0 Cherry Blossom|Arch Linux with the parts that usually take a weekend already decided, and a way back when an update goes wrong."
 )
 
 mkdir -p "$OUT"
