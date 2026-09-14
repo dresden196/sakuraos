@@ -150,6 +150,13 @@ sakura-master-SECRET.asc   the master key. Passphrase protected. This is the
                            stick, and not on any machine that is switched on.
 sakura-revocation.rev      use this to revoke the key if it is ever lost or
                            copied. Publishing it kills the key permanently.
+
+                           NOTE: gpg wrote this file with a colon in front of
+                           every line of the armoured block, on purpose, so it
+                           cannot be imported by accident. To actually use it,
+                           remove those leading colons first, then:
+                               gpg --import sakura-revocation.rev
+                               gpg --keyserver <server> --send-keys $FPR
 sakura-public.asc          the public half. Not a secret.
 
 The passphrase is NOT in here and must not be stored with this stick.
@@ -184,10 +191,20 @@ if [[ "$GOT" != "$FPR" ]]; then
 fi
 echo "    master key reads back correctly: $GOT"
 
-if gpg --list-packets "$TARGET/sakura-revocation.rev" 2>/dev/null | grep -q "signature packet"; then
-    echo "    revocation certificate is present and parses"
+# GnuPG writes a revocation certificate with a colon prefixed to every armor
+# line, deliberately, so the file cannot be imported by accident. Reading it
+# therefore means stripping that colon first -- checking the file as-is reports a
+# perfectly good certificate as unparseable, which is what the first version of
+# this did. sigclass 0x20 is what makes it a key revocation rather than any
+# other signature.
+REVCLASS="$(sed -n '/BEGIN PGP PUBLIC KEY BLOCK/,/END PGP PUBLIC KEY BLOCK/p' \
+    "$TARGET/sakura-revocation.rev" 2>/dev/null | sed 's/^://' \
+    | gpg --dearmor 2>/dev/null | gpg --list-packets 2>/dev/null \
+    | grep -oE 'sigclass 0x[0-9a-f]+' | head -1)"
+if [[ "$REVCLASS" == "sigclass 0x20" ]]; then
+    echo "    revocation certificate is a valid key revocation"
 else
-    echo "    WARNING: the revocation certificate did not parse" >&2
+    echo "    WARNING: the revocation certificate did not verify (${REVCLASS:-no signature found})" >&2
 fi
 
 echo
