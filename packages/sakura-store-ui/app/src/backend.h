@@ -2,7 +2,10 @@
 
 #include <QObject>
 #include <QProcess>
+#include <QJsonObject>
+#include <QStringList>
 #include <QVariantList>
+#include <QVector>
 #include <QVariantMap>
 
 /**
@@ -41,6 +44,22 @@ class Backend : public QObject
     // and only the second is the question somebody staring at a download is
     // actually asking.
     Q_PROPERTY(QString downloadProgress READ downloadProgress NOTIFY progressChanged)
+    // One transaction at a time was a property of this class, not of the
+    // package managers underneath it. pacman genuinely cannot run twice at
+    // once -- it takes an exclusive lock on its database -- but flatpak, snap
+    // and pacman have nothing to do with each other, and two flatpaks queue
+    // behind each other perfectly happily. So the store now keeps a queue and
+    // runs one job per lane, where a lane is the thing that actually
+    // serialises. Installing four applications no longer means waiting for
+    // each to finish before asking for the next.
+    Q_PROPERTY(QVariantList jobs READ jobs NOTIFY jobsChanged)
+    // True while anything at all is running, for the few things that really
+    // are global -- closing the window with work outstanding, mainly.
+    Q_PROPERTY(bool anyBusy READ anyBusy NOTIFY jobsChanged)
+    Q_PROPERTY(int activeJobs READ activeJobs NOTIFY jobsChanged)
+    // busy now means "the application currently on screen is busy", which is
+    // what every button asking the question actually wanted. A transaction
+    // somewhere else no longer greys out a button here.
     Q_PROPERTY(bool busy READ busy NOTIFY progressChanged)
     // Which application the running transaction is for, so a button can tell
     // "I started this" apart from "something is running somewhere".
@@ -100,7 +119,12 @@ public:
     int percent() const { return m_percent; }
     QString progressDetail() const { return m_detail; }
     QString downloadProgress() const;
+    QString formatProgress(qint64 bytes, qint64 total, int count,
+                           int countTotal, const QString &stage) const;
     bool busy() const { return m_busy; }
+    QVariantList jobs() const;
+    bool anyBusy() const { return !m_jobs.isEmpty(); }
+    int activeJobs() const { return static_cast<int>(m_jobs.size()); }
     QString busyId() const { return m_busyId; }
     bool reviewBusy() const { return m_reviewBusy; }
     bool reviewDone() const { return m_reviewDone; }
@@ -141,6 +165,13 @@ public:
     Q_INVOKABLE void applyUpdates(const QString &id, const QString &source);
     Q_INVOKABLE void loadCategory(const QString &id, const QString &label);
     Q_INVOKABLE void install(const QString &id, const QString &source);
+    // What the queue panel and each app page ask about one application.
+    Q_INVOKABLE QVariantMap jobFor(const QString &id, const QString &source) const;
+    // Only a job that has not started can be dropped. Killing pacman half way
+    // through a transaction is how a system ends up with a half-installed
+    // package and a stale lock, so a running job is left to finish.
+    Q_INVOKABLE void cancelJob(const QString &id, const QString &source);
+    Q_INVOKABLE void dismissJob(const QString &id, const QString &source);
     Q_INVOKABLE void planRemoval(const QString &id, const QString &source);
     Q_INVOKABLE void clearRemovalPlan();
     Q_INVOKABLE void remove(const QString &id, const QString &source,
@@ -172,11 +203,47 @@ Q_SIGNALS:
     void categoryChanged();
     void appChanged();
     void progressChanged();
+    void jobsChanged();
 
     void reviewChanged();
     void aurReviewChanged();
 private:
     QProcess *run(const QStringList &args);
+
+    // One queued or running piece of work. Everything the queue panel shows
+    // and everything an app page needs to describe its own state lives here,
+    // per job, rather than in one set of fields shared by whatever ran last.
+    struct Job {
+        QString id;
+        QString source;
+        QString name;
+        QString kind;        // install | remove | update
+        QString stage;       // queued | resolving | downloading | ... | failed
+        QString detail;
+        QString error;
+        QString errorDetail;
+        int percent = 0;
+        qint64 bytes = 0;
+        qint64 total = 0;
+        int count = 0;
+        int countTotal = 0;
+        bool deleteData = false;
+        QStringList args;
+        QProcess *proc = nullptr;
+    };
+
+    // pacman and the AUR share one lock, so they share one lane. Everything
+    // else is independent and gets a lane of its own.
+    static QString laneOf(const QString &source);
+    void enqueue(const Job &job);
+    void pump();
+    void onJobLine(int index, const QJsonObject &o);
+    void finishJob(int index, int code, bool crashed, const QString &trailing);
+    int indexOfJob(const QString &id, const QString &source) const;
+    QVariantMap jobToMap(const Job &j) const;
+    void syncCurrentFromJobs();
+    void markInstalled(const QString &id, const QString &source, bool state);
+    QVector<Job> m_jobs;
 
     void loadCollection(const QString &name, int limit, QVariantList &into);
 
@@ -198,6 +265,7 @@ private:
     int m_count = 0;
     int m_countTotal = 0;
     bool m_searching = false, m_loadingApp = false, m_busy = false;
+    bool m_exporting = false;
     QString m_busyId;
     bool m_reviewBusy = false;
     bool m_reviewDone = false;

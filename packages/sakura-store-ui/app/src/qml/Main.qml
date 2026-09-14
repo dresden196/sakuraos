@@ -169,6 +169,24 @@ QQC2.ApplicationWindow {
     // left ~110px of dead space on the right and the whole grid read as
     // shoved to the left. Sizing the cell to the column instead means the
     // grid always fills the width and lines up with the heading above it.
+    // The queue, searched in QML rather than through the C++ invokable.
+    //
+    // A binding tracks the properties it reads while it evaluates, and reading
+    // them inside a function called from the binding counts. Calling
+    // backend.jobFor() does not: it is a C++ method, nothing is read, and the
+    // binding never re-runs, so a row would show the state the queue had when
+    // the page was built and never update. Hence this, rather than naming
+    // backend.jobs in a comma expression purely for its side effect.
+    function jobFor(id, source) {
+        var l = backend.jobs
+        for (var i = 0; i < l.length; ++i) {
+            if (l[i].id === id && l[i].source === source) {
+                return l[i]
+            }
+        }
+        return null
+    }
+
     function stageLabel(stage) {
         return ({
             resolving:   "Working out what is needed",
@@ -177,6 +195,11 @@ QQC2.ApplicationWindow {
             configuring: "Setting up",
             removing:    "Uninstalling",
             done:        "Done",
+            // Now that work can sit behind other work, the waiting state needs
+            // a word of its own. Falling through to the raw "queued" read as a
+            // stage name leaking out of the engine.
+            queued:      "Waiting",
+            failed:      "Failed",
         })[stage] || stage
     }
 
@@ -697,6 +720,125 @@ QQC2.ApplicationWindow {
                 // Bottom of the sidebar because it is about you rather than
                 // about software: the same place every desktop application
                 // that has an identity puts it.
+                // Everything the store is doing, in one place.
+                //
+                // Without this, work the user started was only visible on the
+                // page they started it from: queue three installs, walk to
+                // another page, and the store looked idle while three
+                // transactions ran. It appears only when there is something to
+                // report, so an idle store still has an empty rail.
+                Rectangle {
+                    id: queuePanel
+                    readonly property var list: backend.jobs
+                    visible: list.length > 0
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: accountRow.top
+                    anchors.margins: 12
+                    anchors.bottomMargin: 6
+                    height: visible ? queueCol.implicitHeight + 24 : 0
+                    radius: 12
+                    color: Qt.rgba(1, 1, 1, 0.05)
+
+                    ColumnLayout {
+                        id: queueCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 12
+                        spacing: 8
+
+                        QQC2.Label {
+                            text: {
+                                var running = 0
+                                for (var i = 0; i < queuePanel.list.length; ++i) {
+                                    if (queuePanel.list[i].running) running++
+                                }
+                                // The two numbers answer different questions:
+                                // how much is happening, and how much is
+                                // waiting. One number hides the second.
+                                var waiting = queuePanel.list.length - running
+                                return waiting > 0
+                                    ? running + " running · " + waiting + " waiting"
+                                    : running + (running === 1 ? " running" : " running")
+                            }
+                            color: root.dim
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
+                        }
+
+                        Repeater {
+                            model: queuePanel.list
+                            delegate: ColumnLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                spacing: 2
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    QQC2.Label {
+                                        Layout.fillWidth: true
+                                        text: modelData.name
+                                        color: root.text
+                                        font.pixelSize: 12
+                                        elide: Text.ElideRight
+                                    }
+                                    // A queued job can be dropped; a running
+                                    // one cannot. Killing a package manager
+                                    // part way through leaves a half-installed
+                                    // package and a stale lock, which is a
+                                    // worse problem than waiting.
+                                    QQC2.ToolButton {
+                                        visible: modelData.queued || modelData.failed
+                                        implicitWidth: 22
+                                        implicitHeight: 22
+                                        text: "✕"
+                                        font.pixelSize: 11
+                                        onClicked: modelData.failed
+                                            ? backend.dismissJob(modelData.id, modelData.source)
+                                            : backend.cancelJob(modelData.id, modelData.source)
+                                    }
+                                }
+
+                                QQC2.Label {
+                                    Layout.fillWidth: true
+                                    text: modelData.failed
+                                        ? (modelData.error || "Failed")
+                                        : modelData.queued
+                                          ? "Waiting for " + modelData.source
+                                          : (modelData.progress !== ""
+                                             ? root.stageLabel(modelData.stage)
+                                               + " · " + modelData.progress
+                                             : root.stageLabel(modelData.stage))
+                                    color: modelData.failed ? "#ff8a9b" : root.dim
+                                    font.pixelSize: 11
+                                    elide: Text.ElideRight
+                                }
+
+                                // A bar only where there is a position to
+                                // show. A queued job has none, and a bar at
+                                // zero that never moves reads as a stall.
+                                Rectangle {
+                                    visible: modelData.running
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 3
+                                    radius: 2
+                                    color: Qt.rgba(1, 1, 1, 0.10)
+                                    Rectangle {
+                                        width: parent.width
+                                               * Math.max(0, Math.min(100, modelData.percent)) / 100
+                                        height: parent.height
+                                        radius: parent.radius
+                                        color: root.accent
+                                        Behavior on width { NumberAnimation { duration: 180 } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Rectangle {
                     id: accountRow
                     anchors.left: parent.left
@@ -1511,8 +1653,11 @@ QQC2.ApplicationWindow {
                     }
                     Item { Layout.fillWidth: true }
                     Action {
-                        text: backend.busy ? "Updating…" : "Update all"
-                        enabled: !backend.busy
+                        readonly property var uj:
+                            root.jobFor("*", "")
+                        readonly property bool running: !!(uj && uj.id && !uj.failed)
+                        text: running ? "Updating…" : "Update all"
+                        enabled: !running
                         onClicked: backend.applyUpdates("", "")
                     }
                 }
@@ -1725,8 +1870,17 @@ QQC2.ApplicationWindow {
                         // Only this app's own row shows progress. An install
                         // started here and then navigated away from must not
                         // light up every other Install on screen.
-                        readonly property bool mine:
-                            backend.busy && !!pick && backend.busyId === pick.id
+                        //
+                        // Asked of the queue by id AND source rather than read
+                        // off one global flag, because several things can now
+                        // be installing at once and "something is running" no
+                        // longer says anything about this row. backend.jobs is
+                        // named in the binding so the lookup re-runs when the
+                        // queue changes; a function call alone is not
+                        // something Qt knows to repeat.
+                        readonly property var job:
+                            pick ? root.jobFor(pick.id, pick.source) : null
+                        readonly property bool mine: !!(job && job.id && !job.failed)
 
                         // While work is running the button gives way to a
                         // status line and a ring.
@@ -1749,10 +1903,11 @@ QQC2.ApplicationWindow {
                                 // edge of the page instead of beside the words
                                 // it belongs to.
                                 Layout.maximumWidth: 430
-                                text: backend.downloadProgress !== ""
-                                    ? root.stageLabel(backend.stage)
-                                      + "  ·  " + backend.downloadProgress
-                                    : root.stageLabel(backend.stage)
+                                readonly property var j: installRow.job || ({})
+                                text: (j.progress || "") !== ""
+                                    ? root.stageLabel(j.stage || "")
+                                      + "  ·  " + j.progress
+                                    : root.stageLabel(j.stage || "")
                                 color: root.text
                                 font.pixelSize: 15
                                 font.weight: Font.DemiBold
@@ -1763,7 +1918,7 @@ QQC2.ApplicationWindow {
                                 Layout.alignment: Qt.AlignVCenter
                                 diameter: 34
                                 thickness: 3.5
-                                progress: backend.percent
+                                progress: (installRow.job || {}).percent || 0
                             }
                         }
 
@@ -1782,7 +1937,10 @@ QQC2.ApplicationWindow {
                             text: blocked ? "AUR is switched off"
                                  : isAur ? "Review and install"
                                  : (pick && pick.installed ? "Reinstall" : "Install")
-                            enabled: !backend.busy && !!pick && !blocked
+                            // Gated on this application, not on the whole
+                            // store: one install used to disable every
+                            // Install button in the window.
+                            enabled: !installRow.mine && !!pick && !blocked
                             onClicked: {
                                 if (isAur) {
                                     root.aurName = pick.id
@@ -1817,7 +1975,7 @@ QQC2.ApplicationWindow {
                         Action {
                             readonly property var pick: appRoot.options[appRoot.chosen] || null
                             visible: !!(pick && pick.installed)
-                            enabled: !backend.busy
+                            enabled: !installRow.mine
                             text: "Uninstall"; quiet: true
                             onClicked: backend.planRemoval(pick.id, pick.source)
                         }
