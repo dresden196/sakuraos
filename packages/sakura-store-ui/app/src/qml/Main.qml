@@ -750,17 +750,24 @@ QQC2.ApplicationWindow {
 
                         QQC2.Label {
                             text: {
-                                var running = 0
+                                // Three states, counted separately. The first
+                                // version took "not running" to mean waiting,
+                                // so two jobs that had already failed were
+                                // reported as "0 running · 2 waiting" -- the
+                                // panel said work was queued when nothing was
+                                // going to happen, directly above two lines of
+                                // red error text saying otherwise.
+                                var running = 0, failed = 0
                                 for (var i = 0; i < queuePanel.list.length; ++i) {
                                     if (queuePanel.list[i].running) running++
+                                    else if (queuePanel.list[i].failed) failed++
                                 }
-                                // The two numbers answer different questions:
-                                // how much is happening, and how much is
-                                // waiting. One number hides the second.
-                                var waiting = queuePanel.list.length - running
-                                return waiting > 0
-                                    ? running + " running · " + waiting + " waiting"
-                                    : running + (running === 1 ? " running" : " running")
+                                var waiting = queuePanel.list.length - running - failed
+                                var parts = []
+                                if (running > 0) parts.push(running + " running")
+                                if (waiting > 0) parts.push(waiting + " waiting")
+                                if (failed > 0)  parts.push(failed + " failed")
+                                return parts.join(" · ")
                             }
                             color: root.dim
                             font.pixelSize: 11
