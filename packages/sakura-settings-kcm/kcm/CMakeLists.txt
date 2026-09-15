@@ -22,3 +22,10 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
 
 add_subdirectory(src)
 add_subdirectory(helper)
+
+# Off by default; the harness turns it on.
+option(BUILD_TESTING "Build the KCM tests" OFF)
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
