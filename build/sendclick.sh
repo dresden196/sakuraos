@@ -21,7 +21,7 @@ exec python3 - "$REPO_ROOT/out/qmp-${SAKURA_VM:-test}.sock" "$@" <<'PY'
 import json, socket, sys, time
 
 sock_path, coords = sys.argv[1], sys.argv[2:]
-if len(coords) % 2:
+if coords and coords[0] != "--wheel" and len(coords) % 2:
     sys.exit("sendclick: coordinates come in pairs")
 
 s = socket.socket(socket.AF_UNIX)
@@ -41,6 +41,27 @@ def cmd(name, **args):
 
 f.readline()
 cmd("qmp_capabilities")
+
+# --wheel <x> <y> <n>: scroll n notches down (negative for up) at that point.
+# Needed because a settings page taller than the window cannot be reached with
+# clicks alone, and Page Down goes to whatever has keyboard focus rather than
+# to the thing under the pointer.
+if coords and coords[0] == "--wheel":
+    x, y, n = int(coords[1]), int(coords[2]), int(coords[3])
+    cmd("input-send-event", events=[
+        {"type": "abs", "data": {"axis": "x", "value": int(x * 32767 / 1920)}},
+        {"type": "abs", "data": {"axis": "y", "value": int(y * 32767 / 1080)}},
+    ])
+    time.sleep(0.2)
+    button = "wheel-down" if n > 0 else "wheel-up"
+    for _ in range(abs(n)):
+        cmd("input-send-event", events=[
+            {"type": "btn", "data": {"down": True, "button": button}}])
+        cmd("input-send-event", events=[
+            {"type": "btn", "data": {"down": False, "button": button}}])
+        time.sleep(0.05)
+    print(f"scrolled {n}")
+    raise SystemExit(0)
 
 for i in range(0, len(coords), 2):
     x, y = int(coords[i]), int(coords[i + 1])

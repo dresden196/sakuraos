@@ -151,9 +151,19 @@ KCM.SimpleKCM {
             ]
             Layout.minimumWidth: Kirigami.Units.gridUnit * 15
             currentIndex: indexOfValue(cfg.aurHelperInstalled || "none")
-            onActivated: {
-                cfg.aurHelper = currentValue
-                cfg.applyAurHelper(currentValue)
+            // The value at the index the signal carries, not currentValue.
+            //
+            // currentIndex above is a binding on what is installed, and that
+            // binding is still live when the item is chosen: it puts the index
+            // straight back to the installed helper, so currentValue read
+            // "none" the moment after picking "yay". The page then applied
+            // "none" -- which, with no helper installed, is nothing at all.
+            // Choosing yay silently did nothing, with no error to explain it,
+            // because the code did exactly what it was told.
+            onActivated: (index) => {
+                const chosen = valueAt(index)
+                cfg.aurHelper = chosen
+                cfg.applyAurHelper(chosen)
             }
         }
 
