@@ -1,4 +1,4 @@
-# Maintainer: SakuraOS <dev@sakuraos.invalid>
+# Maintainer: dresden196 <dresden196@users.noreply.github.com>
 #
 # The installer's face. It collects answers and hands them to sakura-install,
 # which owns all the partitioning and boot setup. Two implementations of that

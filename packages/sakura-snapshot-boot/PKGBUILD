@@ -1,4 +1,4 @@
-# Maintainer: SakuraOS <dev@sakuraos.invalid>
+# Maintainer: dresden196 <dresden196@users.noreply.github.com>
 #
 # Replaces limine-snapper-sync, limine-entry-tool and limine-mkinitcpio-hook.
 # Those are three GraalVM-compiled Kotlin projects from a single upstream, and
