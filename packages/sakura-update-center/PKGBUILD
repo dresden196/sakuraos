@@ -1,4 +1,4 @@
-# Maintainer: SakuraOS <dev@sakuraos.invalid>
+# Maintainer: dresden196 <dresden196@users.noreply.github.com>
 #
 # The face of sakura-update. It runs the engine and draws what comes back --
 # it does not decide anything itself, because a window and a timer that

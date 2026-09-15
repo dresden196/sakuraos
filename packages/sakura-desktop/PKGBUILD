@@ -1,4 +1,4 @@
-# Maintainer: SakuraOS <dev@sakuraos.invalid>
+# Maintainer: dresden196 <dresden196@users.noreply.github.com>
 #
 # This meta package defines the INSTALLED system. It is deliberately separate
 # from iso/packages.x86_64, which defines the LIVE MEDIA. Conflating the two is

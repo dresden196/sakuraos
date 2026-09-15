@@ -1,4 +1,4 @@
-# Maintainer: SakuraOS <dev@sakuraos.invalid>
+# Maintainer: dresden196 <dresden196@users.noreply.github.com>
 #
 # One implementation of the update logic, three front ends: the Update Centre
 # draws it, the timer runs it unattended, and a terminal can drive it

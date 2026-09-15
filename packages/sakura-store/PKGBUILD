@@ -1,4 +1,4 @@
-# Maintainer: SakuraOS <dev@sakuraos.invalid>
+# Maintainer: dresden196 <dresden196@users.noreply.github.com>
 #
 # The store engine. Sources are an interface, so adding one -- including a
 # Sakura-hosted source later -- means implementing search, installed and

@@ -1,4 +1,4 @@
-# Maintainer: SakuraOS <dev@sakuraos.invalid>
+# Maintainer: dresden196 <dresden196@users.noreply.github.com>
 #
 # Two layers, deliberately. The pacman hook cannot be bypassed by choosing a
 # different frontend, but by the time it runs the original command line is

@@ -1,4 +1,4 @@
-# Maintainer: SakuraOS <dev@sakuraos.invalid>
+# Maintainer: dresden196 <dresden196@users.noreply.github.com>
 #
 # Appearance, versioned separately from the meta package so the look can change
 # without touching anything that affects how the system behaves.
