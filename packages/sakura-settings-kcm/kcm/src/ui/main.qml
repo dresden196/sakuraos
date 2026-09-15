@@ -136,35 +136,11 @@ KCM.SimpleKCM {
             text: i18n("Compares what you have installed against published attack campaigns, after every transaction and once a day. It cannot detect an attack nobody has reported yet, so it is not a substitute for reading what you install.")
         }
 
-        QQC2.ComboBox {
+        HelperSelector {
             Kirigami.FormData.label: i18n("Command-line helper:")
-            // This installs and removes now, so it follows the machine rather
-            // than a stored string: the dropdown shows what is actually on the
-            // system, and somebody who removes yay with pacman sees that here.
-            enabled: cfg.aurEnabled && !cfg.aurHelperBusy
-            textRole: "label"
-            valueRole: "value"
-            model: [
-                { label: i18n("yay"),                      value: "yay"  },
-                { label: i18n("paru"),                     value: "paru" },
-                { label: i18n("None, use the store only"), value: "none" },
-            ]
-            Layout.minimumWidth: Kirigami.Units.gridUnit * 15
-            currentIndex: indexOfValue(cfg.aurHelperInstalled || "none")
-            // The value at the index the signal carries, not currentValue.
-            //
-            // currentIndex above is a binding on what is installed, and that
-            // binding is still live when the item is chosen: it puts the index
-            // straight back to the installed helper, so currentValue read
-            // "none" the moment after picking "yay". The page then applied
-            // "none" -- which, with no helper installed, is nothing at all.
-            // Choosing yay silently did nothing, with no error to explain it,
-            // because the code did exactly what it was told.
-            onActivated: (index) => {
-                const chosen = valueAt(index)
-                cfg.aurHelper = chosen
-                cfg.applyAurHelper(chosen)
-            }
+            // root.cfg, not cfg: inside this component `cfg` is its own
+            // property, so the unqualified name binds the property to itself.
+            cfg: root.cfg
         }
 
         QQC2.Label {
