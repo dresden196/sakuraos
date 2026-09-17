@@ -22,6 +22,12 @@ mkdir -p "$OUT_DIR"
 # The recovery demo's frames. They are real screenshots of an installed
 # machine, served as files rather than inlined: six images is most of a
 # megabyte, and the page already carries its photograph as a data URI.
+if [[ -d "$REPO_ROOT/site/icons" ]]; then
+    mkdir -p "$OUT_DIR/icons"
+    cp -f "$REPO_ROOT/site/icons/"* "$OUT_DIR/icons/"
+    echo ">> copied $(ls "$REPO_ROOT/site/icons" | wc -l) favicon files"
+fi
+
 if [[ -d "$REPO_ROOT/site/shots" ]]; then
     mkdir -p "$OUT_DIR/shots"
     cp -f "$REPO_ROOT/site/shots/"* "$OUT_DIR/shots/"
@@ -68,6 +74,12 @@ open(out, 'w', encoding='utf-8').write(
     '<html lang="en">\n'
     '<head>\n'
     '<meta charset="utf-8">\n'
+    # The tab icon. Declared here rather than in the body source because the
+    # body is also published as an artifact, which supplies its own head.
+    '<link rel="icon" href="/icons/favicon.ico" sizes="any">\n'
+    '<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">\n'
+    '<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png">\n'
+    '<link rel="apple-touch-icon" sizes="180x180" href="/icons/favicon-180.png">\n'
     '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
     '<meta name="description" content="SakuraOS is an opinionated Arch and '
     'KDE Plasma distribution: automatic restore points, guarded updates, and '

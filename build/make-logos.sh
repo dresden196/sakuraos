@@ -58,6 +58,29 @@ for i in $(seq 0 35); do
     render "$(( i * 10 ))" 160 "$(printf '%s/throbber-%04d.png' "$PLY" "$i")"
 done
 
+# The browser tab. Three sizes because browsers pick differently: 16 and 32 for
+# the tab itself, 180 for iOS when somebody saves the page to a home screen. An
+# SVG favicon would be one file, but the mark has a radial gradient and small
+# renderers treat those inconsistently -- the same reason the applications ship
+# a PNG of the blossom rather than the drawing of it.
+echo ">> favicons"
+SITE="$REPO_ROOT/site"
+mkdir -p "$SITE/icons"
+for px in 16 32 180; do
+    # Through render(), not rsvg directly: the source carries __ROT__ and an
+    # unsubstituted one renders as a bare disc with the petals thrown off it.
+    render 0 "$px" "$SITE/icons/favicon-${px}.png"
+done
+# One .ico as well: it is what a bare /favicon.ico request gets, and something
+# always asks for that whatever the page declares.
+if command -v magick >/dev/null || command -v convert >/dev/null; then
+    ${MAGICK:-$(command -v magick || command -v convert)} \
+        "$SITE/icons/favicon-16.png" "$SITE/icons/favicon-32.png" \
+        "$SITE/icons/favicon.ico" 2>/dev/null \
+        || echo "   (could not build favicon.ico; the PNGs still cover browsers)"
+fi
+echo "   wrote $(ls "$SITE/icons" | wc -l) favicon files"
+
 echo ">> plymouth dialog images"
 # plymouth's two-step plugin loads these unconditionally, not only when it has
 # a passphrase to ask for. A theme without them fails at show_splash with
