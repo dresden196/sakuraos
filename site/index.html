@@ -184,6 +184,7 @@ button{font:inherit; cursor:pointer}
 :focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:6px}
 
 /* ---- content grids ---------------------------------------------------- */
+@media(max-width:759px){br.wide{display:none}}
 .cols{display:grid; gap:1.1rem; grid-template-columns:1fr}
 @media(min-width:760px){.cols.two{grid-template-columns:1fr 1fr}}
 .card{padding:1.7rem 1.8rem; border-radius:18px; border:1px solid var(--hair); background:var(--accent-soft)}
@@ -249,6 +250,23 @@ td:first-child{font-weight:500; white-space:nowrap}
   .topbar nav a.get .label{display:none}
   .topbar nav a.get{padding:.45rem .6rem}
 }
+/* The row was already running off the right edge here before a third icon was
+   added: brand, action and two destinations leave no room for social marks.
+   The repo stays because it is a destination people come looking for; X and
+   Reddit are in the footer, which is where they were going to be read anyway. */
+@media (max-width:660px){
+  .topbar nav a.social{display:none}
+  .topbar nav a.icon{padding:.3rem}
+  .topbar nav a svg{width:22px; height:22px}
+}
+/* At 360 the bar still measured 405 wide. The brand and the two word links
+   carry the slack: nothing is dropped, everything just stops being generous. */
+@media (max-width:420px){
+  .topbar .brand{font-size:1.05rem; gap:.45rem}
+  .topbar .brand svg{width:28px; height:28px}
+  .topbar nav{gap:.1rem}
+  .topbar nav a{padding:.38rem .42rem; font-size:.94rem}
+}
 
 /* Positioned against .screen, which has an aspect-ratio and therefore a real
    height. Sizing against .inner does not work: that box is sized by its
@@ -288,6 +306,9 @@ code{
   font-family:"JetBrains Mono",ui-monospace,monospace; font-size:.88em;
   background:var(--accent-soft); padding:.12em .38em; border-radius:5px;
 }
+/* The chip is for code inside a sentence. In a block the <pre> already
+   supplies the background, and the chip banded every line. */
+pre code{background:none; padding:0; border-radius:0; font-size:inherit}
 
 .hero .mark{width:104px;height:104px}
 
@@ -367,11 +388,14 @@ code{
       <a href="https://blog.sakuraos.org/">Blog</a>
       <a href="https://wiki.sakuraos.org/">Wiki</a>
       <!-- Icons inline rather than fetched: the page is served with a strict
-           policy and one more request for two small glyphs is not worth it. -->
-      <a class="icon" href="https://x.com/ThesakuraOS" rel="me noopener" target="_blank" aria-label="SakuraOS on X">
+           policy and one more request for three small glyphs is not worth it. -->
+      <a class="icon" href="https://github.com/dresden196/sakuraos" rel="noopener" target="_blank" aria-label="SakuraOS on GitHub">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+      </a>
+      <a class="icon social" href="https://x.com/ThesakuraOS" rel="me noopener" target="_blank" aria-label="SakuraOS on X">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
       </a>
-      <a class="icon" href="https://www.reddit.com/r/SakuraOS/" rel="noopener" target="_blank" aria-label="SakuraOS on Reddit">
+      <a class="icon social" href="https://www.reddit.com/r/SakuraOS/" rel="noopener" target="_blank" aria-label="SakuraOS on Reddit">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12.5c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.688-.561-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>
       </a>
     </nav>
@@ -419,7 +443,7 @@ code{
       <span class="badge-new">New</span>
       1.0 Cherry Blossom release
     </a>
-    <p class="tagline">A no nonsense distro.</p>
+    <p class="tagline">Arch, with a way back.</p>
     <p class="lede" style="max-width:52ch">
       SakuraOS is an Arch based Linux distribution that ships with KDE Plasma
       as the desktop, a suite of custom built applications, and a tuned kernel
@@ -427,7 +451,7 @@ code{
       fallback for older processors.
     </p>
     <p class="lede" style="max-width:52ch">
-      Installing it is not a questionnaire. No desktop selection, no
+      Installing it is not a technical exam. No desktop selection, no
       bootloader decision, no filesystem comparison, no kernel choice. The
       system detects what your hardware supports, applies the sensible
       defaults, and is ready to use when you boot.
@@ -446,75 +470,32 @@ code{
     <div class="stack g-6">
       <div class="stack g-3">
         <p class="eyebrow">The idea</p>
-        <h2>Arch is the best software model in Linux.<br>It is also the one that breaks.</h2>
+        <h2>Arch is the best software model in Linux.<br>It just never made the way back <br class="wide">part of the system.</h2>
       </div>
-      <div class="cols two">
+      <!-- One column, one measure. These three paragraphs are a sequence --
+           the model, then its cost, then the conclusion -- and a two-column
+           grid presented the first two as parallel facts, so the reader met
+           "The cost is that..." before the thing it is the cost of. It also
+           put three different line lengths in one box. -->
+      <div class="stack g-4" style="max-width:var(--measure)">
         <p class="dim">
-          A rolling release means software the week it ships, and no
-          eighteen-month version upgrade that eats your machine. That part is
-          genuinely better than what Ubuntu or Fedora offer, and the community
-          has known it for years.
+          A rolling release means current software as it ships. There is no
+          next version to migrate to, because the system never stops moving
+          &mdash; no upgrade night, no major-version migration, no finding out
+          in the morning what the jump broke.
         </p>
         <p class="dim">
           The cost is that a bad update, a half-finished command, or an
-          unreviewed build script can leave you at a black screen, and the
-          fix is written for people who already know how to chroot from a live
-          USB. That is the whole barrier. It was never that Arch is hard.
+          unreviewed build script can leave you at a black screen, and the fix
+          is written for people who already know how to chroot from a live USB.
+        </p>
+        <p class="dim">
+          That is the barrier SakuraOS is built to remove. Arch was never hard
+          because the model was complicated. <strong>Recovery was assumed
+          knowledge.</strong>
         </p>
       </div>
-      <p class="pull">SakuraOS keeps the model and removes the cliff.</p>
-    </div>
-  </div>
-</section>
-
-<!-- ============================ software ============================ -->
-<section>
-  <div class="pane" style="padding:clamp(2rem,5vw,4rem)">
-    <div class="stack g-6">
-      <div class="stack g-3">
-        <p class="eyebrow">What's in the box</p>
-        <h2>The software everyone installs +<br>our own core applications + theming.</h2>
-        <p class="lede" style="max-width:56ch">
-          What makes SakuraOS special is its core applications, the ones that
-          make using Linux a breeze. Each is there so you can work, game or
-          build without opening a terminal you didn't want to open.
-        </p>
-      </div>
-
-      <div class="cols two">
-        <div class="card">
-          <h3>Terminal Assist</h3>
-          <p class="dim">Reads what you're about to run and stops the commands that break Arch systems: partial upgrades, removing the last kernel, force-removing glibc. Every check can be overridden; you just have to read the message first.</p>
-        </div>
-        <div class="card">
-          <h3>Installer</h3>
-          <p class="dim">Ten short questions, each one saying what it will do rather than naming the thing it configures. It sets up the disk, the restore points, the boot menu and Secure Boot without asking you to understand any of them first, and shows you the work as it happens.</p>
-        </div>
-        <div class="card">
-          <h3>Update Manager</h3>
-          <p class="dim">Updates handled for you, on a schedule you set, with a restore point taken first, and a plain-English list of what's actually changing.</p>
-        </div>
-        <div class="card">
-          <h3>App Store</h3>
-          <p class="dim">One place for repository packages, Flatpaks and the AUR, with the source of every app stated plainly instead of buried.</p>
-        </div>
-        <div class="card">
-          <h3>Windows applications</h3>
-          <p class="dim">Windows software runs through Wine, installed the first time you open something that needs it rather than sitting on the disk from the day you install. It is close to a gigabyte with its runtimes, so the switch in Settings turns it off again and takes the gigabyte with it. Most distributions offer only the installing half of that.</p>
-        </div>
-        <div class="card">
-          <h3>AUR scanner</h3>
-          <p class="dim">The AUR has been used to ship malware, and the packages, files and services from each campaign get published. SakuraOS checks what you have installed against every one on record, inside pacman, after every install and upgrade. It runs whether you installed from the store or typed yay yourself.</p>
-        </div>
-        <div class="card">
-          <h3>Sakura Settings</h3>
-          <p class="dim">Turn the AUR on with one click, with yay already there as the helper. The same place holds the rest of what makes the system yours: what Terminal Assist blocks, when updates install, whether Windows applications are set up at all.</p>
-        </div>
-        <div class="card">
-          <h3>Tuned kernel</h3>
-          <p class="dim">SakuraOS builds the CachyOS kernel, the scheduler work that makes an Arch desktop feel quick, and puts its own defaults on top. We add memory and writeback limits, an I/O scheduler picked per drive, and compressed swap in RAM so a machine with 8&nbsp;GB stays usable.</p>
-        </div>
-      </div>
+      <p class="pull">SakuraOS keeps the model and adds the way back.</p>
     </div>
   </div>
 </section>
@@ -553,6 +534,58 @@ code{
   </div>
 </section>
 
+<!-- ============================ software ============================ -->
+<section>
+  <div class="pane" style="padding:clamp(2rem,5vw,4rem)">
+    <div class="stack g-6">
+      <div class="stack g-3">
+        <p class="eyebrow">What's in the box</p>
+        <h2>The software everyone installs +<br>our own core applications + theming.</h2>
+        <p class="lede" style="max-width:56ch">
+          What makes SakuraOS special is its core applications, the ones that
+          make using Linux a breeze. Each is there so you can work, game or
+          build without opening a terminal you didn't want to open.
+        </p>
+      </div>
+
+      <div class="cols two">
+        <div class="card">
+          <h3>Terminal Assist</h3>
+          <p class="dim">Reads what you're about to run and stops the commands that break Arch systems: partial upgrades, removing the last kernel, force-removing glibc. Every check can be overridden; you just have to read the message first.</p>
+        </div>
+        <div class="card">
+          <h3>Installer</h3>
+          <p class="dim">Ten short questions, each one saying what it will do rather than naming the thing it configures. It sets up the disk, the restore points, the boot menu and Secure Boot without asking you to understand any of them first, and shows you the work as it happens.</p>
+        </div>
+        <div class="card">
+          <h3>Update Manager</h3>
+          <p class="dim">Updates handled for you, on a schedule you set, with a restore point taken first, and a plain-English list of what's actually changing.</p>
+        </div>
+        <div class="card">
+          <h3>App Store</h3>
+          <p class="dim">One place for repository packages, Flatpaks and the AUR, with the source of every app stated plainly instead of buried.</p>
+        </div>
+        <div class="card">
+          <h3>Windows applications</h3>
+          <p class="dim">Windows software runs through Wine, installed the first time you open something that needs it rather than sitting on the disk from the day you install. It is close to a gigabyte with its runtimes, so the switch in Settings turns it off again and takes the gigabyte with it. Turning it off is the half that usually goes missing.</p>
+        </div>
+        <div class="card">
+          <h3>AUR scanner</h3>
+          <p class="dim">The AUR has been used to ship malware -- Arch reported a high-volume campaign in June 2026 and more in July -- and the packages, files and services from each one get published afterwards. SakuraOS checks what you have installed against those published lists, inside pacman, after every install and upgrade. It runs whether you installed from the store or typed yay yourself. It cannot catch a campaign nobody has reported yet, which is why the AUR is off until you turn it on and why the build script is shown to you first.</p>
+        </div>
+        <div class="card">
+          <h3>Sakura Settings</h3>
+          <p class="dim">Turn the AUR on with one click, with yay already there as the helper. The same place holds the rest of what makes the system yours: what Terminal Assist blocks, when updates install, whether Windows applications are set up at all.</p>
+        </div>
+        <div class="card">
+          <h3>Tuned kernel</h3>
+          <p class="dim">SakuraOS builds the CachyOS kernel, the scheduler work that makes an Arch desktop feel quick, and puts its own defaults on top. We add memory and writeback limits, an I/O scheduler picked per drive, and compressed swap in RAM so a machine with 8&nbsp;GB stays usable.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============================ assist ============================ -->
 <section>
   <div class="pane" style="padding:clamp(2rem,5vw,4rem)">
@@ -584,7 +617,7 @@ code{
 
     This refreshes the package list without upgrading the system.
 
-    That mismatch is the most common way an Arch install breaks.
+    Arch does not support partial upgrades; this is how you get one.
     Use <span class="ok">-Syu</span> instead.
 
     Run it again with <span class="warn">SAKURA_ASSIST_OVERRIDE=1</span> if you meant it.
@@ -670,7 +703,7 @@ code{
       </div>
       <p class="pull">Off by default. One click away. Never hidden.</p>
 
-      <div class="cols two" style="align-items:start">
+      <div class="cols two">
         <div class="card">
           <h3>Scanned against known attacks</h3>
           <p class="dim">
@@ -707,13 +740,13 @@ code{
         <h2>Tuned for the machine you own.</h2>
       </div>
       <p class="dim">
-        SakuraOS uses the same kernel scheduling work as CachyOS, the tuning
-        that made them the fastest Arch derivative on modern hardware. On a
-        recent CPU you get every bit of it.
+        SakuraOS uses the same kernel scheduling work as CachyOS, whose
+        tuning is why people run it on modern hardware. On a recent CPU you get
+        every bit of it.
       </p>
       <p class="dim">
-        And if you don't have a recent CPU? Most distributions that chase
-        performance quietly stop supporting you. There's one image, standard
+        And if you don't have a recent CPU? Chasing performance often means
+        dropping older hardware quietly. There's one image, standard
         x86-64, and a first-generation i7 runs exactly the same one a Ryzen
         9000 does. Nothing to work out before you download.
       </p>
@@ -780,7 +813,7 @@ code{
 
       <p class="pull">Your machine, your data, your business.</p>
 
-      <div class="cols two" style="align-items:start">
+      <div class="cols two">
         <div class="card">
           <h3>You can still support KDE devs</h3>
           <p class="dim">
@@ -819,28 +852,28 @@ code{
           Setting it up takes about a minute.
         </p>
       </div>
+      <div class="stack g-3">
       <div style="display:flex;gap:.8rem;flex-wrap:wrap;align-items:center">
         <a class="btn" href="https://repo.sakuraos.org/iso/sakura-latest-x86_64.iso">Download · x86_64</a>
         <span class="dim" style="font-size:.9rem">3.2&nbsp;GB&nbsp;· <a href="#verify" style="color:inherit">verify it</a></span>
       </div>
-      <p class="dim" style="font-size:.85rem;margin-top:.2rem">
-        Written to a USB stick with
+      <p class="dim" style="font-size:.9rem">
+        Write it to a USB stick of 8&nbsp;GB or more using
         <a href="https://etcher.balena.io/" rel="noopener" target="_blank">balenaEtcher</a>,
         <a href="https://rufus.ie/" rel="noopener" target="_blank">Rufus</a>, or
-        <code>dd</code>. 8&nbsp;GB or larger.
+        the <code>dd</code> command.
       </p>
+      </div>
 
       <!-- The checksum and the signature answer different questions, and saying
            so is the difference between a ritual and a check somebody can act on.
            Both files sit on the same host as the image, so the checksum alone
            proves only that the download finished intact; the signature is what
            ties it to the key. -->
-      <div id="verify" style="margin-top:1.6rem;max-width:var(--measure)">
+      <div id="verify" style="max-width:var(--measure)">
         <p class="eyebrow">Verifying the download</p>
-        <p class="dim" style="font-size:.9rem;margin-bottom:.6rem">
-          The checksum tells you the file arrived in one piece. The signature
-          tells you we made it — it is the one that matters, and it needs our
-          key, which ships in every release and is published here.
+        <p class="dim" style="font-size:.9rem;margin-bottom:.9rem">
+          The checksum catches a broken download. The signature catches a fake one.
         </p>
         <pre style="overflow-x:auto;padding:.9rem 1rem;border-radius:.6rem;background:rgba(0,0,0,.25);font-size:.82rem;line-height:1.5"><code>curl -LO https://repo.sakuraos.org/iso/sakura-latest-x86_64.iso
 curl -LO https://repo.sakuraos.org/iso/sakura-latest-x86_64.iso.sha256
@@ -853,7 +886,7 @@ gpg --verify sakura-latest-x86_64.iso.sig sakura-latest-x86_64.iso</code></pre>
         <p class="dim" style="font-size:.85rem;margin-top:.6rem">
           A good signature names
           <strong>SakuraOS Signing Key &lt;packages@sakuraos.org&gt;</strong>,
-          fingerprint <code style="font-size:.8rem">6F45 296E DBF1 C57A E762&nbsp; 26E7 131E 22D5 8CBD 7EE6</code>.
+          fingerprint <code style="font-size:.8rem">6F45 296E DBF1 C57A E762&nbsp; 26E7 131E 22D5 8CBD 7EE6</code>
         </p>
       </div>
     </div>
@@ -865,6 +898,7 @@ gpg --verify sakura-latest-x86_64.iso.sig sakura-latest-x86_64.iso</code></pre>
     <div class="links">
 <a href="https://blog.sakuraos.org/">Blog</a>
             <a href="https://wiki.sakuraos.org/">Wiki</a>
+      <a href="https://github.com/dresden196/sakuraos" rel="noopener" target="_blank">Source</a>
       <a href="https://x.com/ThesakuraOS" rel="me noopener" target="_blank">X</a>
       <a href="https://www.reddit.com/r/SakuraOS/" rel="noopener" target="_blank">Reddit</a>
     </div>
