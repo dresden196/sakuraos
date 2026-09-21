@@ -54,5 +54,7 @@ docker run --rm --privileged \
         bash /build/tests/test-shell-assist.sh || rc=1
         echo
         bash /build/tests/test-updates.sh || rc=1
+        echo
+        bash /build/tests/test-store-matching.sh || rc=1
         exit $rc
     '

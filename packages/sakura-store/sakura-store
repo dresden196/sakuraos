@@ -881,17 +881,58 @@ def pacman_version(pkg: str) -> str:
     return ""
 
 
+# Packaging suffixes that still mean "this application": a prebuilt binary of
+# the same release, or the same release shipped differently. Anything else --
+# -git, -nightly, -beta, -dev -- is a different build with different code, and
+# offering vlc-git as VLC would be a lie the user only discovers after it is
+# installed. So this is an allowlist, and a name that is not on it is refused.
+PACKAGING_SUFFIXES = ("-bin", "-appimage", "-stable")
+
+
+def slugify(name: str) -> str:
+    """A display name as a package would spell it: Visual Studio Code -> visual-studio-code."""
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+
+
+def variant_of(candidate: str, bases: set) -> bool:
+    """Whether a package name is this application under a packaging suffix."""
+    c = (candidate or "").lower()
+    if c in bases:
+        return True
+    for suffix in PACKAGING_SUFFIXES:
+        if c.endswith(suffix) and c[: -len(suffix)] in bases:
+            return True
+    return False
+
+
+def base_names(app_id: str, name: str) -> set:
+    """What this application is plausibly called in a flat namespace.
+
+    Three spellings, because no one of them is reliable:
+
+      the id stem      com.spotify.Client ends in "Client", which names nothing
+      the display name "Visual Studio Code" is visual-studio-code in the AUR
+      the vendor       com.brave.Browser is brave-bin, and neither of the other
+                       two contains the word "brave" at all
+    """
+    parts = app_id.split(".")
+    stem = parts[-1].lower()
+    vendor = parts[-2].lower() if len(parts) >= 3 else ""
+    return {b for b in (stem, slugify(name), vendor) if b}
+
+
 def find_elsewhere(app_id: str, name: str) -> list[dict]:
     """The same application from other sources.
 
     Namespaces do not line up -- Flatpak uses reverse-DNS, the AUR and Snap
-    use bare names -- so the last component of the id is tried alongside the
-    display name. This is a heuristic and is presented as one: the app page
-    offers what it found rather than asserting they are the same build.
+    use bare names -- so the application is looked for under each name it
+    plausibly goes by, allowing the suffixes that mean the same release
+    packaged differently and refusing the ones that mean a different build.
+    This is a heuristic and is presented as one: the app page offers what it
+    found rather than asserting they are the same build.
     """
-    stem = app_id.rsplit(".", 1)[-1].lower()
-    words = {stem, name.lower().split()[0]} if name else {stem}
     found = []
+    bases = base_names(app_id, name)
 
     # The repositories are not a guess: AppStream gives their packages the same
     # component id Flathub uses, so this is an exact lookup rather than a
@@ -921,14 +962,32 @@ def find_elsewhere(app_id: str, name: str) -> list[dict]:
               and src.available()]
 
     def probe(src):
+        # Searched under each name it might go by, not just the id stem --
+        # searching the AUR for "client" does not find Spotify.
+        #
+        # The suffixed spellings are asked for only after the plain ones come
+        # back with nothing, because this returns on the first match and the
+        # usual case should cost one round trip. They are needed because a
+        # search is capped and ranked by votes: firefox-bin exists but sits
+        # far below the many firefox-* packages, so nothing finds it except
+        # asking for it by name.
+        plain = sorted(bases, key=len, reverse=True)
+        # Only the shortest base gets the suffixed spellings. Every base times
+        # every suffix is twelve sequential requests to answer "no", on a page
+        # the user is waiting for, and the shortest base is the bare product
+        # name -- firefox, brave -- which is the one these suffixes attach to.
+        suffixed = ([plain[-1] + sfx for sfx in PACKAGING_SUFFIXES]
+                    if plain else [])
         try:
-            for hit in src.search(stem):
-                if hit.source_id.lower() in words or hit.name.lower() in words:
-                    return {"source": src.name, "id": hit.source_id,
-                            "version": hit.version,
-                            "installed": hit.installed,
-                            "popularity": hit.popularity,
-                            "exact": False}
+            for query in plain + suffixed:
+                for hit in src.search(query):
+                    if variant_of(hit.source_id, bases) \
+                            or variant_of(hit.name, bases):
+                        return {"source": src.name, "id": hit.source_id,
+                                "version": hit.version,
+                                "installed": hit.installed,
+                                "popularity": hit.popularity,
+                                "exact": False}
         except Exception:
             return None
         return None
