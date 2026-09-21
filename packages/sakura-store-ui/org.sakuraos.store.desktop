@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Sakura Store
-GenericName=Software Centre
+GenericName=Software Center
 Comment=Find and install applications
 Exec=sakura-store-ui %f
 Icon=sakura-store

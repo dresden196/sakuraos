@@ -193,6 +193,10 @@ QQC2.ApplicationWindow {
     // somebody in Berlin expects 14:30, and making them both correct it is a
     // question that did not need asking.
     property bool hour24Touched: false
+    // Same idea for the zone itself. The time page is rebuilt every time it is
+    // navigated to, so without this its Component.onCompleted re-ran the guess
+    // and overwrote a zone the user had already chosen.
+    property bool timezoneTouched: false
 
     // Whether this machine can reach a network right now. Re-read when the
     // browser screen opens rather than held from the network screen, because
@@ -486,8 +490,7 @@ QQC2.ApplicationWindow {
                             icon: "qrc:/assets/credit-cachyos.svg",
                             name: "CachyOS",
                             body: "The kernel. Its scheduler work, its build configuration and "
-                                + "its hardware patches are what make this machine feel quick, "
-                                + "and SakuraOS builds their work rather than its own."
+                                + "its hardware patches are what make this machine feel quick."
                         },
                         {
                             icon: "qrc:/assets/credit-linux.svg",
@@ -732,7 +735,7 @@ QQC2.ApplicationWindow {
                         {
                             title: "Terminal Assist",
                             body: "Using a terminal for the first time is daunting, and one command can "
-                                + "take a whole system with it. Terminal Assist recognises the commands "
+                                + "take a whole system with it. Terminal Assist recognizes the commands "
                                 + "that do real damage: partial upgrades, removing the last kernel, "
                                 + "force-removing packages other things depend on. It stops them "
                                 + "and tells you what to run instead."
@@ -1988,6 +1991,10 @@ QQC2.ApplicationWindow {
                 Layout.fillWidth: true
                 placeholderText: "Search for a city…"
                 Component.onCompleted: {
+                    // Only detect when the user has not already chosen. This
+                    // runs on every visit to the page, not just the first.
+                    if (root.timezoneTouched)
+                        return
                     var guess = backend.guessTimezone()
                     root.answers.timezone = guess === "" ? "UTC" : guess
                     // Same rule as picking one by hand: the detected zone
@@ -2027,6 +2034,7 @@ QQC2.ApplicationWindow {
                             TapHandler {
                                 onTapped: {
                                     root.answers.timezone = modelData.id
+                                    root.timezoneTouched = true
                                     // Follow the region until somebody says
                                     // otherwise. Picking Chicago and then
                                     // being shown 14:30 is a small thing that
@@ -2268,7 +2276,7 @@ QQC2.ApplicationWindow {
             }
 
             QQC2.Label {
-                text: "Accent colour"
+                text: "Accent color"
                 color: root.dim; font.pixelSize: 13
                 topPadding: 10
             }
@@ -2747,7 +2755,7 @@ QQC2.ApplicationWindow {
                         { pkg: "brave-bin",       name: "Brave", icon: "brave", needsNet: true,
                           detail: "Chromium-based. Blocks ads and trackers by default." },
                         { pkg: "vivaldi",         name: "Vivaldi", icon: "vivaldi", needsNet: true,
-                          detail: "Chromium-based. Heavily customisable, with tab tiling and stacking." },
+                          detail: "Chromium-based. Heavily customizable, with tab tiling and stacking." },
                         { pkg: "helium-browser-bin", name: "Helium", icon: "helium", needsNet: true,
                           detail: "Chromium-based, stripped of the tracking. Minimal by design." },
                         // Named in full: "Chrome" alone reads as Chromium to
@@ -3110,24 +3118,28 @@ QQC2.ApplicationWindow {
             readonly property var slides: [
                 {
                     t: "Nothing you type can quietly break it",
+                    img: "",
                     d: `Terminal Assist stops the commands known to wreck an Arch \
 system and explains what they would have done. You can always override one, \
 and it tells you exactly how.`
                 },
                 {
                     t: "Every update is reversible",
+                    img: "qrc:/assets/slide-updates.jpg",
                     d: `A snapshot is taken before anything changes. If an update \
 goes wrong, pick Recovery in the boot menu and you are back where you were. \
 No live USB, no chroot, no forum thread.`
                 },
                 {
                     t: "Software without the guesswork",
+                    img: "qrc:/assets/slide-store.jpg",
                     d: `The App Store shows you what a package actually is before \
 it installs, and where it came from. The AUR stays off until you turn it on, \
 and Sakura reads the build script to you when you do.`
                 },
                 {
                     t: "Tuned for the machine you have",
+                    img: "",
                     d: `SakuraOS checks what your processor supports and installs \
 the kernel that suits it. Older hardware gets the one that runs everywhere, \
 newer hardware gets the faster build.`
@@ -3177,6 +3189,52 @@ newer hardware gets the faster build.`
                     spacing: 12
                     opacity: 1
                     Behavior on opacity { NumberAnimation { duration: 300 } }
+
+                    // The screenshot for this slide, where there is one.
+                    // Masked the same way as the account pictures: radius on
+                    // an Image does nothing, and clip is rectangular whatever
+                    // the radius, so the corners have to be masked away.
+                    Item {
+                        id: slideShot
+                        readonly property int shotHeight: 260
+                        // Sized to the picture's own aspect, so the image, the
+                        // mask and the effect are all one box. A mask that is
+                        // not the same geometry as its source gets stretched
+                        // across the effect and the rounding lands off the
+                        // corners it was meant to cut.
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredHeight: slides[slideIndex].img === "" ? 0 : shotHeight
+                        Layout.preferredWidth: slideShotImage.implicitHeight > 0
+                            ? shotHeight * (slideShotImage.implicitWidth
+                                            / slideShotImage.implicitHeight)
+                            : 0
+                        visible: slides[slideIndex].img !== ""
+                        Image {
+                            id: slideShotImage
+                            anchors.fill: parent
+                            source: slides[slideIndex].img
+                            fillMode: Image.PreserveAspectFit
+                            // Decoded at the size actually drawn: the source
+                            // frames are far larger than this slot, and the
+                            // installer is competing with pacman for the CPU.
+                            sourceSize.height: slideShot.shotHeight
+                            asynchronous: true
+                            visible: false
+                        }
+                        Rectangle {
+                            id: slideShotMask
+                            anchors.fill: parent
+                            radius: 10
+                            visible: false
+                            layer.enabled: true
+                        }
+                        MultiEffect {
+                            anchors.fill: parent
+                            source: slideShotImage
+                            maskEnabled: true
+                            maskSource: slideShotMask
+                        }
+                    }
 
                     QQC2.Label {
                         text: slides[slideIndex].t

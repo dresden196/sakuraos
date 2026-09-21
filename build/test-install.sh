@@ -518,7 +518,7 @@ check "the browser choice is on record for future upgrades" \
 check "the browser is pinned to the task bar" \
       "grep -q \"\$(pacman -Ql $BROWSER_PKG | awk '\$2 ~ /applications\\/.*desktop\$/ {print \"applications:\" substr(\$2, match(\$2, /[^\\/]*\$/))}' | head -1)\" /usr/share/plasma/look-and-feel/org.sakura.dark.desktop/contents/layouts/org.kde.plasma.desktop-layout.js"
 # The answers the installer collects and used to drop on the floor.
-check "the accent colour was applied" \
+check "the accent color was applied" \
       "grep -q '^AccentColor=61,174,233' /home/$USER_NAME/.config/kdeglobals"
 check "the clock format was applied" \
       "grep -q '^LC_TIME=en_US.UTF-8' /home/$USER_NAME/.config/plasma-localerc"

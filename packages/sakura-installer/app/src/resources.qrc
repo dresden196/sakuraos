@@ -8,6 +8,10 @@
     <file>assets/browser-chrome.png</file>
     <file>assets/browser-vivaldi.png</file>
     <file>assets/browser-helium.png</file>
+    <!-- Shown on the install progress deck, so the screen somebody sits and
+         watches shows the thing each slide is describing. -->
+    <file>assets/slide-updates.jpg</file>
+    <file>assets/slide-store.jpg</file>
     <!-- Bundled because they are not on the machine: KDE's own logo from
          kde.org's brand assets, and Limine's from its repository. Arch's is
          absent on purpose; it ships in the filesystem package, so it is read
