@@ -12,6 +12,8 @@
          watches shows the thing each slide is describing. -->
     <file>assets/slide-updates.jpg</file>
     <file>assets/slide-store.jpg</file>
+    <file>assets/slide-terminal.jpg</file>
+    <file>assets/slide-kernel.jpg</file>
     <!-- Bundled because they are not on the machine: KDE's own logo from
          kde.org's brand assets, and Limine's from its repository. Arch's is
          absent on purpose; it ships in the filesystem package, so it is read

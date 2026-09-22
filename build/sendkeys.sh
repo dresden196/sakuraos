@@ -53,6 +53,18 @@ if keys and keys[0] == "--type":
             out.append(("minus", False))
         elif ch == "_":
             out.append(("minus", True))
+        # Enough for a shell command line, which is what a screenshot of a
+        # terminal needs typed into it. These are US positions: a guest
+        # installed with another layout gets other characters -- on a UK
+        # layout this key types ~, and | is shift-less.
+        elif ch == "/":
+            out.append(("slash", False))
+        elif ch == "|":
+            out.append(("backslash", True))
+        elif ch == ";":
+            out.append(("semicolon", False))
+        elif ch == "=":
+            out.append(("equal", False))
         else:
             sys.exit(f"unsupported character for --type: {ch!r}")
     for code, shift in out:

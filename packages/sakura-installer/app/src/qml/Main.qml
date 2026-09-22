@@ -3118,7 +3118,7 @@ QQC2.ApplicationWindow {
             readonly property var slides: [
                 {
                     t: "Nothing you type can quietly break it",
-                    img: "",
+                    img: "qrc:/assets/slide-terminal.jpg",
                     d: `Terminal Assist stops the commands known to wreck an Arch \
 system and explains what they would have done. You can always override one, \
 and it tells you exactly how.`
@@ -3139,7 +3139,7 @@ and Sakura reads the build script to you when you do.`
                 },
                 {
                     t: "Tuned for the machine you have",
-                    img: "",
+                    img: "qrc:/assets/slide-kernel.jpg",
                     d: `SakuraOS checks what your processor supports and installs \
 the kernel that suits it. Older hardware gets the one that runs everywhere, \
 newer hardware gets the faster build.`
