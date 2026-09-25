@@ -3172,10 +3172,18 @@ newer hardware gets the faster build.`
 
             // The deck. It holds the space whether or not it is showing
             // anything, so the progress bar underneath never jumps.
+            //
+            // The floor has to fit the tallest slide. It was 150 when the
+            // slides were two lines of text; with a 260 px screenshot on top
+            // a slide is over 400 tall, and a vertically centred column in a
+            // 150 px box overflows both ways -- the picture sat on top of the
+            // "Installing SakuraOS" heading and the text ran into the progress
+            // bar. A fixed floor rather than the current slide's height, so the
+            // bar does not jump each time the deck rotates.
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.minimumHeight: 150
+                Layout.minimumHeight: Math.max(440, deck.implicitHeight)
                 visible: !showLog.checked
 
                 ColumnLayout {
