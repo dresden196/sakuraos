@@ -663,6 +663,52 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # time-sync.target ever runs. That is a strange thing to inherit from the
     # installer media, and the machine has an RTC.
     rm -f /mnt/etc/systemd/system/sysinit.target.wants/systemd-time-wait-sync.service
+    rm -rf /mnt/etc/systemd/system/systemd-time-wait-sync.service.d
+
+    # The rest of what the live media configures for itself, every file of
+    # which was reaching installed machines. Each one is right for a disc that
+    # boots into a desktop nobody has a password for, and wrong for a computer
+    # somebody owns:
+    #   sshd enabled, with 10-archiso.conf allowing password logins -- every
+    #     installed machine accepted SSH logins from its network;
+    #   kscreenlockerrc turning the lock screen off;
+    #   do-not-suspend.conf ignoring the lid switch and the suspend key;
+    #   volatile-storage.conf keeping the journal in RAM, so no log survived a
+    #     restart and the @log subvolume held nothing;
+    #   cloud-init, which configures users and keys from any disk labelled
+    #     CIDATA or any metadata service that answers -- a live-media
+    #     convenience and, on a desktop, a way in.
+    # The rest are inert on an installed machine, but they describe a live
+    # environment, and the motd says so to anyone who reads it.
+    # The systemd-gpt-auto-generator mask stays: the installer writes an fstab,
+    # and unmasking it would start mounting partitions by type on disks that
+    # also hold other systems.
+    rm -f /mnt/etc/systemd/system/multi-user.target.wants/sshd.service \
+          /mnt/etc/ssh/sshd_config.d/10-archiso.conf \
+          /mnt/etc/xdg/kscreenlockerrc \
+          /mnt/etc/systemd/logind.conf.d/do-not-suspend.conf \
+          /mnt/etc/systemd/journald.conf.d/volatile-storage.conf \
+          /mnt/etc/systemd/resolved.conf.d/archiso.conf \
+          /mnt/etc/sddm.conf.d/10-sakura-live.conf \
+          /mnt/etc/polkit-1/rules.d/49-sakura-live-install.rules \
+          /mnt/etc/modprobe.d/broadcom-wl.conf \
+          /mnt/etc/systemd/system/livecd-alsa-unmuter.service \
+          /mnt/etc/systemd/system/sound.target.wants/livecd-alsa-unmuter.service \
+          /mnt/usr/local/bin/choose-mirror \
+          /mnt/usr/local/bin/Installation_guide \
+          /mnt/usr/local/bin/livecd-sound \
+          /mnt/etc/motd
+    rm -rf /mnt/usr/local/share/livecd-sound \
+           /mnt/etc/systemd/system/cloud-init.target.wants
+    : > /mnt/etc/motd
+    arch-chroot /mnt pacman -Rns --noconfirm cloud-init 2>/dev/null || true
+    # journald only keeps logs on disk when this directory exists, and /var/log
+    # is a fresh, empty subvolume. Without it, removing the volatile setting
+    # above changes nothing.
+    # The mode and group are what systemd's own package gives it; tmpfiles
+    # adds the ACLs at boot.
+    arch-chroot /mnt install -d -m 2755 -o root -g systemd-journal \
+        /var/log/journal 2>/dev/null || mkdir -p /mnt/var/log/journal
 
     # Anything else archiso left in /etc/systemd/system that belongs to the
     # live image. Named units above are the ones known to cause damage; this

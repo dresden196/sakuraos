@@ -538,6 +538,16 @@ else
 fi
 check "the display manager is enabled"     "systemctl is-enabled sddm"
 check "the network manager is enabled"     "systemctl is-enabled NetworkManager"
+# The live media's own configuration, which a copy install used to carry over
+# wholesale: an SSH server taking passwords, no screen lock, the lid ignored,
+# logs in RAM and cloud-init. Every one of these passed the checks above.
+check "no SSH server is listening"         "! ss -tlnH | grep -q ':22 '"
+check "the live SSH config is gone"        "test ! -e /etc/ssh/sshd_config.d/10-archiso.conf"
+check "the screen lock is not disabled"    "test ! -e /etc/xdg/kscreenlockerrc"
+check "closing the lid suspends"           "test ! -e /etc/systemd/logind.conf.d/do-not-suspend.conf"
+check "logs are kept on disk"              "test -d /var/log/journal && test ! -e /etc/systemd/journald.conf.d/volatile-storage.conf"
+check "cloud-init is not installed"        "! pacman -Q cloud-init"
+check "no live autologin is configured"    "test ! -e /etc/sddm.conf.d/10-sakura-live.conf"
 check "a boot entry was written"           "efibootmgr | grep -qi sakura"
 check "the store engine runs as the user"  "runuser -u $USER_NAME -- sakura-store sources"
 # Everything below is something that was broken and is meant to be fixed.

@@ -24,6 +24,56 @@ _activate_repos() {
     sed -i '/^\[core\]/i Include = /etc/pacman.d/sakura-core.conf\n' etc/pacman.conf
 }
 
+_clean_live_leftovers() {
+    # Installs made before the installer learned to remove them carry the live
+    # media's own configuration: an SSH server accepting password logins, no
+    # screen lock, the lid switch ignored, logs kept only in memory, and
+    # cloud-init. Each file is removed only if it is still the live media's
+    # version, identified by its content, so nothing a person wrote is touched.
+    # Never on the live media itself, where these files are correct.
+    [ -d run/archiso ] && return 0
+    local changed=0 f
+
+    f=etc/ssh/sshd_config.d/10-archiso.conf
+    if grep -qs 'PermitRootLogin yes' "$f"; then
+        rm -f "$f"
+        # Enabled by the live media, not by the owner: the owner's own setup
+        # would not have needed the live media's permissive config file.
+        rm -f etc/systemd/system/multi-user.target.wants/sshd.service
+        echo ":: SakuraOS: the SSH server had been left on by the installer. It is"
+        echo "   now off from the next restart. To use it deliberately:"
+        echo "   sudo systemctl enable --now sshd"
+        changed=1
+    fi
+    grep -qs 'No screen lock on the install media' etc/xdg/kscreenlockerrc \
+        && rm -f etc/xdg/kscreenlockerrc && changed=1
+    grep -qs 'HandleLidSwitch=ignore' etc/systemd/logind.conf.d/do-not-suspend.conf \
+        && rm -f etc/systemd/logind.conf.d/do-not-suspend.conf && changed=1
+    if grep -qs 'Storage=volatile' etc/systemd/journald.conf.d/volatile-storage.conf; then
+        rm -f etc/systemd/journald.conf.d/volatile-storage.conf
+        [ -d var/log/journal ] || install -d -m 2755 -o root -g systemd-journal var/log/journal 2>/dev/null \
+            || mkdir -p var/log/journal
+        systemctl try-restart systemd-journald.service 2>/dev/null || true
+        changed=1
+    fi
+    grep -qs 'Default systemd-resolved configuration for archiso' etc/systemd/resolved.conf.d/archiso.conf \
+        && rm -f etc/systemd/resolved.conf.d/archiso.conf
+    grep -qs 'Live session only' etc/sddm.conf.d/10-sakura-live.conf \
+        && rm -f etc/sddm.conf.d/10-sakura-live.conf
+    grep -qs 'subject.user === "sakura"' etc/polkit-1/rules.d/49-sakura-live-install.rules \
+        && rm -f etc/polkit-1/rules.d/49-sakura-live-install.rules
+    grep -qs 'SakuraOS live environment' etc/motd && : > etc/motd
+    rm -rf etc/systemd/system/systemd-time-wait-sync.service.d
+    if [ -d etc/systemd/system/cloud-init.target.wants ]; then
+        rm -rf etc/systemd/system/cloud-init.target.wants
+        # cloud-init's own off switch, in case anything else pulls it in.
+        [ -d etc/cloud ] && touch etc/cloud/cloud-init.disabled
+        changed=1
+    fi
+    [ "$changed" = 1 ] && echo ":: SakuraOS: removed settings left over from the install media. Restart to finish."
+    return 0
+}
+
 post_install() {
     pre_install
     _activate_repos
@@ -31,6 +81,7 @@ post_install() {
 
 post_upgrade() {
     _activate_repos
+    _clean_live_leftovers
 }
 
 pre_remove() {

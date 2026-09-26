@@ -10,7 +10,8 @@ pkgdesc="SakuraOS system settings schema"
 arch=('any')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
-backup=('etc/sakura/sakura.conf' 'etc/systemd/zram-generator.conf')
+backup=('etc/sakura/sakura.conf' 'etc/systemd/zram-generator.conf'
+        'etc/sysctl.d/99-sakura-zram.conf')
 source=('sakura.conf' 'zram-generator.conf' '99-sakura-zram.conf')
 sha256sums=('SKIP' 'SKIP' 'SKIP')
 
