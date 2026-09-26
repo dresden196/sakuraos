@@ -1,0 +1,92 @@
+<h1>How restore points and recovery work</h1>
+<p class="lede">
+  The technical side of <a href="/recovery">Going back</a>: when restore points
+  are taken, what a rollback does to the disk, and how the recovery screen
+  decides to appear.
+</p>
+
+<h2>Taking restore points</h2>
+<p>
+  Restore points are <a href="/glossary#snapshot">BTRFS snapshots</a> of the
+  <code>@</code> subvolume, which holds the system, managed by
+  <a href="https://github.com/openSUSE/snapper">Snapper</a>. They are taken:
+</p>
+<ul>
+  <li>before and after every pacman transaction, by <code>snap-pac</code>, whatever started it: the Update Center, the App Store, an AUR helper or a terminal;</li>
+  <li>by the update engine, before it starts a nightly update;</li>
+  <li>by hand, from the Update Center's <span class="ui">History</span> tab.</li>
+</ul>
+<p>
+  A snapshot costs almost nothing when it is taken; it grows only as the files
+  it covers change. Snapper keeps the 10 most recent numbered snapshots, plus
+  up to 5 marked important, and <code>snapper-cleanup.timer</code> removes older
+  ones. No snapshots are taken on a timer.
+</p>
+<p>
+  <code>/home</code>, the logs, the package cache and the snapshots themselves
+  are separate subvolumes and are never part of a restore point. See
+  <a href="/disk-layout">Disk layout</a>.
+</p>
+
+<h2>What a rollback does</h2>
+<p>
+  SakuraOS boots a <a href="/glossary#uki">unified kernel image</a> whose kernel
+  command line is built in and always mounts <code>subvol=@</code>. Going back
+  therefore changes what <code>@</code> is, rather than which subvolume is booted:
+</p>
+<ol class="steps">
+  <li><p>The current <code>@</code> is renamed to <code>@rollback-</code> followed by a timestamp. It is kept, not deleted.</p></li>
+  <li><p>A new, writable <code>@</code> is created from the chosen snapshot.</p></li>
+  <li><p>The computer starts from the new <code>@</code>.</p></li>
+</ol>
+<p>
+  Because the command line never changes, it stays inside the signed image, and
+  the same mechanism works with Secure Boot on or off. A separate boot entry per
+  snapshot would not: with Secure Boot on, systemd-stub ignores a command line
+  passed from outside a signed image that has its own.
+</p>
+<p>
+  A rollback cannot happen while <code>@</code> is mounted as the running
+  system, so it is done in the initramfs, before the system mounts it. When you
+  go back from the Update Center, it records the chosen snapshot number in
+  <code>/etc/sakura/rollback-request</code> and restarts, and the initramfs
+  carries it out.
+</p>
+
+<h2>The recovery screen</h2>
+<p>
+  Recovery is a second unified kernel image, listed in the boot menu as
+  <span class="ui">SakuraOS Recovery</span>. It lists snapshots and performs the
+  rollback you choose.
+</p>
+<p>
+  The normal image also opens it by itself after failed starts. Early in every
+  start, the initramfs increments a counter on the EFI system partition, in
+  <code>EFI/sakura/state</code>. <code>sakura-boot-success.service</code> resets
+  it once the login screen has started and is still running a short while
+  later. If the counter passes 3, the next start opens the recovery screen,
+  saying it was started because the machine has not started properly three
+  times.
+</p>
+<p>
+  The threshold is three rather than one because a single failed start is
+  usually a power cut or a held power button.
+</p>
+
+<h2>Kernel updates and rollback</h2>
+<p>
+  The kernel images live on the EFI system partition, which is FAT and not
+  part of any snapshot, while the kernel's modules live in <code>@</code>. After
+  going back across a kernel update, the two can disagree: the newer kernel
+  starts, but the restored system only has modules for the older one.
+</p>
+<p>
+  <code>sakura-kernel-sync.service</code> checks on every start whether the
+  running kernel has its modules. If not, it rebuilds the boot image for the
+  installed kernel and restarts once. A marker file stops it from restarting
+  more than once for the same problem.
+</p>
+
+<h2>Useful commands</h2>
+<pre><code>snapper -c root list            <span class="c"># every restore point</span>
+sudo btrfs subvolume list /     <span class="c"># subvolumes, including kept @rollback-* ones</span></code></pre>

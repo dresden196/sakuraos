@@ -1,0 +1,49 @@
+<h1>Other drives and USB sticks</h1>
+<p class="lede">
+  Drives other than the one SakuraOS is on, including USB sticks, external
+  drives and a Windows partition, appear in the file manager, Dolphin.
+</p>
+
+<h2>Opening a drive</h2>
+<ol class="steps">
+  <li><p>Open <span class="ui">Dolphin</span>. Drives are listed in the sidebar under <span class="ui">Devices</span>.</p></li>
+  <li><p>Click a drive to open it. For a drive inside the computer, you may be asked for your password.</p></li>
+  <li><p>Before unplugging a USB stick or external drive, click the eject icon beside it and wait for it to disappear. Unplugging without doing this can lose files that were still being written.</p></li>
+</ol>
+<p>
+  SakuraOS reads and writes drives formatted for Windows (NTFS, exFAT and FAT32)
+  as well as Linux file systems.
+</p>
+
+<h2>Opening a drive automatically</h2>
+<ol class="steps">
+  <li><p>Open <span class="ui">System Settings</span> and search for <strong>Auto-Mount</strong>. Open <span class="ui">Device Auto-Mount</span>.</p></li>
+  <li><p>Find the drive under <span class="ui">Attached Devices</span>. It is listed only after you have opened it once in Dolphin.</p></li>
+  <li><p>Tick <span class="ui">On Login</span> to open it every time you log in, and press <span class="ui">Apply</span>.</p></li>
+</ol>
+
+<h2>Formatting a drive</h2>
+<p>
+  Install <strong>KDE Partition Manager</strong>, which can format, create and
+  resize partitions. In a terminal:
+</p>
+<pre><code>sudo pacman -S partitionmanager</code></pre>
+<p>Then open <span class="ui">KDE Partition Manager</span> from the application menu.</p>
+<div class="warn">
+  <p>
+    <strong>Formatting erases everything on the drive.</strong> Check the
+    drive's name and size before you confirm, and never format the drive
+    SakuraOS is on.
+  </p>
+</div>
+<p>
+  To use a USB stick with Windows and macOS as well, format it as exFAT.
+</p>
+
+<h2>What is using my space?</h2>
+<p>
+  Open <span class="ui">Filelight</span>, which is installed, and choose a
+  folder or drive. It shows what takes up the space as a chart you can click
+  into. If the system drive is full, see
+  <a href="/troubleshooting#disk-full">The disk is full</a>.
+</p>

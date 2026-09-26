@@ -1,0 +1,60 @@
+<h1>Uninstalling SakuraOS</h1>
+<p class="lede">
+  How to remove SakuraOS depends on whether it has a disk to itself or shares one
+  with Windows. Either way, back up anything you want to keep from SakuraOS
+  first: removing it deletes everything on its partition, including your home
+  folder.
+</p>
+
+<h2>SakuraOS on its own disk</h2>
+<p>
+  Install the other operating system and let its installer erase that disk.
+  Nothing else is needed. If the computer's boot menu still lists
+  <span class="ui">SakuraOS</span> afterwards, delete that entry in the firmware
+  settings.
+</p>
+
+<h2 id="beside-windows">SakuraOS beside Windows</h2>
+<p>
+  Do these steps in Windows, in this order. Fixing the startup files first means
+  the computer never tries to start a SakuraOS that is no longer there.
+</p>
+
+<h3>1. Put Windows' startup files back</h3>
+<p>
+  Open Command Prompt as administrator: search the Start menu for
+  <strong>cmd</strong>, right-click <span class="ui">Command Prompt</span> and
+  choose <span class="ui">Run as administrator</span>. Use Command Prompt, not
+  PowerShell or Terminal, as these commands are written for it. Run them one at
+  a time. If <code>S:</code> is already in use, pick another free letter and
+  use it everywhere below.
+</p>
+<pre><code>mountvol S: /S
+rmdir /S /Q S:\EFI\sakura
+bcdboot C:\Windows /s S: /f UEFI
+mountvol S: /D</code></pre>
+<p>
+  The first line gives the EFI system partition a drive letter, the second
+  removes SakuraOS's startup files, the third rewrites Windows' own, and the
+  last removes the drive letter again.
+</p>
+
+<h3>2. Remove the SakuraOS startup entry</h3>
+<p>In the same window:</p>
+<pre><code>bcdedit /enum firmware</code></pre>
+<p>
+  Find the entry whose <code>description</code> is <code>SakuraOS</code> and note
+  its <code>identifier</code>, which looks like
+  <code>{12345678-abcd-…}</code>. Then run the following, replacing the text in
+  quotes with that identifier, braces included:
+</p>
+<pre><code>bcdedit /delete "{identifier}"</code></pre>
+
+<h3>3. Delete the SakuraOS partition</h3>
+<ol class="steps">
+  <li><p>Right-click the Start button and choose <span class="ui">Disk Management</span>.</p></li>
+  <li><p>Find the SakuraOS partition. It has no drive letter, is the size you gave SakuraOS, and usually sits right after the <span class="ui">(C:)</span> partition. If you are not sure which it is, stop and <a href="/help">ask</a>: deleting the wrong partition loses its files.</p></li>
+  <li><p>Right-click it and choose <span class="ui">Delete Volume</span>.</p></li>
+  <li><p>To give the space back to Windows, right-click <span class="ui">(C:)</span> and choose <span class="ui">Extend Volume</span>. This only works if the free space is directly after C:.</p></li>
+</ol>
+<p>Restart. The computer now starts straight into Windows.</p>

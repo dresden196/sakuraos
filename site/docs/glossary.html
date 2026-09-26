@@ -1,80 +1,183 @@
 <h1>Glossary</h1>
 <p class="lede">
-  The words this wiki uses. Where a term means something specific here rather
-  than generally, that is the meaning given.
+  Short explanations of the terms this wiki uses, in alphabetical order. Each
+  one links to the page that goes into more detail.
 </p>
 
-<h2>AUR</h2>
+<h2 id="appimage">AppImage</h2>
 <p>
-  The Arch User Repository: build scripts written by other users, for software
-  not packaged by Arch itself. Nobody reviews them. Off by default here. See
-  <a href="/aur">The AUR</a>.
+  A whole application packed into one file, downloaded from the developer's
+  website. See <a href="/store#appimage">AppImages</a>.
 </p>
 
-<h2>BTRFS</h2>
+<h2 id="arch-linux">Arch Linux</h2>
 <p>
-  The filesystem SakuraOS installs on. It can take a snapshot of itself
-  instantly and cheaply, which is what makes restore points practical.
+  The Linux distribution SakuraOS is based on. Almost all of SakuraOS's software
+  comes from Arch's repositories. SakuraOS adds the installer, the App Store,
+  the Update Center, the recovery system and its own settings on top.
 </p>
 
-<h2>Canary</h2>
+<h2 id="aur">AUR</h2>
 <p>
-  A machine of ours that installs each night, applies the day's updates,
-  restarts, and is checked. What breaks it is held back from you. See
+  The Arch User Repository: build scripts written by Arch users for software
+  that Arch does not package itself. Nobody reviews them before they are
+  published. It is off until you turn it on. See <a href="/aur">The AUR</a>.
+</p>
+
+<h2 id="btrfs">BTRFS</h2>
+<p>
+  The filesystem SakuraOS installs on. It can take a snapshot of itself almost
+  instantly without copying anything, which is what makes restore points
+  practical. See <a href="/disk-layout">Disk layout</a>.
+</p>
+
+<h2 id="canary">Canary</h2>
+<p>
+  SakuraOS's test machine. Every night it is installed from scratch, given the
+  day's updates, restarted and checked. Updates that break it are held back
+  from everyone until they are fixed. See
   <a href="/updates">Updates</a>.
 </p>
 
-<h2>Hook</h2>
+<h2 id="esp">EFI system partition (ESP)</h2>
 <p>
-  A script pacman runs before or after a transaction. SakuraOS uses hooks for
-  the checks that must not be avoidable, because a hook runs whatever asked for
-  the package: a terminal, a script, <code>yay</code>, or the App Store.
+  A small partition the firmware reads when the computer starts. It holds the
+  boot loader and, on SakuraOS, the kernel images. Windows has one too, and on
+  a dual-boot computer they share it. See <a href="/disk-layout">Disk layout</a>.
 </p>
 
-<h2>Pacman</h2>
+<h2 id="flatpak">Flatpak</h2>
 <p>
-  Arch's package manager, and the thing underneath the App Store. Everything
-  that installs or removes software goes through it.
+  A way of distributing applications that runs each one in a sandbox with its
+  own copy of what it needs. Flatpaks come from Flathub. See
+  <a href="/store">App Store</a>.
 </p>
 
-<h2>Restore point</h2>
+<h2 id="hook">Hook</h2>
 <p>
-  A snapshot of the system taken before a change, that you can return to. Not a
-  backup: it is on the same disk and does not protect against the disk failing.
+  A script that pacman runs before or after installing or removing packages.
+  SakuraOS uses hooks for checks that must apply however a package is
+  installed: from the App Store, a terminal or a script. See
+  <a href="/terminal">Terminal Assist</a>.
 </p>
 
-<h2>Rolling release</h2>
+<h2 id="kernel">Kernel</h2>
 <p>
-  A distribution with no versions. Software arrives when it is released rather
-  than being held for a version upgrade every six months. It is why Arch has
-  current software, and why a bad day upstream reaches you sooner.
+  The core of the operating system, which talks to the hardware and runs every
+  other program. See <a href="/kernel">Kernel</a>.
 </p>
 
-<h2>Subvolume</h2>
+<h2 id="luks">LUKS</h2>
 <p>
-  An independently snapshottable part of a BTRFS filesystem. SakuraOS puts the
-  system, your home directory, the logs, the package cache and the snapshots in
-  separate ones, which is why rolling the system back does not touch your files
-  or erase the logs that explain what happened.
+  The standard disk encryption on Linux, used when you choose to encrypt the
+  disk during the install. See <a href="/install">Installing</a>.
 </p>
 
-<h2>Secure Boot</h2>
+<h2 id="pacman">pacman</h2>
 <p>
-  A firmware feature that refuses to start anything not signed by a key it
-  trusts. SakuraOS enrolls its own keys and signs both its system and recovery
-  images, so recovery still works with it on.
+  Arch's package manager. Everything that installs, updates or removes system
+  software goes through it, including the App Store and the Update Center.
 </p>
 
-<h2>UKI</h2>
+<h2 id="package">Package</h2>
 <p>
-  Unified Kernel Image: the kernel, its initramfs and its command line in one
-  signed file. Both the system and the recovery environment are UKIs here,
-  which is what lets both be signed for Secure Boot.
+  A piece of software prepared for installing, with a list of what else it
+  needs. A single application can be several packages.
 </p>
 
-<h2>x86-64-v3</h2>
+<h2 id="proton">Proton</h2>
 <p>
-  A set of processor instructions, roughly anything from 2013 onward. The
-  installer checks for it and gives machines that have it a kernel built to use
-  it. See <a href="/kernel">Kernel</a>.
+  Valve's version of Wine, built into Steam, which runs Windows games. See
+  <a href="/gaming">Gaming</a>.
+</p>
+
+<h2 id="restore-point">Restore point</h2>
+<p>
+  A snapshot of the system that you can go back to. SakuraOS takes one before
+  every update, and you can save your own. A restore point is not a backup: it
+  is on the same disk, so it does not protect against the disk failing. See
+  <a href="/recovery">Going back</a> and <a href="/backups">Backups</a>.
+</p>
+
+<h2 id="rolling-release">Rolling release</h2>
+<p>
+  A distribution without version upgrades. Instead of a big upgrade every six
+  months or two years, software updates arrive a little at a time, soon after
+  they are released. SakuraOS, like Arch, works this way, so you never need to
+  reinstall to get newer software.
+</p>
+
+<h2 id="secure-boot">Secure Boot</h2>
+<p>
+  A firmware feature that only starts software signed by keys the firmware
+  trusts. SakuraOS can set it up with its own keys during the install. See
+  <a href="/install#secure-boot">Secure Boot</a>.
+</p>
+
+<h2 id="snap">Snap</h2>
+<p>
+  Canonical's way of distributing applications, from the Snap Store. Some
+  software is only published there. See <a href="/store">App Store</a>.
+</p>
+
+<h2 id="snapshot">Snapshot</h2>
+<p>
+  A frozen copy of a BTRFS subvolume as it was at one moment. It takes almost
+  no space at first, and grows only as the files it froze change. Restore
+  points are snapshots of the system.
+</p>
+
+<h2 id="subvolume">Subvolume</h2>
+<p>
+  A separate part of a BTRFS filesystem that can be snapshotted on its own.
+  SakuraOS keeps the system, your home folder, the logs and the package cache in
+  separate subvolumes, which is why going back to a restore point does not
+  touch your files. See <a href="/disk-layout">Disk layout</a>.
+</p>
+
+<h2 id="sudo">sudo</h2>
+<p>
+  Put in front of a terminal command to run it with administrator rights. It
+  asks for your password.
+</p>
+
+<h2 id="terminal">Terminal</h2>
+<p>
+  The window where you type commands. On SakuraOS it is called Konsole. You do
+  not need it for everyday use; this wiki uses it for fixes that have no
+  button yet.
+</p>
+
+<h2 id="uefi">UEFI</h2>
+<p>
+  The firmware on modern computers that starts the operating system. It
+  replaced the older BIOS. SakuraOS needs a computer that starts in UEFI mode.
+  See <a href="/requirements">Requirements</a>.
+</p>
+
+<h2 id="uki">UKI</h2>
+<p>
+  Unified Kernel Image: the kernel and everything it needs to start, in one
+  file. SakuraOS's normal system and its recovery environment are each a UKI,
+  so both can be signed for Secure Boot. See
+  <a href="/how-recovery">How recovery works</a>.
+</p>
+
+<h2 id="wine">Wine</h2>
+<p>
+  Software that runs Windows programs on Linux. See
+  <a href="/windows">Windows programs</a>.
+</p>
+
+<h2 id="x86-64-v3">x86-64-v3</h2>
+<p>
+  A set of processor instructions found on most Intel processors from 2013 and AMD
+  processors from 2015 onward. Computers that have it get SakuraOS's tuned
+  kernel. See <a href="/kernel">Kernel</a>.
+</p>
+
+<h2 id="zram">zram</h2>
+<p>
+  Compressed memory used in place of a swap file. See
+  <a href="/tuning#compressed-swap">Tuning</a>.
 </p>

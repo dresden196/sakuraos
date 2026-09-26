@@ -1,83 +1,103 @@
 <h1>The App Store</h1>
 <p class="lede">
-  Four packaging systems in one place, with the source of every application
-  stated plainly rather than buried. The same application often exists in more
-  than one of them, and which one you pick has real consequences.
+  The App Store finds, installs, updates and removes applications. It searches
+  several sources at once, and when an application is available from more than
+  one, it lets you choose.
 </p>
 
-<h2>The four sources</h2>
+<figure>
+  <img src="/img/store-discover.jpg" alt="The App Store's Discover page, with a featured application, categories and popular applications" width="1180" height="830" loading="lazy">
+</figure>
 
-<div class="tablewrap">
-<table>
-  <thead><tr><th>Source</th><th>What it is</th><th>Reviewed by</th></tr></thead>
+<h2>Finding and installing an application</h2>
+<ol class="steps">
+  <li><p>Search at the top, or browse by category on the left.</p></li>
+  <li><p>Open the application's page for its description, screenshots, reviews and license.</p></li>
+  <li><p>Under <span class="ui">Install from</span>, check which source is selected. The store picks one for you; see below.</p></li>
+  <li><p>Press <span class="ui">Install</span>, and type your password if asked.</p></li>
+</ol>
+<p>
+  You can start several installs without waiting. Installs from the same kind of
+  source take turns; different kinds, such as a Flatpak and a SakuraOS package,
+  run at the same time. The store shows each one as waiting, installing or
+  failed.
+</p>
+
+<h2>Where applications come from</h2>
+<figure>
+  <img src="/img/store-app-page.jpg" alt="Steam's page in the App Store, with Install from showing Flatpak, SakuraOS and Snap" width="1180" height="830" loading="lazy">
+  <figcaption>An application available from three sources. The selected one is highlighted.</figcaption>
+</figure>
+<div class="tablewrap"><table>
+  <thead><tr><th>Source</th><th>What it is</th></tr></thead>
   <tbody>
-    <tr>
-      <td><strong>Repositories</strong></td>
-      <td>Arch's own packages, plus ours. Native, smallest, best integrated with the system.</td>
-      <td>Arch package maintainers</td>
-    </tr>
-    <tr>
-      <td><strong>Flatpak</strong></td>
-      <td>Sandboxed applications from Flathub, carrying their own runtime. Newer versions, larger downloads.</td>
-      <td>Flathub, with per-application sandbox permissions</td>
-    </tr>
-    <tr>
-      <td><strong>Snap</strong></td>
-      <td>Canonical's format. Present because some software ships here and nowhere else.</td>
-      <td>Canonical, with automatic review for most publishers</td>
-    </tr>
-    <tr>
-      <td><strong>AUR</strong></td>
-      <td>Build scripts written by other users. Off by default. See <a href="/aur">The AUR</a>.</td>
-      <td><strong>Nobody.</strong> That is the whole point of the page about it.</td>
-    </tr>
+    <tr><td><strong>SakuraOS</strong></td><td>Packages from Arch Linux and SakuraOS. The smallest downloads, updated with the rest of the system.</td></tr>
+    <tr><td><strong>Flatpak</strong></td><td>Applications from Flathub. Each runs in a sandbox with its own copy of what it needs, so downloads are larger. Often the newest version. The page lists what each one is allowed to access.</td></tr>
+    <tr><td><strong>Snap</strong></td><td>Applications from Canonical's Snap Store. Some software is only published here.</td></tr>
+    <tr><td><strong>AppImage</strong></td><td>A single file you download from a website. See <a href="#appimage">AppImages</a>.</td></tr>
+    <tr><td><strong>AUR</strong></td><td>Build scripts written by Arch users, which nobody reviews. Off until you turn it on. See <a href="/aur">The AUR</a>.</td></tr>
   </tbody>
-</table>
-</div>
-
+</table></div>
 <p>
-  Where an application exists in more than one source, the store matches them
-  up and shows you the choice rather than picking silently. A Flatpak of the
-  same program is usually newer and always larger; the repository version is
-  usually better integrated. Neither is right in general.
+  When an application is available from more than one source, the store selects
+  the one you already have installed. If you have none, it selects SakuraOS
+  first, then Flatpak, Snap, AppImage and the AUR. To use a different one, click
+  it before pressing Install.
 </p>
 
-<h2>Ordering</h2>
+<h2>Updates</h2>
 <p>
-  The default preference is repositories first, then Flatpak, then Snap, then
-  the AUR. That order runs from "reviewed by a distribution and integrated with
-  your system" to "arbitrary code from a stranger", which is the order most
-  people would choose if the information were in front of them.
+  Everything is updated automatically: SakuraOS packages with the nightly system
+  update, and Flatpaks, Snaps and AppImages by the store shortly afterwards.
+  Applications from the AUR are the exception; see
+  <a href="/aur#updating">updating AUR packages</a>.
 </p>
 
-<h2>AppImages</h2>
+<h2>Removing an application</h2>
 <p>
-  An AppImage is a single executable file. The store can install one you have
-  already downloaded, or fetch one and integrate it so it appears in your
-  application menu like anything else.
+  Open <span class="ui">Installed</span>, choose the application, and press
+  <span class="ui">Uninstall</span>. Tick
+  <span class="ui">Also remove its settings and saved data</span> to remove what
+  it stored in your home folder as well.
 </p>
 <p>
-  The order of operations is deliberate: <strong>download, verify, then make
-  executable</strong>. An AppImage is an executable fetched over the network,
-  and marking it runnable before knowing it arrived intact is the one step
-  never worth skipping.
-</p>
-<p>
-  Many AppImages carry no update information at all. When that is true, the
-  store says so at install time rather than leaving you with a program that
-  silently never updates again.
+  The store will not remove something the system needs to start or to update
+  itself. See <a href="/terminal">Terminal Assist</a>.
 </p>
 
-<h2>Keeping things current</h2>
+<h2 id="appimage">AppImages</h2>
 <p>
-  Repository packages, Flatpaks and Snaps are all updated by the nightly update
-  run, so keeping current is one thing rather than three. AUR packages are the
-  exception and are covered in <a href="/aur">The AUR</a>.
+  An AppImage is a whole application in one file, downloaded from the
+  developer's website. Open the downloaded file and the store offers to install
+  it: the file is copied to the <code>Applications</code> folder in your home
+  folder and added to the application menu.
+</p>
+<p>
+  An AppImage is only as trustworthy as the website you downloaded it from, and
+  the store says so before installing. Many AppImages cannot update themselves;
+  the store tells you when that is the case.
 </p>
 
-<h2>What the store will not do quietly</h2>
+<h2>Reviews</h2>
 <p>
-  Removals go through the same guard as everything else. If a package the
-  system depends on is about to be removed, the check inside pacman stops it no
-  matter which application asked. See <a href="/terminal">Terminal Assist</a>.
+  Ratings and reviews come from the Open Desktop Ratings Service, which GNOME
+  Software and KDE Discover also use. To write one, open an application you have
+  installed and choose <span class="ui">Write a review</span>. Reviews are
+  public, under whatever name you choose.
+</p>
+
+<h2 id="app-sync">App Sync</h2>
+<p>
+  To set up a new computer with the same applications, click your name at the
+  bottom left of the store and choose
+  <span class="ui">Save this machine's list…</span>. On the new computer, choose
+  <span class="ui">Open a list…</span> and pick that file. The list holds only
+  application names: no settings and no files.
+</p>
+
+<h2>What the store does not show</h2>
+<p>
+  The store lists applications that appear in the application menu. Command-line
+  tools and libraries are not listed. Install those in a terminal with
+  <code>sudo pacman -S name</code>.
 </p>

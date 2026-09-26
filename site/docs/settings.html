@@ -1,0 +1,68 @@
+<h1>The SakuraOS settings page</h1>
+<p class="lede">
+  SakuraOS's own settings are on one page in System Settings. Open
+  <span class="ui">System Settings</span>, then <span class="ui">SakuraOS</span>
+  in the <span class="ui">System</span> group.
+</p>
+
+<figure>
+  <img src="/img/settings-page.jpg" alt="System Settings with the SakuraOS page open, showing the Terminal Assist and AUR settings" width="840" height="612" loading="lazy">
+</figure>
+<p>
+  Change what you want, then press <span class="ui">Apply</span> at the bottom.
+  <span class="ui">Defaults</span> puts everything back as it was after
+  installing.
+</p>
+
+<h2>Terminal Assist</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>When a command would break the system</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr><td><span class="ui">Stop it and explain why</span> (default)</td><td>The command does not run. You see why, and how to run it anyway.</td></tr>
+    <tr><td><span class="ui">Warn, but continue</span></td><td>You see the explanation, and the command runs.</td></tr>
+    <tr><td><span class="ui">Do nothing</span></td><td>Terminal Assist is off.</td></tr>
+  </tbody>
+</table></div>
+<p>See <a href="/terminal">Terminal Assist</a>.</p>
+
+<h2 id="aur">AUR</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><span class="ui">Allow installing packages from the AUR</span></td><td>Off</td><td>Lets the App Store search and install AUR packages. The other AUR settings can only be changed while this is on.</td></tr>
+    <tr><td><span class="ui">Review packages before they build</span></td><td>On</td><td>The App Store shows you each build script, and what changed since the last one you accepted, before building. Turning it off builds without asking.</td></tr>
+    <tr><td><span class="ui">Check for known compromised packages</span></td><td>On</td><td>Checks what you have installed against published AUR malware campaigns, after every install and once a day.</td></tr>
+    <tr><td><span class="ui">Command-line helper</span></td><td>None installed</td><td>Installs <code>yay</code> or <code>paru</code> for using the AUR from a terminal. Choosing one removes the other.</td></tr>
+  </tbody>
+</table></div>
+<p>
+  The helper is installed when you choose it from the list, and the line under
+  the list says which one is installed. Until you choose, it says
+  <span class="ui">No helper is installed</span>, even though the list shows
+  <span class="ui">yay</span>. Both helpers are built and signed by SakuraOS
+  rather than compiled on your computer. The App Store does not need either of
+  them. See <a href="/aur">The AUR</a>.
+</p>
+
+<h2>Windows programs</h2>
+<p>
+  Turns support for Windows programs on or off. Turning it on downloads and
+  installs Wine, about 1 GB. Turning it off removes it again. When it is on,
+  programs you have installed are listed, each with an option to remove it. See
+  <a href="/windows">Windows apps</a>.
+</p>
+
+<h2 id="updates">Updates</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><span class="ui">Install updates automatically</span></td><td>On</td><td>Installs updates each night after taking a restore point. When off, updates are only checked; install them from the Update Center.</td></tr>
+    <tr><td><span class="ui">Updates that have been tested first</span></td><td>On</td><td>Holds back any update that failed on SakuraOS's test machine. See <a href="/updates">Updates</a>.</td></tr>
+    <tr><td><span class="ui">Install updates at</span></td><td>03:00</td><td>The time automatic updates start.</td></tr>
+    <tr><td><span class="ui">Only when plugged in</span></td><td>On</td><td>On a laptop, waits for the charger.</td></tr>
+  </tbody>
+</table></div>
+<p>
+  The same settings are on the <span class="ui">Schedule</span> tab of the
+  Update Center; changing one changes the other.
+</p>

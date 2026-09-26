@@ -1,93 +1,75 @@
-<h1>Gaming on SakuraOS</h1>
+<h1>Gaming</h1>
 <p class="lede">
-  Nothing here is SakuraOS-specific magic. It is Arch with a current kernel,
-  current Mesa and a scheduler tuned for a desktop, which is most of what
-  gaming on Linux needs. This page is the setup and the things worth checking
-  when a game misbehaves.
+  Most Windows games on Steam run on SakuraOS through Proton, which Steam
+  includes. This page covers installing Steam, getting games to run, and what to
+  try when one does not.
 </p>
 
-<h2>Steam</h2>
+<h2>Installing Steam</h2>
+<ol class="steps">
+  <li><p>Open the App Store and search for <strong>Steam</strong>.</p></li>
+  <li><p>Under <span class="ui">Install from</span>, choose <span class="ui">Flatpak</span>. The <span class="ui">SakuraOS</span> option cannot install Steam at the moment, so make sure Flatpak is the one highlighted.</p></li>
+  <li><p>Press <span class="ui">Install</span>, then open Steam and sign in.</p></li>
+</ol>
+
+<h2>Running Windows games</h2>
 <p>
-  Install Steam from the <a href="/store">App Store</a>. The repository version
-  is the one to take: it is the native package, it updates with everything
-  else, and it uses your system's graphics drivers rather than carrying its
-  own.
+  Steam runs Windows games through Proton. It is on for games Valve has tested.
+  To allow it for every game, open Steam's
+  <span class="ui">Settings → Compatibility</span> and turn on
+  <span class="ui">Enable Steam Play for all other titles</span>.
 </p>
 <p>
-  In Steam, turn on <strong>Steam Play</strong> for all titles under Settings,
-  Compatibility. That is what runs Windows games through Proton, and it is off
-  by default in Steam itself rather than by anything we did.
+  Before buying a game, check <a href="https://www.protondb.com/">ProtonDB</a>,
+  where players report how well each game runs.
 </p>
 
-<h2>Proton</h2>
+<h2>When a game will not start</h2>
+<p>Try these in order:</p>
+<ol class="steps">
+  <li><p><strong>Try a different Proton version.</strong> Right-click the game, choose <span class="ui">Properties → Compatibility</span>, tick <span class="ui">Force the use of a specific Steam Play compatibility tool</span>, and pick another version. Older games often want an older Proton. This fixes more games than anything else.</p></li>
+  <li><p><strong>Look the game up on <a href="https://www.protondb.com/">ProtonDB</a>.</strong> Someone has usually found what works.</p></li>
+  <li><p><strong>Verify the game's files.</strong> <span class="ui">Properties → Installed Files → Verify integrity of game files</span> fixes a damaged download.</p></li>
+  <li><p><strong>Check whether it stopped working after an update.</strong> If it did, going back to a restore point from before the update is often quickest. See <a href="/recovery">Going back</a>.</p></li>
+  <li><p><strong>Get a log.</strong> Put <code>PROTON_LOG=1 %command%</code> in the game's <span class="ui">Properties → Launch Options</span> and start it. Proton writes a file named <code>steam-</code> followed by the game's number, ending in <code>.log</code>, to <code>~/.var/app/com.valvesoftware.Steam/</code> in your home folder. Include it when you <a href="/help">ask for help</a>.</p></li>
+</ol>
 <p>
-  Proton is Valve's Wine, maintained for games specifically. It is a better
-  choice for games than the general Wine that <a href="/windows">Windows
-  applications</a> describes, and the two do not conflict.
-</p>
-<p>
-  When a game does not run on the default Proton, the usual answer is a
-  different version rather than a fix: right-click the game, Properties,
-  Compatibility, and force a specific one. Older titles frequently want an
-  older Proton. <a href="https://www.protondb.com/" rel="noopener">ProtonDB</a>
-  is where people record which one worked.
+  Some games accept options that avoid a problem with their default graphics
+  mode, such as <code>-dx11</code> or <code>-vulkan</code>. Whether a game supports
+  them, and which helps, varies; ProtonDB usually says.
 </p>
 
-<h2>Launch options worth trying</h2>
+<h2>Games that will not run at all</h2>
 <p>
-  Set these per game in Properties, General, Launch Options. Each solves a
-  specific class of problem rather than being a general improvement:
+  Some online games refuse to run on Linux because of their anti-cheat, by the
+  publisher's decision. No setting on your side changes this.
+  <a href="https://areweanticheatyet.com/">Are We Anti-Cheat Yet?</a> lists which
+  games are affected.
 </p>
-<ul>
-  <li><code>gamemoderun %command%</code> asks the system to prioritise the game while it runs.</li>
-  <li><code>PROTON_LOG=1 %command%</code> writes a log to your home directory, which is what to attach when asking why a game will not start.</li>
-  <li><code>-vulkan</code> or <code>-dx11</code> depending on the title, when the default renderer misbehaves.</li>
-  <li><code>gamescope -- %command%</code> for games that handle resolution or focus badly on Wayland.</li>
-</ul>
 
 <h2>Controllers</h2>
 <p>
-  Xbox and PlayStation controllers work over USB and bluetooth without setup.
-  Steam Input handles the mapping, including for non-Steam games added to the
-  library. A controller that pairs but does nothing is usually one Steam has
-  not been told to support: Settings, Controller, and enable the layout for its
-  type.
+  Xbox and PlayStation controllers work over USB and Bluetooth. Pair a Bluetooth
+  controller from the Bluetooth icon in the panel.
+</p>
+<p>
+  Steam can reconfigure most controllers under
+  <span class="ui">Settings → Controller</span>. SakuraOS does not yet include
+  Steam's own device rules, so some Steam controller features, and some less
+  common controllers, may not work in Steam. If a controller works in other
+  games but not in Steam, <a href="/help">please report it</a>.
 </p>
 
-<h2>Other launchers</h2>
+<h2>Other stores</h2>
 <p>
-  Lutris and Heroic are both in the App Store and cover GOG, Epic and games
-  outside Steam. They use the same Wine and Proton builds underneath, so
-  nothing about the driver setup changes.
+  For GOG, Epic Games and others, install <strong>Heroic Games Launcher</strong>
+  or <strong>Lutris</strong> from the App Store. Both use Proton or Wine
+  in the same way Steam does.
 </p>
 
 <h2>Graphics drivers</h2>
 <p>
-  Nothing to install: whatever your card needs was installed during the
-  install, and it is the same driver everything else on the desktop uses. If
-  performance is poor on an older NVIDIA card, check which driver you are on
-  first, because Nouveau and the frozen 580xx branch behave very differently
-  from the current one. See <a href="/hardware">Hardware</a>.
-</p>
-
-<h2>When a game will not start</h2>
-<p>
-  In order, because each rules out the one below it:
-</p>
-<ul>
-  <li>Try a different Proton version. This is the answer more often than everything else combined.</li>
-  <li>Check ProtonDB for the title. Someone has usually hit it already.</li>
-  <li>Run with <code>PROTON_LOG=1</code> and read the end of the log in your home directory.</li>
-  <li>Verify the game's files from Steam, which catches a genuinely broken download.</li>
-  <li>Check whether it broke after a system update, from the Update Center history. If it did, a restore point is faster than debugging it, and worth doing before you spend an evening on it.</li>
-</ul>
-
-<h2>Anti-cheat</h2>
-<p>
-  Some multiplayer games do not run on Linux at all, because their anti-cheat
-  refuses to. This is a decision by the game's publisher and no distribution
-  can work around it.
-  <a href="https://areweanticheatyet.com/" rel="noopener">Are We Anti-Cheat Yet?</a>
-  tracks which titles those are. If a game you want is on that list, no amount
-  of configuration here will change it.
+  The installer already set up the right driver for your graphics card. If you
+  have an NVIDIA card and games are slow, check which driver you are using; see
+  <a href="/hardware#nvidia">NVIDIA</a>.
 </p>

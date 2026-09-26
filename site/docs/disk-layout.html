@@ -1,0 +1,46 @@
+<h1>Disk layout</h1>
+<p class="lede">
+  The partitions and BTRFS subvolumes the installer creates, and why each one
+  exists.
+</p>
+
+<h2>Partitions</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Partition</th><th>Label</th><th>Size</th><th>Holds</th></tr></thead>
+  <tbody>
+    <tr><td>EFI system partition</td><td><code>SAKURA_ESP</code></td><td>1 GiB</td><td>The boot loader and kernel images</td></tr>
+    <tr><td>System</td><td><code>SAKURA_ROOT</code></td><td>The rest</td><td>A BTRFS file system labeled <code>SAKURA</code>, optionally inside LUKS encryption</td></tr>
+  </tbody>
+</table></div>
+<p>
+  When installing beside another system, SakuraOS reuses that system's
+  existing EFI system partition and creates only the system partition. See
+  <a href="/dual-boot">Dual boot with Windows</a>.
+</p>
+<p>
+  The EFI system partition is larger than the usual few hundred megabytes
+  because each unified kernel image contains a whole initramfs, and there are
+  two of them: the normal one and recovery. It is mounted at <code>/boot</code>
+  with <code>fmask=0077,dmask=0077</code>, so only root can read it.
+</p>
+
+<h2>Subvolumes</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Subvolume</th><th>Mounted at</th><th>Why it is separate</th></tr></thead>
+  <tbody>
+    <tr><td><code>@</code></td><td><code>/</code></td><td>The system. This is what restore points capture and what going back replaces.</td></tr>
+    <tr><td><code>@home</code></td><td><code>/home</code></td><td>Your files. Never part of a restore point, so going back never changes them.</td></tr>
+    <tr><td><code>@log</code></td><td><code>/var/log</code></td><td>Logs survive going back, so the record of what went wrong is still there afterwards.</td></tr>
+    <tr><td><code>@pkg</code></td><td><code>/var/cache/pacman/pkg</code></td><td>Downloaded packages. Large and not worth capturing in restore points.</td></tr>
+    <tr><td><code>@snapshots</code></td><td><code>/.snapshots</code></td><td>The restore points themselves.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Encryption</h2>
+<p>
+  With encryption, the system partition is a LUKS2 container, opened as
+  <code>cryptroot</code> at start-up, with the BTRFS file system inside it. The
+  EFI system partition is not encrypted, because the firmware has to read it.
+  Both the normal and the recovery kernel image carry the settings needed to
+  unlock it, so recovery works on an encrypted disk too.
+</p>

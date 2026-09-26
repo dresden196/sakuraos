@@ -71,7 +71,25 @@ body{
 .topnav a:hover{background:var(--accent-soft); border-color:var(--hair)}
 
 .side{display:flex; flex-direction:column; gap:.1rem; align-self:start}
-@media(min-width:900px){ .side{position:sticky; top:5rem} }
+/* Taller than a laptop screen now, so it scrolls on its own rather than
+   leaving the last sections out of reach while it sticks. */
+@media(min-width:900px){
+  .side{position:sticky; top:5rem; max-height:calc(100vh - 6rem); overflow-y:auto; overscroll-behavior:contain}
+}
+/* On a phone the full list would sit above every page, a screen of links
+   before the first word. It goes after the page instead, with a link to it at
+   the top. */
+.jump{display:none}
+@media(max-width:899px){
+  .side{order:2; border-top:1px solid var(--hair); padding-top:1.5rem}
+  .jump{display:inline-block; margin:0 0 1rem; font-size:.9rem}
+}
+@media(max-width:600px){
+  .topbar{flex-wrap:wrap; position:static; row-gap:.4rem}
+  .crumb{display:none}
+  .topnav{margin-left:-.45rem; width:100%; flex-wrap:wrap; gap:.1rem}
+  .topnav a{padding:.3rem .45rem; font-size:.9rem}
+}
 .side a{
   color:var(--text-dim); text-decoration:none;
   padding:.42rem .7rem; border-radius:8px; font-size:.94rem;
@@ -163,3 +181,44 @@ td code{white-space:nowrap}
   *{animation:none !important; transition:none !important}
   html{scroll-behavior:auto}
 }
+
+/* Screenshots. Bordered because most of them are dark UI on a light page and
+   would otherwise have no edge; capped at the text measure so a picture never
+   pushes the reading column wider than the words around it. */
+figure{margin:1.6rem 0; max-width:var(--measure)}
+figure img{
+  display:block; width:100%; height:auto; border-radius:10px;
+  border:1px solid var(--hair); background:#140e18;
+}
+figcaption{margin-top:.55rem; font-size:.88rem; color:var(--text-dim)}
+
+/* Numbered procedures. The number is drawn rather than left to the browser so
+   a step can hold its own paragraphs, code and pictures and still read as one
+   step. */
+ol.steps{list-style:none; counter-reset:step; padding-left:0; max-width:var(--measure)}
+ol.steps > li{
+  counter-increment:step; position:relative;
+  padding-left:2.6rem; margin:0 0 1.15rem;
+}
+ol.steps > li::before{
+  content:counter(step); position:absolute; left:0; top:.05rem;
+  width:1.75rem; height:1.75rem; border-radius:50%;
+  display:grid; place-items:center;
+  font-size:.82rem; font-weight:600;
+  background:var(--accent-soft); color:var(--accent); border:1px solid var(--hair);
+}
+ol.steps > li > p:first-child{margin-top:0}
+
+/* Keyboard keys and on-screen buttons, so "press F12" and "click Continue"
+   look like the thing you are looking for. */
+kbd{
+  font-family:"JetBrains Mono",ui-monospace,monospace; font-size:.82em;
+  padding:.08rem .38rem; border-radius:5px;
+  border:1px solid var(--hair); border-bottom-width:2px; background:var(--surface);
+}
+.ui{font-weight:600; color:var(--text)}
+
+/* When a page was last checked against the system, and against which release. */
+.checked{font-size:.82rem; color:var(--text-dim); margin-top:3rem;
+  padding-top:1rem; border-top:1px solid var(--hair); max-width:var(--measure)}
+.checked a{color:inherit}

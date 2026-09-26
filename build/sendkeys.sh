@@ -65,6 +65,8 @@ if keys and keys[0] == "--type":
             out.append(("semicolon", False))
         elif ch == "=":
             out.append(("equal", False))
+        elif ch == "@":
+            out.append(("2", True))
         else:
             sys.exit(f"unsupported character for --type: {ch!r}")
     for code, shift in out:

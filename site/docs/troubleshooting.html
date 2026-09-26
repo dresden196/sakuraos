@@ -1,126 +1,117 @@
 <h1>Troubleshooting</h1>
 <p class="lede">
-  The problems people actually hit, roughly in the order they hit them. If the
-  machine will not start at all, go to <a href="/recovery">Recovery</a> first:
-  that is a solved problem here and does not need anything on this page.
+  Common problems and how to fix them. If the computer does not start at all,
+  go straight to <a href="/recovery">Going back</a>.
 </p>
 
-<h2>Start here: what changed?</h2>
+<h2>Start here: did it begin after an update?</h2>
 <p>
-  Almost every sudden fault on a rolling release follows something that
-  changed. Before anything else, find out what:
-</p>
-<pre><code>sakura-update history
-# or, for everything pacman did
-grep -E 'upgraded|installed' /var/log/pacman.log | tail -30</code></pre>
-<p>
-  If the fault started after that list, you do not have to diagnose it. Take
-  the restore point from before it and carry on with your day.
+  Most sudden problems follow a change. Open the Update Center and look at
+  <span class="ui">History</span>. If the problem started after an entry there,
+  go back to the restore point from just before it. That fixes it in a few
+  minutes without working out the cause. See <a href="/recovery">Going back</a>.
 </p>
 
-<h2>The machine boots to a black screen</h2>
+<h2>A black screen</h2>
 <p>
-  Usually graphics. Restart, and when the boot menu appears choose
-  <strong>SakuraOS Recovery</strong>, then a restore point from before the
-  last update. If it happened on a brand new install rather than after an
-  update, see <a href="/hardware">Hardware</a> for the NVIDIA notes: cards
-  older than Pascal need the legacy driver, which is fetched rather than
-  shipped.
+  <strong>After an update:</strong> restart, choose
+  <span class="ui">SakuraOS Recovery</span> in the boot menu, and go back to the
+  restore point from before the update.
+</p>
+<p>
+  <strong>On a new install with an NVIDIA card:</strong> the graphics driver
+  is the likely cause. See <a href="/hardware#nvidia">NVIDIA</a>.
 </p>
 
-<h2>It boots, but there is no desktop</h2>
-<p>
-  You will land at a text login. Check whether the display manager is running:
-</p>
+<h2>A text login instead of the desktop</h2>
+<p>Log in with your username and password, then check whether the login screen started:</p>
 <pre><code>systemctl status sddm</code></pre>
 <p>
-  If it failed, the reason is in <code>journalctl -b -u sddm</code>. If it is
-  running and you still see no desktop, the graphics driver is the next
-  suspect: <code>journalctl -b -p err</code> will usually name it.
+  If it failed, <code>journalctl -b -u sddm</code> says why. If it is running but
+  there is still no desktop, the graphics driver is the usual cause;
+  <code>journalctl -b -p err</code> normally names it. Going back to a restore
+  point is often the quickest fix.
 </p>
 
-<h2>No wireless</h2>
-<p>
-  Check the radio is not switched off in software or by a hardware key:
-</p>
+<h2 id="wifi">No Wi-Fi</h2>
+<p>Check that Wi-Fi is not switched off, in the panel's network icon or by a key on the laptop. Then in a terminal:</p>
 <pre><code>rfkill list
 nmcli radio wifi on</code></pre>
 <p>
-  If the adapter does not appear in <code>ip link</code> at all, it needs
-  firmware the base install does not carry. <code>dmesg | grep -i firmware</code>
-  names the file it wanted, and the package is almost always
-  <code>linux-firmware</code> or a vendor package named after the chipset.
+  If the Wi-Fi adapter does not appear at all, it may need firmware or a driver
+  SakuraOS does not include. This shows what is missing:
 </p>
+<pre><code>sudo dmesg | grep -i firmware</code></pre>
+<p>Some Broadcom adapters need an extra driver; see <a href="/hardware">Hardware and drivers</a>.</p>
 
 <h2>No sound</h2>
 <p>
-  SakuraOS uses PipeWire. Most "no sound" is the wrong output selected rather
-  than a broken stack:
+  Usually the wrong output is selected. Click the speaker icon in the panel and
+  choose the right device, or use <span class="ui">System Settings → Sound</span>.
+  If nothing is listed at all, restart the sound system:
 </p>
-<pre><code>wpctl status          # what PipeWire can see
-systemctl --user status pipewire wireplumber</code></pre>
-<p>
-  If both are running and the device is listed, pick it in System Settings
-  under Audio. If <code>wpctl</code> shows nothing at all, restart the user
-  services with <code>systemctl --user restart pipewire wireplumber</code>.
-</p>
+<pre><code>systemctl --user restart pipewire wireplumber</code></pre>
 
-<h2>pacman will not run</h2>
-<p>
-  Two faults account for nearly all of these.
-</p>
+<h2>Updates or installs fail</h2>
 <h3>"unable to lock database"</h3>
 <p>
-  Something died mid-transaction and left its lock. Make sure nothing is
-  actually running first, then remove it:
+  Another install or update is running, or one was interrupted. Wait for the
+  Update Center or App Store to finish. If nothing is running, remove the
+  leftover lock:
 </p>
 <pre><code>pgrep -x pacman || sudo rm /var/lib/pacman/db.lck</code></pre>
+<p>This command only removes the lock if no install is actually running.</p>
+
 <h3>"invalid or corrupted package" or a signature error</h3>
+<p>Usually an out-of-date keyring, the list of keys packages are signed with. Update the keyrings first, then everything else:</p>
+<pre><code>sudo SAKURA_ASSIST_OVERRIDE=1 pacman -Sy archlinux-keyring sakura-keyring
+sudo pacman -Su</code></pre>
 <p>
-  Usually a truncated download or a stale keyring. Clear the cached copy and
-  refresh the keys:
+  Terminal Assist normally stops <code>pacman -Sy</code> on its own, because
+  refreshing without upgrading can break the system. Here it is safe, as the
+  second command upgrades everything straight afterwards; the first part of the
+  command tells Terminal Assist you meant it. Run both.
 </p>
-<pre><code>sudo pacman -Sc
-sudo pacman-key --refresh-keys
-sudo pacman -Syu</code></pre>
-<p>
-  If it names a SakuraOS package specifically, the mirror may have been
-  mid-publish. Waiting a minute and retrying is the fix.
-</p>
+<p>If the error names a SakuraOS package, the server may have been mid-update. Wait a few minutes and try again.</p>
 
 <h2>A command was refused</h2>
 <p>
-  That is <a href="/terminal">Terminal Assist</a>, and it prints the reason and
-  the exact override. If you want it out of the way permanently, Settings moves
-  it between block, warn and off.
+  That is Terminal Assist. The message explains why and how to run the command
+  anyway. See <a href="/terminal">Terminal Assist</a>.
 </p>
 
-<h2>The disk is full</h2>
+<h2>An update wants to remove something the system needs</h2>
 <p>
-  Two things grow: the package cache and old restore points. Neither is inside
-  a snapshot, so clearing them does not affect what you can go back to.
+  It will be stopped, whatever started it, with an explanation. If you are not
+  sure, leave it stopped and <a href="/help">ask</a>. See
+  <a href="/terminal">Terminal Assist</a>.
 </p>
-<pre><code>sudo pacman -Sc                 # cached packages
-sudo journalctl --vacuum-size=200M
-snapper -c root list            # then delete old ones from the Update Center</code></pre>
 
-<h2>An update wants to remove something important</h2>
+<h2 id="disk-full">The disk is full</h2>
+<p>Open <span class="ui">Filelight</span> to see what is using the space. Then, starting with the safest:</p>
+<pre><code>sudo pacman -Sc                    <span class="c"># remove old downloaded packages</span>
+flatpak uninstall --unused         <span class="c"># remove Flatpak parts nothing uses any more</span>
+sudo journalctl --vacuum-size=200M  <span class="c"># shrink the system log</span></code></pre>
 <p>
-  It will not be allowed to remove your last kernel or a package the system
-  needs: the check inside pacman refuses, whatever asked. If you are certain,
-  the refusal prints the override. If you are not certain, that refusal is the
-  feature working.
+  Restore points take space too, as they keep old versions of anything that
+  has since changed. SakuraOS keeps about ten and removes older ones by itself.
+  To free more, delete some in the Update Center's <span class="ui">History</span>.
+  You can no longer go back to a restore point you delete, so keep at least the
+  newest few.
+</p>
+<p>
+  After going back to a restore point, SakuraOS keeps the system you went back
+  from. These also take space, and there is not yet a button to remove them.
 </p>
 
 <h2>A game will not start</h2>
-<p>
-  See <a href="/gaming">Gaming</a>, which covers Proton versions, the Steam
-  runtime and the launch options worth trying before anything else.
-</p>
+<p>See <a href="/gaming">Gaming</a>.</p>
+
+<h2>Windows shows the wrong time</h2>
+<p>See <a href="/dual-boot">Dual boot with Windows</a>.</p>
 
 <h2>Still stuck</h2>
 <p>
-  Collect the logs described in <a href="/logs">Logs and bug reports</a> before
-  asking. A report with the journal attached is usually answered; one without
-  it usually turns into a conversation about how to get the journal.
+  See <a href="/help">Getting help</a>. Collecting the information in
+  <a href="/logs">Logs and bug reports</a> first will get you an answer faster.
 </p>

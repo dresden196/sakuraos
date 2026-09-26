@@ -1,0 +1,75 @@
+<h1>Privacy</h1>
+<p class="lede">
+  SakuraOS does not collect information about you or your computer. There is no
+  account and no telemetry. Your computer does contact some servers on its own,
+  mainly to check for updates; this page lists every one of them.
+</p>
+
+<h2>What SakuraOS collects</h2>
+<p>
+  Nothing. No usage statistics, no crash reports, no hardware details and no
+  identifier for your computer are sent to SakuraOS.
+</p>
+<p>
+  The only telemetry on the system belongs to KDE, which makes the Plasma
+  desktop. It sends anonymous information about your hardware and which
+  features you use to KDE, never to SakuraOS, and it is off unless you turned it
+  on in the installer. You can change it in
+  <span class="ui">System Settings → User Feedback</span>. KDE's
+  <a href="https://kde.org/privacypolicy/">privacy policy</a> says what it
+  collects.
+</p>
+
+<h2>Servers your computer contacts by itself</h2>
+<p>
+  These requests contain no personal information, but like any internet
+  request they show the server your IP address.
+</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>What</th><th>Server</th><th>When</th></tr></thead>
+  <tbody>
+    <tr><td>Check for updates to the system</td><td>Arch Linux mirrors, and <code>repo.sakuraos.org</code></td><td>Nightly at 03:00</td></tr>
+    <tr><td>Updates held back by SakuraOS's test machine</td><td><code>repo.sakuraos.org</code></td><td>Nightly, with the update check</td></tr>
+    <tr><td>Arch news about updates that need a manual step</td><td><code>archlinux.org</code></td><td>Nightly, with the update check</td></tr>
+    <tr><td>Choose the fastest mirrors</td><td><code>archlinux.org</code> and a selection of Arch mirrors</td><td>Weekly</td></tr>
+    <tr><td>Update Flatpak and Snap applications</td><td>Flathub and the Snap Store</td><td>Daily, if you have any</td></tr>
+    <tr><td>Check the internet connection works</td><td><code>ping.archlinux.org</code></td><td>Every few minutes while connected</td></tr>
+    <tr><td>Set the clock</td><td><code>arch.pool.ntp.org</code></td><td>While connected</td></tr>
+  </tbody>
+</table></div>
+<p>
+  To stop the nightly update check, turn off automatic updates in
+  <a href="/settings">SakuraOS settings</a>. We do not recommend it: an out-of-date
+  system is less secure.
+</p>
+
+<h2>Servers contacted when you use a feature</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>When you</th><th>Server</th></tr></thead>
+  <tbody>
+    <tr><td>Browse the App Store</td><td>Flathub, the Snap Store, and <code>odrs.gnome.org</code> for ratings and reviews</td></tr>
+    <tr><td>Search or install from the AUR, if you turned it on</td><td><code>aur.archlinux.org</code></td></tr>
+    <tr><td>Install or update certain AppImages</td><td>GitHub, where many AppImages are published</td></tr>
+    <tr><td>Write a review</td><td><code>odrs.gnome.org</code>. Reviews are public, under the name you choose.</td></tr>
+  </tbody>
+</table></div>
+<p>
+  Your web browser, and any application you install, has its own privacy
+  policy. Zen, the default browser, is based on Firefox.
+</p>
+
+<h2>On your local network</h2>
+<p>
+  Other devices on the same network, such as the people sharing your Wi-Fi, can
+  see your computer's name. The system answers when something looks that name
+  up, and while you are logged in, KDE Connect announces the computer so that
+  your phone can find it. Nothing is shared with a device until you approve it
+  on this computer.
+</p>
+
+<h2>Turning off the connection check</h2>
+<p>
+  The connection check lets the system notice captive portals, such as hotel
+  Wi-Fi login pages. To turn it off, run the following in a terminal and restart:
+</p>
+<pre><code>printf '[connectivity]\nenabled=false\n' | sudo tee /etc/NetworkManager/conf.d/20-no-connectivity-check.conf</code></pre>

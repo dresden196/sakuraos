@@ -1,95 +1,230 @@
 <h1>Installing SakuraOS</h1>
 <p class="lede">
-  Fourteen steps, each one saying what it will do rather than naming the thing
-  it configures. Nothing is written to the disk until the summary screen, and
-  the summary says so.
+  The installer asks a few questions, shows you a summary, and only then
+  changes your disk. This page goes through every screen. Answering the
+  questions takes a few minutes, and installing a few more.
+</p>
+<p>
+  Start from the USB stick first; see <a href="/install-media">Making a USB</a>.
+  Installing beside Windows? Read <a href="/dual-boot">Dual boot with Windows</a>
+  before you begin.
 </p>
 
-<h2>What it asks</h2>
+<h2>Welcome</h2>
+<figure>
+  <img src="/img/installer-welcome.jpg" alt="The welcome screen, with Get started and Try SakuraOS buttons" width="800" height="560" loading="lazy">
+</figure>
 <p>
-  Language, keyboard, network, time, appearance, disk, encryption, your
-  account, a browser, how updates should behave, which SakuraOS features you
-  want, and privacy. Then a summary, then the install.
+  <span class="ui">Get started</span> begins the installer.
+  <span class="ui">Try SakuraOS</span> closes it and leaves you on a live
+  desktop, where you can look around without changing anything. Nothing you do
+  there is kept. To install afterwards, open <span class="ui">Install SakuraOS</span>
+  from the application menu.
 </p>
 <p>
-  The network step is optional. SakuraOS installs from the disc, so a machine
-  with no cable and no wifi still gets a complete system. Connecting during the
-  install means the machine arrives up to date with the right graphics driver
-  already on it, rather than doing that on first boot.
+  Two short screens follow: what SakuraOS does differently, and the projects it
+  is built on. Then the setup itself begins, with the steps listed down the
+  left side.
 </p>
 
-<h2>The disk layout</h2>
+<h2>Language</h2>
+<figure>
+  <img src="/img/installer-language.jpg" alt="The Language screen with American English selected" width="940" height="600" loading="lazy">
+</figure>
 <p>
-  One EFI system partition and one BTRFS partition, with five subvolumes.
+  The language of the desktop, and how dates, numbers and currency are written.
+  Type in the search box to find yours.
 </p>
 
-<div class="tablewrap">
-<table>
-  <thead><tr><th>Subvolume</th><th>Mounted at</th><th>Why it is separate</th></tr></thead>
-  <tbody>
-    <tr><td><code>@</code></td><td><code>/</code></td><td>The system. This is what a restore point restores and what a rollback replaces.</td></tr>
-    <tr><td><code>@home</code></td><td><code>/home</code></td><td>Your files. Never part of a system restore point, so rolling back the system never touches your documents.</td></tr>
-    <tr><td><code>@log</code></td><td><code>/var/log</code></td><td>Logs survive a rollback. The record of what went wrong is the thing you need after going back, and it would otherwise be rolled back along with the fault.</td></tr>
-    <tr><td><code>@pkg</code></td><td><code>/var/cache/pacman/pkg</code></td><td>The package cache is large and worthless to snapshot. Keeping it out means snapshots stay cheap.</td></tr>
-    <tr><td><code>@snapshots</code></td><td><code>/.snapshots</code></td><td>Where the restore points live. A subvolume cannot usefully contain its own snapshots.</td></tr>
-  </tbody>
-</table>
-</div>
-
+<h2>Keyboard</h2>
+<figure>
+  <img src="/img/installer-keyboard.jpg" alt="The Keyboard layout screen, showing the English (US) layout and a box to test typing" width="940" height="440" loading="lazy">
+</figure>
 <p>
-  The EFI system partition is <strong>1 GiB</strong>. That is larger than the
-  usual advice, and deliberately: a unified kernel image is the kernel plus the
-  entire initramfs in one file, there are two of them here (the normal one and
-  the recovery one), and a machine that cannot write a new boot image because
-  the ESP filled up is a machine that cannot take a kernel update.
+  Pick your keyboard layout, then type a few characters in the box to check
+  them. This matters: your password is typed with this layout, so the wrong
+  one can lock you out at your first login.
+</p>
+
+<h2>Network</h2>
+<figure>
+  <img src="/img/installer-network.jpg" alt="The Network screen showing a wired connection" width="940" height="320" loading="lazy">
+</figure>
+<p>
+  Optional. SakuraOS installs from the USB stick, so you can skip this step and
+  connect later. Connecting now means the system is fully up to date when it
+  first starts. If you have an NVIDIA graphics card from the GTX 900 or 1000
+  series, connect here: its driver is downloaded during the install. See
+  <a href="/hardware#nvidia">NVIDIA</a>.
 </p>
 <p>
-  It is mounted with <code>fmask=0077,dmask=0077</code>. It holds the boot
-  chain and, once Secure Boot is set up, key material. No other account has
-  business reading it.
+  Wired connections connect by themselves. For Wi-Fi, pick your network and
+  enter its password. <span class="ui">Set the address myself</span> is only
+  needed on networks that do not hand out addresses automatically.
+</p>
+
+<h2>Time</h2>
+<figure>
+  <img src="/img/installer-time.jpg" alt="The Time screen, with a time zone search box, a clock, and a choice of 24-hour or 12-hour" width="940" height="680" loading="lazy">
+</figure>
+<p>
+  Search for your city to set the time zone, and choose a 24-hour or 12-hour
+  clock. The clock choice follows your time zone until you change it.
+</p>
+
+<h2>Appearance</h2>
+<figure>
+  <img src="/img/installer-appearance.jpg" alt="The Appearance screen, with Dark and Light choices and a row of accent colors" width="940" height="520" loading="lazy">
+</figure>
+<p>
+  Dark or light, and an accent color. You can change both later in System
+  Settings.
+</p>
+
+<h2>Disk</h2>
+<figure>
+  <img src="/img/installer-disk.jpg" alt="The Disk screen, with two disks listed and the options Install alongside what is here and Erase the whole disk" width="940" height="480" loading="lazy">
+</figure>
+<p>Choose a disk, then what to do with it:</p>
+<ul>
+  <li>
+    <strong>Erase the whole disk.</strong> Everything on that disk is
+    replaced by SakuraOS. Other disks in the computer are not touched.
+  </li>
+  <li>
+    <strong>Install alongside what is here.</strong> Keeps an existing system,
+    such as Windows, and installs SakuraOS into unused space on the same disk.
+    It needs at least 25 GB of unallocated space and an existing system that
+    starts in UEFI mode; the screen says why when it is not possible. See
+    <a href="/dual-boot">Dual boot with Windows</a>.
+  </li>
+</ul>
+<p>
+  Nothing is written yet. That happens only after the summary.
 </p>
 
 <h2>Encryption</h2>
+<figure>
+  <img src="/img/installer-encryption.jpg" alt="The Encryption screen with the choices Encrypt this disk and Leave it unencrypted" width="940" height="270" loading="lazy">
+</figure>
 <p>
-  Optional, LUKS, and applied to the BTRFS partition only. The ESP stays
-  unencrypted because firmware has to be able to read it, which is true of
-  every full-disk encryption setup on every operating system.
+  Encryption protects your files if the computer is lost or stolen. With it
+  on, you type a passphrase every time the computer starts.
 </p>
-<p>
-  When encryption is on, the <code>encrypt</code> hook goes into the initramfs
-  and the kernel command line carries the <code>cryptdevice</code> for both the
-  normal and the recovery boot images. The recovery path is easy to forget and
-  is exactly when you need it to work.
-</p>
-
-<h2>Secure Boot</h2>
-<p>
-  If the firmware is in setup mode, the installer generates keys on your
-  machine with <code>sbctl</code>, enrols them alongside Microsoft's, and signs
-  the boot chain.
-</p>
-<p>
-  Microsoft's keys are enrolled too because some hardware needs them for its
-  own option ROMs, and a machine whose graphics card stops initialising is a
-  worse outcome than a slightly larger trust store.
-</p>
-<p>
-  Most Arch-based distributions tell you to switch Secure Boot off in firmware.
-  That is where a lot of people quietly give up, and it is why this is part of
-  the install rather than a wiki page.
-</p>
-
-<h2>The kernel is chosen for your processor</h2>
-<p>
-  The installer checks what your CPU supports and installs the tuned kernel or
-  the standard one accordingly. You are not asked, and there is nothing to
-  undo. See <a href="/kernel">Kernel</a>.
-</p>
-
-<div class="note">
+<div class="warn">
   <p>
-    <strong>Nothing is written until you press Install.</strong> The summary
-    screen lists every decision and states plainly which disk is about to be
-    erased and that other disks are not touched.
+    <strong>There is no way to recover a forgotten passphrase.</strong> Without
+    it, the files on the disk cannot be read by anyone, including you. Write it
+    down somewhere safe.
   </p>
 </div>
+
+<h2>Account</h2>
+<figure>
+  <img src="/img/installer-account.jpg" alt="The Create your account screen, with a picture, name, username and password filled in" width="940" height="780" loading="lazy">
+</figure>
+<p>
+  Choose a picture, then type your name. Your username fills in from it; you
+  can change it. The password must be at least 4 characters. Your account can
+  make administrator changes, such as installing software, after typing this
+  password.
+</p>
+<p>
+  The computer is named <code>sakura</code>. To change it later, open a
+  terminal and run <code>sudo hostnamectl hostname new-name</code>.
+</p>
+
+<h2>Browser</h2>
+<figure>
+  <img src="/img/installer-browser.jpg" alt="The Pick a browser screen with Zen, Firefox, Brave, Vivaldi, Helium and Google Chrome" width="940" height="570" loading="lazy">
+</figure>
+<p>
+  The browser that is ready when you first start. Zen is on the USB stick; the
+  others are downloaded during the install. If you install without an internet
+  connection and pick a browser other than Zen, you get Zen, and can install
+  your choice later from the App Store. You can install any of them later.
+</p>
+
+<h2>Updates</h2>
+<figure>
+  <img src="/img/installer-updates.jpg" alt="The Updates screen, with automatic updates and tested updates both on, at 03:00 when plugged in" width="940" height="310" loading="lazy">
+</figure>
+<p>
+  Both options are on by default, and we recommend leaving them on.
+  <span class="ui">Install updates automatically</span> installs updates at the
+  time shown, only when plugged in, after taking a restore point.
+  <span class="ui">Only install updates that were tested first</span> waits until
+  each update has been installed and restarted on a SakuraOS test machine. See
+  <a href="/updates">Updates</a>.
+</p>
+
+<h2>Sakura and Privacy</h2>
+<figure>
+  <img src="/img/installer-privacy.jpg" alt="The Privacy screen, with the option to send information to KDE switched off" width="940" height="360" loading="lazy">
+</figure>
+<p>
+  The Sakura screen explains Terminal Assist, restore points and the AUR; there
+  is nothing to choose there. The Privacy screen has one choice: whether to send
+  anonymous usage information to KDE, which makes the Plasma desktop. It is off
+  unless you turn it on. SakuraOS itself collects nothing. See
+  <a href="/privacy">Privacy</a>.
+</p>
+
+<h2>Summary</h2>
+<figure>
+  <img src="/img/installer-summary.jpg" alt="The summary screen, warning that everything on /dev/vda will be erased and listing each choice" width="940" height="530" loading="lazy">
+</figure>
+<p>
+  Every choice, and in red, exactly which disk will be erased. Check it
+  carefully. Use <span class="ui">Back</span> to change anything; your answers
+  are kept. When you press <span class="ui">Install SakuraOS</span>, the install
+  starts and cannot be undone.
+</p>
+
+<h2>Install</h2>
+<figure>
+  <img src="/img/installer-progress.jpg" alt="The install in progress, with a progress bar and a slide about the tuned kernel" width="940" height="660" loading="lazy">
+</figure>
+<p>
+  This usually takes a few minutes; longer if you connected to the internet and
+  there are updates to download. Tick <span class="ui">Show details</span> to see
+  exactly what is happening.
+</p>
+<figure>
+  <img src="/img/installer-done.jpg" alt="The finished screen, saying You are all set" width="940" height="660" loading="lazy">
+</figure>
+<p>
+  When it says <span class="ui">You are all set</span>, press
+  <span class="ui">Restart now</span> and remove the USB stick when the screen
+  goes black. Then see <a href="/first-run">After installing</a>.
+</p>
+
+<h2 id="secure-boot">Secure Boot</h2>
+<p>
+  Secure Boot is a firmware feature that only starts software signed by keys
+  the firmware trusts. You do not need it to use SakuraOS. If you want it,
+  SakuraOS can set it up with its own keys during the install:
+</p>
+<ol class="steps">
+  <li><p>Open the firmware settings (see <a href="/install-media#wont-start">If the USB stick will not start</a>).</p></li>
+  <li><p>Find the Secure Boot keys, and choose the option to clear or reset them. Firmware names this differently: <span class="ui">Reset to Setup Mode</span>, <span class="ui">Clear Secure Boot Keys</span> or <span class="ui">Delete All Secure Boot Variables</span>. This puts the firmware into <em>Setup Mode</em>, in which the USB stick can start.</p></li>
+  <li><p>Install SakuraOS as normal. The installer creates its own keys, adds them to the firmware together with Microsoft's keys, and signs SakuraOS's boot files.</p></li>
+  <li><p>After the install, open the firmware settings again and make sure Secure Boot is set to <span class="ui">Enabled</span>.</p></li>
+</ol>
+<p>
+  Microsoft's keys are added so that Windows, and hardware whose firmware is
+  signed by Microsoft, such as many graphics cards, keep working. If the firmware
+  is not in Setup Mode, the install finishes normally without Secure Boot.
+</p>
+<div class="note">
+  <p>
+    <strong>If Windows uses BitLocker</strong>, resetting the keys makes Windows
+    ask for its recovery key on the next start. Have the key ready. See
+    <a href="/dual-boot#bitlocker">BitLocker</a>.
+  </p>
+</div>
+<p>
+  This has been tested in virtual machines. Firmware on real computers varies;
+  if it does not work on yours, <a href="/help">please tell us</a> which
+  computer it is.
+</p>

@@ -1,123 +1,91 @@
-<h1>How updates work</h1>
+<h1>Updates</h1>
 <p class="lede">
-  SakuraOS updates itself overnight, behind a restore point, and holds back
-  anything Arch has published a manual step for. Falling months behind on a
-  rolling release is more dangerous than updating often.
+  SakuraOS updates itself at night, after taking a restore point. You do not
+  have to do anything, but you can see what is happening and update by hand at
+  any time in the Update Center.
 </p>
 
-<h2>When it runs</h2>
+<h2>What happens automatically</h2>
+<ul>
+  <li>Every night at 03:00, give or take 20 minutes, SakuraOS checks for updates and installs them. If the computer was off or asleep, it does this the next time it is on.</li>
+  <li>On a laptop, it waits until the charger is plugged in.</li>
+  <li>A restore point is taken before anything is installed.</li>
+  <li>The computer never restarts by itself. If an update needs a restart, the Update Center says so.</li>
+  <li>Flatpak and Snap applications are updated by the App Store at 04:00.</li>
+</ul>
 <p>
-  A systemd timer checks nightly at <strong>03:00</strong>, with up to twenty
-  minutes of jitter so that every SakuraOS machine in the world does not hit
-  the mirrors in the same second. The timer is persistent: a machine that was
-  asleep at three in the morning runs the check when it next wakes rather than
-  skipping the day.
-</p>
-<p>
-  The time is a setting, along with whether updates apply automatically at all,
-  whether the machine must be on mains power first, and whether it may reboot
-  itself afterwards.
+  To change the time, or to turn automatic updates off, see
+  <a href="/settings#updates">SakuraOS settings</a> or the
+  <span class="ui">Schedule</span> tab in the Update Center. They are the same
+  settings.
 </p>
 
-<div class="tablewrap">
-<table>
-  <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+<h2>The Update Center</h2>
+<p>Open <span class="ui">Update Center</span> from the application menu. It has four tabs:</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Tab</th><th>Shows</th></tr></thead>
   <tbody>
-    <tr><td><code>AutoApply</code></td><td>true</td><td>Install what is ready, rather than only telling you about it.</td></tr>
-    <tr><td><code>Window</code></td><td>03:00</td><td>When the nightly check runs.</td></tr>
-    <tr><td><code>RequireACPower</code></td><td>true</td><td>Do not update a laptop running on its battery.</td></tr>
-    <tr><td><code>AutoReboot</code></td><td>false</td><td>Never restart the machine on its own. You are told when a restart is needed.</td></tr>
+    <tr><td><span class="ui">Status</span></td><td>How many updates are ready, how many are held back, whether a restart is needed, and how many restore points you have. <span class="ui">Install now</span> installs the updates straight away.</td></tr>
+    <tr><td><span class="ui">Available</span></td><td>Every update, with what the package is and what on your computer needs it.</td></tr>
+    <tr><td><span class="ui">History</span></td><td>Your restore points. See <a href="/recovery">Going back</a>.</td></tr>
+    <tr><td><span class="ui">Schedule</span></td><td>When updates install.</td></tr>
   </tbody>
-</table>
-</div>
+</table></div>
+<figure>
+  <img src="/img/update-center-available.jpg" alt="The Update Center Available tab listing updates, each with a description and what needs it" width="900" height="668" loading="lazy">
+</figure>
 
-<h2>The restore point comes first</h2>
+<h2>Updating by hand</h2>
 <p>
-  Nothing is installed until a snapshot exists. That is the whole reason
-  automatic updates are defensible on a rolling release: the worst case is a
-  reboot and a menu entry, not an afternoon.
+  In the Update Center, press <span class="ui">Install now</span> on the
+  <span class="ui">Status</span> tab. A restore point is taken first, exactly as
+  for automatic updates.
 </p>
+<p>From a terminal, the same thing:</p>
+<pre><code>sudo sakura-update apply</code></pre>
 <p>
-  See <a href="/recovery">Recovery</a> for what happens when you use it.
-</p>
-
-<h2>What gets held back</h2>
-<p>
-  Arch publishes a news item when an update needs a human to do something
-  first. The update engine reads that feed, matches the notices against the
-  packages actually queued for your machine, and holds only those packages
-  back, with the reason attached.
-</p>
-<p>
-  The matching is deliberately narrow. Only the leading component of a package
-  name is tried, because a notice about <code>linux</code> would otherwise
-  match every <code>linux-</code> package on the system and hold back an entire
-  update for no reason.
-</p>
-<p>
-  Held updates are not hidden. They are listed with the notice that caused the
-  hold, so the decision is yours rather than the engine's.
+  <code>sudo pacman -Syu</code> also works, and also takes a restore point, but it
+  does not hold back the updates described below.
 </p>
 
-<h2>What an update tells you</h2>
+<h2>Updates that are held back</h2>
 <p>
-  Nobody knows what <code>libjxl</code> is. The list says what a package is for
-  and what on your system depends on it, so that agreeing to an update is
-  something you can actually do knowingly rather than by reflex.
+  Some updates are not installed automatically. They are listed in the Update
+  Center with the reason. There are two:
+</p>
+<ul>
+  <li>
+    <strong>Arch Linux says the update needs a manual step.</strong> Arch
+    publishes a news item when an update needs someone to do something first.
+    SakuraOS reads those notices and holds back only the packages they are about,
+    for as long as the notice is among Arch's recent news. The Update Center
+    shows the notice's title; the full text is on
+    <a href="https://archlinux.org/news/">archlinux.org/news</a>. Once you have
+    done what it says, install the held update from a terminal with
+    <code>sudo pacman -Syu</code>.
+  </li>
+  <li>
+    <strong>The update broke SakuraOS's test machine.</strong> Every night a
+    SakuraOS machine is installed from scratch, given the day's updates,
+    restarted and checked. If it does not survive, those updates are held back
+    until they are fixed. This is the <span class="ui">Only install updates that
+    were tested first</span> setting, which is on by default.
+  </li>
+</ul>
+<p>
+  If your computer cannot reach these notices, for example because it is
+  offline, nothing is held back. Security updates are never blocked just
+  because a check could not be made.
 </p>
 
-<h2>Two timers, one promise</h2>
+<h2>Applications from the AUR</h2>
 <p>
-  Repository packages and everything else are updated by different components
-  on purpose.
-</p>
-<div class="tablewrap">
-<table>
-  <thead><tr><th>Timer</th><th>Runs</th><th>Covers</th></tr></thead>
-  <tbody>
-    <tr><td><code>sakura-updates</code></td><td><code>sakura-update apply</code></td><td>Repository packages, behind a restore point.</td></tr>
-    <tr><td><code>sakura-store-updates</code></td><td><code>sakura-store update</code></td><td>System Flatpaks and Snaps.</td></tr>
-    <tr><td><code>sakura-store-updates-user</code></td><td><code>sakura-store update</code></td><td>Per-user Flatpaks and AppImages, which live in a home directory and need no root.</td></tr>
-  </tbody>
-</table>
-</div>
-<p>
-  The store deliberately skips repository packages: the update engine already
-  runs a full <code>-Syu</code> nightly behind a snapshot, and doing it in both
-  places would be the same work twice and, worse, the second time without that
-  snapshot.
-</p>
-<p>
-  Packages installed from the AUR are deliberately excluded. Updating one means
-  running a build script written by somebody else, and doing that unattended at
-  three in the morning is exactly what the AUR being off by default exists to
-  prevent. They are reported for your review instead, and covered in
-  <a href="/aur">The AUR</a>.
+  Applications you built from the AUR are never updated automatically, because
+  updating one means running a new build script. The App Store tells you when a
+  newer version is available. See <a href="/aur#updating">updating AUR packages</a>.
 </p>
 
-<h2>Evidence from our own machines</h2>
+<h2>If an update causes a problem</h2>
 <p>
-  A machine of ours installs every pending update, reboots, and re-runs the
-  same checks a fresh install has to pass. When that machine does not survive,
-  the packages in that transaction are published as an advisory and held back
-  on yours.
-</p>
-<p>
-  The hold covers everything in the failed transaction rather than one package,
-  because the canary knows the update broke a machine, not which package did
-  it. Narrowing that down is a bisect, and a bisect is a person's job rather
-  than a nightly timer's.
-</p>
-<div class="note">
-  <p>
-    <strong>It fails open.</strong> If the advisory feed cannot be reached,
-    nothing is held. A machine that cannot reach us must still get its security
-    updates; holding everything back because a web request failed would strand
-    exactly the machines least able to recover. The same is true of the Arch
-    news feed.
-  </p>
-</div>
-<p>
-  This is the <code>RequireCanaryEvidence</code> setting, on by default. Turning
-  it off means updates reach you without waiting on our test machine.
+  Go back to the restore point from before it. See <a href="/recovery">Going back</a>.
 </p>

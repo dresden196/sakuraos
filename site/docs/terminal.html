@@ -1,91 +1,72 @@
 <h1>Terminal Assist</h1>
 <p class="lede">
-  Using a terminal for the first time is daunting, and one command can take a
-  whole system with it. Terminal Assist recognises the commands that do real
-  damage, stops them, and says what to run instead. Every check names its own
-  override.
+  Terminal Assist stops a small set of commands known to break a system or
+  destroy data, and explains what they would have done. Every stop says how to
+  continue if you meant it.
 </p>
 
-<h2>Two layers, and only one of them matters</h2>
-<p>
-  There are two places a check can live, and they are not equally trustworthy.
-</p>
-
-<h3>The check inside pacman</h3>
-<p>
-  The real guard is an ALPM hook. It runs as a
-  <code>PreTransaction</code> action on every package removal, is marked
-  <code>AbortOnFail</code>, and a non-zero exit stops the transaction dead.
-</p>
-<p>
-  Because it lives inside pacman itself, it applies no matter how the
-  transaction was started: from your shell, from a script, from an AUR helper,
-  or from the App Store. There is no way to route around it that does not
-  involve removing the hook.
-</p>
-
-<h3>The layer in your shell</h3>
-<p>
-  A shell function checks the command line before it runs and warns about
-  things pacman never sees, such as a partial upgrade or a destructive
-  <code>rm</code>. This layer is a courtesy, not a guard. It is trivially
-  bypassed, and it is meant to be: it is there to catch a typo and explain it,
-  not to stand between you and your own machine.
-</p>
-
-<h2>What it stops</h2>
-<p>
-  The removal guard knows which packages a system does not survive losing, and
-  says why rather than simply refusing:
-</p>
-
-<div class="tablewrap">
-<table>
-  <thead><tr><th>Package</th><th>Why it is guarded</th></tr></thead>
+<h2>Two layers</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th></th><th>Inside pacman</th><th>In your terminal</th></tr></thead>
   <tbody>
-    <tr><td><code>systemd</code></td><td>the init system, the machine will not boot without it</td></tr>
-    <tr><td><code>glibc</code></td><td>the C library, essentially every program depends on it</td></tr>
-    <tr><td><code>pacman</code></td><td>the package manager, you could not install anything back</td></tr>
-    <tr><td><code>bash</code></td><td>the system shell, install scripts and boot units need it</td></tr>
-    <tr><td><code>coreutils</code></td><td>core utilities like ls, cp and rm</td></tr>
-    <tr><td><code>filesystem</code></td><td>the base directory layout</td></tr>
-    <tr><td><code>sudo</code></td><td>how you become root, you may lock yourself out</td></tr>
-    <tr><td><code>linux-firmware</code></td><td>hardware firmware, wifi and graphics may stop working</td></tr>
-    <tr><td><code>mkinitcpio</code></td><td>builds the boot image, future kernel updates would not boot</td></tr>
-    <tr><td><code>limine</code></td><td>the bootloader, the machine will not boot</td></tr>
-    <tr><td><code>sakura-snapshot-boot</code></td><td>snapshot rollback, you would lose the undo button</td></tr>
+    <tr><td>What it checks</td><td>Removing packages</td><td>Commands you type in Konsole</td></tr>
+    <tr><td>Applies to</td><td>Every removal, whatever started it: a terminal, a script, an AUR helper or the App Store</td><td>Only commands typed into an interactive bash shell</td></tr>
+    <tr><td>How firm</td><td>Firm: the removal does not happen</td><td>A safety net for typing mistakes, not a security barrier</td></tr>
   </tbody>
-</table>
-</div>
+</table></div>
 
-<p>The shell layer additionally recognises:</p>
+<h2>What the pacman check stops</h2>
+<p>Removing any of these, or removing the last kernel installed:</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Package</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td><code>systemd</code></td><td>Starts the system; the computer will not start without it.</td></tr>
+    <tr><td><code>glibc</code></td><td>The C library almost every program needs.</td></tr>
+    <tr><td><code>pacman</code></td><td>The package manager; you could not install anything back.</td></tr>
+    <tr><td><code>bash</code></td><td>The system shell; install scripts and start-up need it.</td></tr>
+    <tr><td><code>coreutils</code></td><td>Basic tools such as <code>ls</code>, <code>cp</code> and <code>rm</code>.</td></tr>
+    <tr><td><code>filesystem</code></td><td>The basic folder layout.</td></tr>
+    <tr><td><code>sudo</code></td><td>How you get administrator rights; you could lock yourself out.</td></tr>
+    <tr><td><code>linux-firmware</code></td><td>Firmware for Wi-Fi, graphics and more.</td></tr>
+    <tr><td><code>mkinitcpio</code></td><td>Builds the boot image; the next kernel update would not start.</td></tr>
+    <tr><td><code>limine</code></td><td>The boot loader.</td></tr>
+    <tr><td><code>sakura-snapshot-boot</code></td><td>Restore points and recovery.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>What the terminal check stops</h2>
 <ul>
-  <li><strong>Partial upgrades.</strong> <code>pacman -Sy something</code> refreshes the package list without upgrading the system, and that mismatch is the most common way an Arch install breaks. It tells you to use <code>-Syu</code>.</li>
-  <li><strong>Removing the running kernel</strong>, which leaves nothing to boot.</li>
-  <li><strong>Destructive filesystem commands</strong> aimed at a path that would take the system with it.</li>
+  <li>Partial upgrades: <code>pacman -Sy</code> without <code>u</code>, the most common way an Arch-based system breaks. Use <code>pacman -Syu</code>.</li>
+  <li>Removing a package while ignoring what depends on it (<code>-Rdd</code>), and overwriting another package's files (<code>--overwrite '*'</code>).</li>
+  <li>Building AUR packages as root, with <code>sudo yay</code>, <code>sudo paru</code> or <code>sudo makepkg</code>.</li>
+  <li>Deleting the system's BTRFS subvolumes, which also deletes the restore points.</li>
+  <li>Commands that erase disks or file systems: <code>rm -rf /</code>, formatting, writing directly to a disk with <code>dd</code>, and discarding a drive's contents.</li>
+  <li>Breaking system permissions or ownership, such as making system files writable by everyone.</li>
+  <li>Running a script straight from the internet, as in <code>curl … | sh</code>. Download it and read it first.</li>
+  <li>A few others: deleting all scheduled jobs, fork bombs, and writing firmware to a drive.</li>
 </ul>
-
-<h2>Overriding a check</h2>
 <p>
-  Every message ends with the exact command that gets past it. Nothing here is
-  a wall; it is a speed bump with a sign on it.
-</p>
-<pre><code><span class="c"># the message tells you which rule fired, and you name it</span>
-sudo SAKURA_ASSIST_OVERRIDE=<span class="k">glibc</span> pacman -R glibc</code></pre>
-<p>
-  The override names the specific rule. It is deliberately not a universal
-  skeleton key: setting it to bypass one check does not silently disable the
-  other ten, and a habit of pasting one override does not turn into a habit of
-  disabling the system. More than one rule can be named at once, separated by
-  commas.
+  The terminal check looks at the first command on each line you type. A command
+  after <code>;</code> or <code>&amp;&amp;</code> on the same line is not checked,
+  though the pacman check still applies to it.
 </p>
 
-<div class="note">
-  <p>
-    <strong>It is not a nanny.</strong> Around thirty rules: eleven packages the
-    removal guard will not let go quietly, and about twenty patterns the
-    shell layer recognises. It is not a filter on what you are allowed to
-    learn, and it never refuses without telling you both why and how to
-    proceed anyway.
-  </p>
-</div>
+<h2>Continuing anyway</h2>
+<p>
+  Every stop prints the exact way to continue. For the terminal check, put
+  <code>SAKURA_ASSIST_OVERRIDE=1</code> in front of the command:
+</p>
+<pre><code>SAKURA_ASSIST_OVERRIDE=1 sudo pacman -Sy archlinux-keyring</code></pre>
+<p>
+  The pacman check wants the name of the rule it stopped, which the message
+  gives you, so that overriding one check does not switch off the others:
+</p>
+<pre><code>sudo SAKURA_ASSIST_OVERRIDE=glibc pacman -R glibc</code></pre>
+<p>Several rules can be named at once, separated by commas.</p>
+
+<h2>Changing how it behaves</h2>
+<p>
+  In <a href="/settings">SakuraOS settings</a>, choose whether Terminal Assist
+  stops these commands, only warns about them, or does nothing. The setting
+  applies to both layers.
+</p>

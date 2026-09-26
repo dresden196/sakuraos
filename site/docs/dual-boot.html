@@ -1,0 +1,145 @@
+<h1>Installing beside Windows</h1>
+<p class="lede">
+  SakuraOS can share a computer with Windows. When the computer starts, a menu
+  lets you choose which one to use. This page covers the preparation in
+  Windows, the install, and the few things that behave differently afterwards.
+</p>
+
+<h2>Two ways to do it</h2>
+<ul>
+  <li>
+    <strong>Windows and SakuraOS on the same disk.</strong> You make room in
+    Windows first, then install SakuraOS into that space. Follow this whole page.
+  </li>
+  <li>
+    <strong>SakuraOS on a separate disk.</strong> Simpler and safer if you have
+    a second disk. In the installer, choose that disk and
+    <span class="ui">Erase the whole disk</span>; the Windows disk is not
+    touched. To choose between them afterwards, use the computer's boot menu
+    key (see <a href="/install-media">Making a USB</a>). SakuraOS's own menu only
+    lists systems on the same disk as SakuraOS.
+  </li>
+</ul>
+
+<h2>Before you start</h2>
+<div class="warn">
+  <p>
+    <strong>Back up anything important in Windows first.</strong> Resizing a
+    partition is normally safe, but a power cut or a mistake during it can cost
+    you your files.
+  </p>
+</div>
+
+<h3 id="bitlocker">Get your BitLocker recovery key</h3>
+<p>
+  Many Windows computers encrypt their disk with BitLocker, also called Device
+  Encryption. Changing firmware settings, including Secure Boot, can make
+  Windows ask for its 48-digit recovery key on the next start. Without the key
+  you cannot get into Windows.
+</p>
+<p>
+  If your Windows account is a Microsoft account, the key is usually saved at
+  <a href="https://account.microsoft.com/devices/recoverykey">account.microsoft.com/devices/recoverykey</a>.
+  You can also save it from Windows: search the Start menu for
+  <span class="ui">Manage BitLocker</span> and choose
+  <span class="ui">Back up your recovery key</span>. Keep it somewhere other
+  than this computer, such as printed out or on your phone.
+</p>
+
+<h3>Turn off Fast Startup</h3>
+<p>
+  Fast Startup makes Windows hibernate instead of shutting down, which leaves
+  its disk locked. Other systems, including SakuraOS, cannot then safely use it.
+</p>
+<ol class="steps">
+  <li><p>Open <span class="ui">Control Panel → Hardware and Sound → Power Options</span>.</p></li>
+  <li><p>Choose <span class="ui">Choose what the power buttons do</span>, then <span class="ui">Change settings that are currently unavailable</span>.</p></li>
+  <li><p>Untick <span class="ui">Turn on fast startup</span> and save.</p></li>
+</ol>
+
+<h3>Make room for SakuraOS</h3>
+<p>
+  SakuraOS needs at least 25 GB of <em>unallocated</em> space: space that no
+  partition uses. 64 GB or more is better. Windows can shrink its own partition
+  to make it:
+</p>
+<ol class="steps">
+  <li><p>Right-click the Start button and choose <span class="ui">Disk Management</span>.</p></li>
+  <li><p>Right-click the <span class="ui">(C:)</span> partition and choose <span class="ui">Shrink Volume</span>.</p></li>
+  <li><p>Enter how much to free, in MB. For 64 GB, enter <code>65536</code>. Choose <span class="ui">Shrink</span>.</p></li>
+  <li><p>A new black bar labeled <span class="ui">Unallocated</span> appears. Leave it as it is: do not create a partition in it. SakuraOS installs there.</p></li>
+</ol>
+<p>
+  If Windows will not shrink as far as you want, it is usually because of
+  files it cannot move. Freeing space on C: and running Disk Cleanup can help.
+</p>
+
+<h2>Install</h2>
+<ol class="steps">
+  <li><p>Start from the SakuraOS USB stick. See <a href="/install-media">Making a USB</a>. If the stick will not start because of Secure Boot, read the note there before turning Secure Boot off.</p></li>
+  <li><p>Go through the installer as described in <a href="/install">Installing</a>.</p></li>
+  <li>
+    <p>
+      On the <span class="ui">Disk</span> screen, choose the disk that has
+      Windows on it, then <span class="ui">Install alongside what is here</span>.
+      It should say how much unallocated space it will use, and that it is
+      keeping Windows.
+    </p>
+    <p>
+      If the option is grayed out, the screen says why: either there is less
+      than 25 GB unallocated, or nothing on the disk starts in UEFI mode.
+    </p>
+  </li>
+  <li><p>On the summary, check that it does not say the disk will be erased. Then install.</p></li>
+</ol>
+
+<h3>What the installer changes on the disk</h3>
+<ul>
+  <li>It creates one new partition in the unallocated space. Your Windows partitions are not resized, moved or changed.</li>
+  <li>It shares Windows' existing EFI system partition, adding a folder named <code>EFI/sakura</code>. Windows' own boot files stay where they are.</li>
+  <li>It adds a startup entry named <span class="ui">SakuraOS</span> to the firmware, first in the order.</li>
+  <li>It also places its boot loader at the firmware's fallback location, <code>EFI/BOOT/BOOTX64.EFI</code>, which some computers use when their startup entries are lost. On a computer with Windows, this replaces Windows' copy at that location. Windows' main boot entry is not affected, and SakuraOS's menu still offers Windows.</li>
+</ul>
+
+<h2>Choosing a system when the computer starts</h2>
+<figure>
+  <img src="/img/boot-menu.jpg" alt="The SakuraOS boot menu listing SakuraOS and SakuraOS Recovery" width="1280" height="800" loading="lazy">
+  <figcaption>The SakuraOS boot menu. On a computer with Windows, a third entry, Windows Boot Manager, is listed too.</figcaption>
+</figure>
+<p>
+  The SakuraOS menu shows for 3 seconds and then starts SakuraOS. To start
+  Windows instead, press <kbd>↓</kbd> to stop the countdown, select
+  <span class="ui">Windows Boot Manager</span>, and press <kbd>Enter</kbd>.
+</p>
+
+<h2>After installing</h2>
+<h3>The computer starts straight into Windows</h3>
+<p>
+  Large Windows updates sometimes put Windows first in the firmware's startup
+  order again. Open the firmware settings, find the boot order, and move
+  <span class="ui">SakuraOS</span> to the top. To start SakuraOS once without
+  changing anything, use the boot menu key instead.
+</p>
+
+<h3>The clock in Windows is wrong by a few hours</h3>
+<p>
+  Windows and SakuraOS store the time in the computer's clock differently:
+  Windows as local time, SakuraOS as UTC. After using one, the other can be off
+  by your time zone's difference from UTC. The simplest fix is to tell Windows
+  to use UTC as well. In Windows, open <span class="ui">Command Prompt</span> as
+  administrator and run:
+</p>
+<pre><code>reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /d 1 /t REG_DWORD /f</code></pre>
+<p>Then restart Windows and let it set its clock from the internet once.</p>
+
+<h3>Opening your Windows files from SakuraOS</h3>
+<p>
+  The Windows partition appears in the file manager's sidebar. Click it to open
+  it, and type your password when asked. If Windows was not fully shut down, for
+  example because Fast Startup is still on, it may open read-only or not at all.
+  A Windows partition encrypted with BitLocker cannot be read without its
+  recovery key.
+</p>
+
+<h3>Removing one of them later</h3>
+<p>See <a href="/uninstall#beside-windows">Uninstalling SakuraOS</a>.</p>

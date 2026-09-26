@@ -1,0 +1,88 @@
+<h1>System requirements</h1>
+<p class="lede">
+  SakuraOS runs on 64-bit PCs with UEFI firmware. Most computers sold since
+  about 2012 qualify.
+</p>
+
+<div class="tablewrap"><table>
+  <thead><tr><th></th><th>Needed</th><th>Recommended</th></tr></thead>
+  <tbody>
+    <tr><td>Processor</td><td>64-bit Intel or AMD (x86-64)</td><td>From about 2013 onward, to get the tuned kernel</td></tr>
+    <tr><td>Firmware</td><td>UEFI</td><td>UEFI</td></tr>
+    <tr><td>Memory</td><td>2 GB</td><td>8 GB</td></tr>
+    <tr><td>Storage</td><td>25 GB</td><td>64 GB or more</td></tr>
+    <tr><td>USB stick</td><td>8 GB</td><td>8 GB</td></tr>
+    <tr><td>Internet</td><td>Not needed to install</td><td>Needed for updates and the App Store</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Processor</h2>
+<p>
+  Any 64-bit Intel or AMD processor works. Processors that support a feature
+  set called <a href="/glossary#x86-64-v3">x86-64-v3</a> get a faster, tuned
+  kernel. That covers most Intel processors from 2013 (Haswell) onward and AMD
+  processors from 2015 (Excavator) onward; some low-cost Pentium and Celeron
+  models lack it. Processors without it get the standard Arch Linux kernel
+  instead. You do not choose; the installer checks for you.
+  See <a href="/kernel">Kernel</a>.
+</p>
+<p>
+  32-bit processors and ARM computers, including Apple Silicon Macs and
+  Raspberry Pis, are not supported.
+</p>
+
+<h2>Firmware</h2>
+<p>
+  SakuraOS needs <a href="/glossary#uefi">UEFI</a> firmware. Nearly every PC
+  sold with Windows 8 or later has it. On an older computer that only has a
+  legacy BIOS, the USB stick will start, but the installed system will not.
+</p>
+<p>
+  Secure Boot does not need to be on. If you want it, see
+  <a href="/install#secure-boot">Secure Boot</a> on the installing page.
+</p>
+
+<h2>Memory</h2>
+<p>
+  A full install and the desktop have been tested with 2 GB. For everyday use
+  with a web browser and a few programs open, 8 GB is comfortable. SakuraOS
+  compresses memory before it runs out, which helps smaller machines. See
+  <a href="/tuning#compressed-swap">compressed swap</a>.
+</p>
+
+<h2>Storage</h2>
+<p>
+  The installer needs at least 25 GB. More gives you room for restore points,
+  which grow as you install updates and applications, so 64 GB or more is a
+  better starting point. An SSD makes a large difference to how fast the system
+  feels.
+</p>
+
+<h2>Graphics</h2>
+<p>
+  Intel and AMD graphics work with no setup. NVIDIA cards work too, but which
+  driver you get depends on the card's age, and older cards need an internet
+  connection during the install. See <a href="/hardware#nvidia">NVIDIA</a>
+  before you install on an NVIDIA machine.
+</p>
+
+<h2>Internet</h2>
+<p>
+  You can install without a connection: everything needed for a working
+  desktop, including a web browser, is on the USB stick. Connect afterwards to
+  get updates and install applications.
+</p>
+
+<h2>Virtual machines</h2>
+<p>
+  SakuraOS is tested in QEMU/KVM virtual machines. In any virtual machine,
+  choose UEFI (sometimes called EFI) firmware rather than BIOS, and give it at
+  least 2 GB of memory and a 25 GB disk.
+</p>
+
+<h2>Not tested yet</h2>
+<p>
+  Intel Macs have not been tested and may need extra drivers, particularly
+  models with an Apple T2 chip. If you try SakuraOS on hardware that does not
+  work, <a href="/help">please report it</a>.
+</p>

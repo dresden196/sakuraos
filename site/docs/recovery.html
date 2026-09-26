@@ -1,129 +1,70 @@
-<h1>Restore points and recovery</h1>
+<h1>Going back to a restore point</h1>
 <p class="lede">
-  A restore point is taken before anything changes the system. If a change
-  goes wrong you pick Recovery at the boot menu and go back, without a live
-  USB and without knowing what a chroot is.
+  SakuraOS takes a restore point before every system update, and whenever a
+  program from the SakuraOS source or the AUR is installed or removed. If
+  something goes wrong, you can put the system back the way it was at any of
+  them, even if the computer will no longer start.
 </p>
 
-<h2>When a restore point is taken</h2>
+<h2>What going back does</h2>
+<ul>
+  <li>Programs, updates and system settings return to how they were at that point. Anything installed or changed since is undone.</li>
+  <li><strong>Your files are not affected.</strong> Documents, photos, downloads and everything else in your home folder stay exactly as they are.</li>
+  <li>Nothing is deleted. The system you went back from is kept on the disk.</li>
+  <li>A password changed since that point goes back to the old one.</li>
+</ul>
 <p>
-  Snapper is configured against the root subvolume, and <code>snap-pac</code>
-  hooks pacman, so every transaction that installs, upgrades or removes a
-  package is bracketed by a snapshot taken before it and one taken after.
-  The update engine takes its own before it starts. You can also take one by
-  hand from the Update Center before doing something risky.
-</p>
-<p>
-  Snapshots are cheap on BTRFS. They are not copies: a snapshot costs almost
-  nothing until something changes, and then costs only what changed.
+  SakuraOS keeps roughly the ten most recent restore points and removes older
+  ones automatically.
 </p>
 
-<div class="note">
-  <p>
-    <strong>Your files are not in it.</strong> <code>/home</code> is a separate
-    subvolume and is never part of a system restore point. Rolling back the
-    system does not roll back your documents, and it does not delete them
-    either. A restore point is for the operating system, not for your data.
-  </p>
-</div>
-
-<h2>How rollback actually works</h2>
-<p>
-  The obvious design is one boot entry per snapshot, each with its own
-  <code>rootflags=subvol=</code> on the kernel command line. SakuraOS does not
-  do that, and the reason matters.
-</p>
-<p>
-  The system boots a unified kernel image, which embeds its own command line.
-  <code>systemd-stub(7)</code> is explicit that when Secure Boot is enabled and
-  the image carries a <code>.cmdline</code> section, any command line passed in
-  from outside is <em>ignored</em>. So the per-snapshot entry approach fails
-  silently on exactly the machines that took the trouble to enable Secure Boot:
-  the menu offers a snapshot from three days ago, you pick it, and the current
-  system boots anyway.
-</p>
-<p>
-  A rollback that quietly does nothing is worse than having no rollback at all.
-  So the command line here always says <code>subvol=@</code>, and rolling back
-  changes what <code>@</code> <em>is</em>:
-</p>
-<ol>
-  <li>The current <code>@</code> is renamed to <code>@rollback-&lt;timestamp&gt;</code>. It is kept, not deleted.</li>
-  <li>A fresh writable subvolume is created at <code>@</code> from the snapshot you chose.</li>
-  <li>The machine reboots.</li>
+<h2>If the computer starts</h2>
+<ol class="steps">
+  <li><p>Open the <span class="ui">Update Center</span> and go to <span class="ui">History</span>. Restore points are listed newest first, with the date and what was about to happen, for example <em>before installing 18 updates</em>.</p></li>
+  <li><p>Choose the one from just before the problem started, and press <span class="ui">Go back to this</span>.</p></li>
+  <li><p>Read the confirmation and press <span class="ui">Restart and go back</span>. Type your password if asked.</p></li>
+  <li><p>The computer restarts, puts the system back, and starts normally.</p></li>
 </ol>
+<figure>
+  <img src="/img/update-center-history.jpg" alt="The Update Center History tab listing restore points, each with Delete and Go back to this buttons" width="900" height="668" loading="lazy">
+</figure>
+
+<h2>If the computer does not start</h2>
+<ol class="steps">
+  <li><p>Turn the computer on. When the SakuraOS menu appears, press <kbd>↓</kbd> within 3 seconds to stop the countdown.</p></li>
+  <li><p>Choose <span class="ui">SakuraOS Recovery</span> and press <kbd>Enter</kbd>.</p></li>
+  <li><p>A list of restore points appears. Type the number of the one to go back to, and press <kbd>Enter</kbd>. To leave without changing anything, type <kbd>c</kbd> and press <kbd>Enter</kbd>.</p></li>
+  <li><p>When it says <em>Done. Your system has been restored to that point</em>, press <kbd>Enter</kbd> to restart.</p></li>
+</ol>
+<figure>
+  <img src="/img/recovery-menu.jpg" alt="The SakuraOS Recovery screen listing six restore points by date, with c to cancel" width="760" height="300" loading="lazy">
+  <figcaption>The recovery screen. Here it opened by itself after three failed starts.</figcaption>
+</figure>
+<figure>
+  <img src="/img/recovery-done.jpg" alt="The recovery screen after going back, saying Done and Press Enter to restart" width="760" height="440" loading="lazy">
+</figure>
+
+<h3>If the menu does not appear</h3>
 <p>
-  Because the command line never varies, it stays embedded and signed, and the
-  same mechanism works identically with Secure Boot on or off.
+  If the computer fails to start three times in a row, the recovery screen opens
+  by itself on the next start. Turning the computer off while it is stuck
+  counts as a failed start.
 </p>
 
-<h2>Why the picker lives in the initramfs</h2>
+<h2>Saving a restore point yourself</h2>
 <p>
-  Renaming a subvolume that is currently mounted appears to succeed and then
-  fails later. So the rollback tool refuses to run while <code>@</code> is
-  mounted as <code>/</code>, and the picker lives in an initramfs instead,
-  which is the one place the root subvolume is not in use.
-</p>
-<p>
-  A rollback you ask for from the running system does not happen there. It
-  reboots into recovery and the work is done from the initramfs.
+  Before a change you are unsure about, open the Update Center's
+  <span class="ui">History</span> tab, type what you are about to do, and press
+  <span class="ui">Save a restore point</span>.
 </p>
 
-<h2>The failed-boot counter</h2>
+<h2>Things to know</h2>
+<ul>
+  <li><strong>After going back across a kernel update</strong>, the computer may restart once more by itself while it sets up the matching kernel. This is normal.</li>
+  <li><strong>If the problem comes back</strong> after going back, the update that caused it will be installed again at night. Turn off automatic updates in <a href="/settings#updates">SakuraOS settings</a> until it is fixed, and <a href="/help">report the problem</a>.</li>
+  <li><strong>Restore points are not backups.</strong> They are on the same disk as the system. See <a href="/backups">Backups</a>.</li>
+</ul>
 <p>
-  A counter on the EFI system partition is incremented early in every boot and
-  cleared once the boot has demonstrably worked. After
-  <strong>three</strong> consecutive failures the boot menu offers recovery
-  without being asked.
+  How restore points and recovery work underneath is described in
+  <a href="/how-recovery">How restore points work</a>.
 </p>
-<p>
-  The threshold is three rather than one because a single failed boot is
-  usually a power cut or a held power button, and offering recovery for that
-  teaches people the warning is noise.
-</p>
-<p>
-  Deciding when a boot has "worked" is the whole problem. Clearing the counter
-  as soon as systemd finishes means a machine whose display manager crashes in
-  a loop clears its own counter every time and never offers recovery. Waiting
-  for someone to log in means a machine left running unattended never clears
-  it at all.
-</p>
-
-<h2>Kernel updates and rollback</h2>
-<p>
-  <code>/boot</code> is the EFI system partition. It is FAT, so it is not part
-  of any BTRFS snapshot, and rollback cannot touch it. The unified kernel image
-  and <code>vmlinuz</code> live there while the kernel modules live in the root
-  subvolume.
-</p>
-<p>
-  Across a kernel update those two disagree after a rollback: the ESP still
-  boots the newer kernel, and the restored root has modules only for the older
-  one. Nothing fails outright, because the initramfs is embedded in the image
-  and still reaches userspace. The machine simply comes up with no module it
-  did not already have built in, which in practice means no network and no
-  graphics.
-</p>
-<p>
-  To somebody who has just rolled back to fix a problem, that reads as a larger
-  and stranger problem than the one they started with.
-  <code>sakura-kernel-sync.service</code> closes it: on every boot it asks
-  whether the running kernel has a modules directory, and if not, rebuilds the
-  boot image and reboots once. The condition it checks is the fault itself
-  rather than "did a rollback just happen", so it also catches any other route
-  into the same state. A stamp file stops it rebooting more than once for the
-  same fault; after that the boot counter offers recovery, which is the right
-  place for a problem it does not understand.
-</p>
-<p>
-  Ordinary rollbacks are unaffected. A bad desktop update leaves the kernel
-  alone, and the boot image still matches.
-</p>
-
-<div class="note">
-  <p>
-    <strong>Nothing is thrown away.</strong> The system you rolled back from is
-    kept as <code>@rollback-&lt;timestamp&gt;</code>. If you rolled back by
-    mistake, what you left is still on the disk.
-  </p>
-</div>

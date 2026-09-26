@@ -1,77 +1,49 @@
 <h1>The kernel</h1>
 <p class="lede">
-  SakuraOS builds the CachyOS kernel, which is the scheduler work that makes an
-  Arch desktop feel quick. Machines whose processors cannot run it get the
-  standard Arch kernel instead, automatically, with nothing to choose and
-  nothing to undo.
+  Computers with a processor from about 2013 onward get a tuned kernel built
+  from CachyOS's sources. Older computers get the standard Arch Linux kernel.
+  The installer decides, and everything else about SakuraOS is the same on both.
 </p>
 
-<h2>What the tuned kernel is</h2>
+<h2>The tuned kernel</h2>
 <p>
-  It is built from the CachyOS sources, pinned to a specific commit and
-  verified against the upstream signing keys rather than tracking a moving
-  branch. The variant is the BORE scheduler with sched-ext support.
+  SakuraOS builds the <a href="https://cachyos.org/">CachyOS</a> kernel itself,
+  so it is signed with the same key as the rest of SakuraOS's packages. The
+  build:
 </p>
+<ul>
+  <li>uses the BORE process scheduler, with <code>sched-ext</code> available;</li>
+  <li>is compiled with Clang, ThinLTO and <code>-O3</code>, for <a href="/glossary#x86-64-v3">x86-64-v3</a> processors;</li>
+  <li>runs at 1000 Hz with full preemption, which favors responsiveness over throughput;</li>
+  <li>is built from a specific, pinned commit of CachyOS's sources, checked against CachyOS's signing keys.</li>
+</ul>
 <p>
-  We build it rather than repackaging theirs, so the same repository signature
-  covers it as everything else on the system. The work is theirs; the build is
-  ours.
-</p>
-
-<h2>The processor check</h2>
-<p>
-  The tuned kernel is compiled for <strong>x86-64-v3</strong>, roughly meaning
-  AVX2, which arrived on Intel with Haswell in 2013 and on AMD with Excavator.
-  A processor older than that cannot execute the binary at all.
-</p>
-<p>
-  So the installer asks the one component that already knows the answer: the
-  dynamic loader.
-</p>
-<pre><code>/lib/ld-linux-x86-64.so.2 --help | grep <span class="k">"x86-64-v3 (supported"</span></code></pre>
-<p>
-  glibc's loader lists the microarchitecture levels it will load libraries for,
-  and it is right about the machine it is running on by definition. That beats
-  parsing CPU flags out of <code>/proc/cpuinfo</code> and guessing which set
-  constitutes v3.
-</p>
-<p>
-  If the loader answers and does not list v3, that is a real answer and the
-  standard kernel is installed. If the loader cannot be asked at all, the
-  standard kernel is installed too, because the safe direction is obvious: a
-  kernel that runs everywhere on a fast machine costs some performance, and a
-  kernel that cannot execute on an old one costs the whole machine.
+  It is compiled for a generic x86-64-v3 processor rather than for the build
+  machine, so every computer that supports x86-64-v3 gets the same kernel.
 </p>
 
-<h2>Why it is built GENERIC_V3</h2>
+<h2>How the installer chooses</h2>
 <p>
-  The upstream build defaults to optimising for the processor doing the
-  building, which is right for somebody compiling their own kernel and wrong
-  for a distribution. Left alone it would produce a kernel tuned for our build
-  server and no one else's computer.
+  x86-64-v3 is a set of processor instructions, including AVX2, that arrived
+  with Intel's Haswell processors in 2013 and AMD's Excavator processors in 2015,
+  though some later low-cost Pentium and Celeron models lack it.
+  A kernel built for it will not run on anything older. The installer asks the
+  system's program loader which instruction sets the processor supports:
 </p>
+<pre><code>/lib/ld-linux-x86-64.so.2 --help | grep "x86-64-v3 (supported"</code></pre>
 <p>
-  We set the target explicitly to a generic v3 build, so every machine that
-  supports v3 gets the same binary and the same benefit.
-</p>
-
-<h2>What older machines get</h2>
-<p>
-  Stock Arch <code>linux</code>. Every other part of SakuraOS is identical:
-  same desktop, same store, same restore points, same recovery. There is one
-  image to download, and a first-generation i7 installs the same one a Ryzen
-  9000 does.
-</p>
-<p>
-  Most distributions that chase performance quietly stop supporting older
-  hardware. This is the alternative to that, and it costs one check at install
-  time.
+  If x86-64-v3 is supported, you get the tuned kernel. If not, or if the check
+  cannot be made, you get the standard Arch kernel, which runs on every 64-bit
+  processor.
 </p>
 
-<h2>Keeping the boot image honest</h2>
+<h2>Which kernel am I running?</h2>
+<pre><code>uname -r</code></pre>
+<p>A version ending in <code>cachyos</code> is the tuned kernel.</p>
+
+<h2>After going back to a restore point</h2>
 <p>
-  The kernel lives in a unified kernel image on the EFI system partition while
-  its modules live in the root subvolume, and the two can disagree after a
-  rollback across a kernel update. A service checks that on every boot and
-  repairs it. See <a href="/recovery">Recovery</a>.
+  Going back across a kernel update is handled automatically, sometimes with
+  one extra restart. See <a href="/how-recovery#kernel-updates-and-rollback">How
+  restore points work</a>.
 </p>

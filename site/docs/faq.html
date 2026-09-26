@@ -1,114 +1,130 @@
 <h1>Frequently asked questions</h1>
-<p class="lede">
-  The questions people ask before installing, and the ones they ask in the
-  first week. Longer answers live on the pages linked from each one.
+<p class="lede">Short answers, with links to the pages that go further.</p>
+
+<h2>About SakuraOS</h2>
+
+<h3>What is SakuraOS?</h3>
+<p>
+  A Linux distribution based on Arch Linux, with the KDE Plasma desktop. It adds
+  a graphical installer, restore points, automatic updates, an App Store and a
+  tuned kernel. See <a href="/why">Why SakuraOS</a>.
 </p>
 
-<h2>What is SakuraOS, exactly?</h2>
+<h3>Is it a fork of Arch?</h3>
 <p>
-  Arch Linux, with KDE Plasma, a kernel chosen by what your processor supports,
-  and five applications built for it. It is not a fork of Arch and it does not
-  hold packages back on a schedule: you are running Arch, with the decisions
-  that usually take a weekend already made and a way back when an update goes
-  wrong.
+  No. SakuraOS installs Arch's own packages, unchanged, from Arch's servers. It
+  adds its own applications and kernel from a separate SakuraOS repository.
 </p>
 
-<h2>Is it just Arch with a theme?</h2>
+<h3>Is it free?</h3>
 <p>
-  No. The parts that are ours are the installer, the App Store, the Update
-  Center, Terminal Assist, Sakura Settings, and the recovery environment that
-  opens when a machine will not start. The theme is the least of it.
+  Yes. It costs nothing, and everything SakuraOS makes is open source under the
+  GPL-3.0. The source is on <a href="https://github.com/dresden196/sakuraos">GitHub</a>.
 </p>
 
-<h2>Do I need to know Arch to use it?</h2>
+<h3>Do I need to know Linux?</h3>
 <p>
-  No. Nothing in normal use requires the terminal. If you do open one,
-  <a href="/terminal">Terminal Assist</a> is there to stop the specific
-  commands known to break an Arch install, and it can be switched off.
+  No. Installing, updating, installing applications and going back after a
+  problem all work without a terminal. If you do use one,
+  <a href="/terminal">Terminal Assist</a> stops the commands known to break the
+  system and explains why.
 </p>
 
-<h2>Will an update break my machine?</h2>
+<h3>Can I use a different desktop than KDE Plasma?</h3>
 <p>
-  It can, the same as on any rolling release. Two things sit in the way. A
-  restore point is taken before every package transaction, so going back is a
-  reboot rather than a rescue. And every night the day's updates are installed
-  on a machine of ours, restarted, and checked; anything that breaks it is held
-  back from you with the reason attached. See <a href="/updates">Updates</a>.
+  SakuraOS is built around Plasma, and it is the only desktop it supports.
 </p>
 
-<h2>What happens if it will not boot?</h2>
+<h2>Installing</h2>
+
+<h3>Will it run on my computer?</h3>
 <p>
-  After three failed starts the recovery environment opens by itself, lists
-  your restore points in plain language, and puts the system back when you pick
-  one. No live USB, no chroot. See <a href="/recovery">Recovery</a>.
+  If it is a 64-bit PC with UEFI firmware, most likely. See
+  <a href="/requirements">System requirements</a>.
 </p>
 
-<h2>Can I use the AUR?</h2>
+<h3>How big is the download?</h3>
+<p>About 3.2 GB. There is one image for every computer.</p>
+
+<h3>Can I try it without installing?</h3>
 <p>
-  Yes, and it is off until you turn it on, because it is build scripts written
-  by other users that nobody reviews. Turning it on is one switch in Settings.
-  What you install is then checked against every published AUR attack campaign
-  from inside pacman, and you see the build script before it runs. See
+  Yes. Start from the USB stick and choose <span class="ui">Try SakuraOS</span>.
+  Nothing on your computer changes, and nothing you do is kept.
+</p>
+
+<h3>Can I keep Windows?</h3>
+<p>Yes. See <a href="/dual-boot">Dual boot with Windows</a>.</p>
+
+<h3>Can I install without an internet connection?</h3>
+<p>
+  Yes. Everything needed for a working desktop, including the Zen browser, is on
+  the USB stick. Two things are downloaded only when connected: a browser other
+  than Zen, and the driver for NVIDIA GTX 900 and 1000 series cards.
+</p>
+
+<h3>Is Secure Boot supported?</h3>
+<p>
+  Yes, but it needs one extra step before installing. See
+  <a href="/install#secure-boot">Secure Boot</a>.
+</p>
+
+<h2>Everyday use</h2>
+
+<h3>Will an update break my computer?</h3>
+<p>
+  It can happen on any system that updates. SakuraOS makes it rare and easy to
+  undo: updates are tested on a SakuraOS machine first, updates that Arch says
+  need a manual step are held back, and a restore point is taken before every
+  change. See <a href="/updates">Updates</a>.
+</p>
+
+<h3>What if my computer will not start?</h3>
+<p>
+  After three failed starts in a row, the recovery screen opens by itself and
+  lets you go back to a restore point. You can also choose
+  <span class="ui">SakuraOS Recovery</span> in the boot menu at any time. See
+  <a href="/recovery">Going back</a>.
+</p>
+
+<h3>Can I use the AUR?</h3>
+<p>
+  Yes. It is off until you turn it on in <a href="/settings">SakuraOS settings</a>.
+  When you install from it in the App Store, you see the build script first. See
   <a href="/aur">The AUR</a>.
 </p>
 
-<h2>Can I use yay?</h2>
+<h3>Can I use yay or paru?</h3>
 <p>
-  Yes. <code>yay</code> is the helper SakuraOS configures, and the campaign
-  check is a pacman hook, so it runs whether the package came from the App
-  Store or from <code>yay</code> in a terminal. The build script review is a
-  store feature; <code>yay</code> shows its own diff instead.
+  Yes. Choose one under <span class="ui">Command-line helper</span> in
+  <a href="/settings">SakuraOS settings</a>, and SakuraOS installs it for you.
 </p>
 
-<h2>Which kernel do I get?</h2>
+<h3>Can I play games?</h3>
 <p>
-  The installer checks whether your processor supports x86-64-v3. If it does
-  you get the tuned CachyOS build; if it does not you get the standard Arch
-  kernel. Both are on the media and nothing else about the install changes.
-  See <a href="/kernel">Kernel</a>.
+  Yes, including most Windows games through Steam. See <a href="/gaming">Gaming</a>.
 </p>
 
-<h2>Does it work offline?</h2>
+<h3>Can I run Windows programs?</h3>
 <p>
-  Yes. The installation media carries everything a working desktop needs,
-  including a browser, so an install with the cable out produces a complete
-  system. Anything that has to be fetched, such as a different browser or the
-  legacy NVIDIA driver, is skipped and named, and the installer tells you
-  plainly that nothing will fetch it later on its own.
+  Some. SakuraOS can install Wine, which runs many Windows programs, though not
+  all of them. See <a href="/windows">Windows apps</a>. Many popular Windows
+  applications also have a web version that works in the browser.
 </p>
 
-<h2>Is Secure Boot supported?</h2>
+<h3>Does SakuraOS collect data about me?</h3>
+<p>No. See <a href="/privacy">Privacy</a>.</p>
+
+<h2>Other</h2>
+
+<h3>How do I remove SakuraOS?</h3>
+<p>See <a href="/uninstall">Uninstalling</a>.</p>
+
+<h3>Who makes SakuraOS?</h3>
 <p>
-  Yes, if your firmware is in setup mode when you install: the installer
-  enrolls its own keys and signs both the system and the recovery images. If
-  the firmware is not in setup mode the install completes normally with Secure
-  Boot off, and says so.
+  A small, independent project developed in the open. Everything, including
+  the pipeline that builds the image you download, is in the
+  <a href="https://github.com/dresden196/sakuraos">repository</a>.
 </p>
 
-<h2>How big is the download?</h2>
-<p>
-  About 3.2&nbsp;GB. One image, x86_64, no editions to choose between.
-</p>
-
-<h2>Can I dual boot with Windows?</h2>
-<p>
-  Yes. The installer can take free space rather than the whole disk, and it
-  does not touch the existing EFI partition beyond adding its own entry. Shrink
-  the Windows partition from Windows first, and turn off Fast Startup, which
-  leaves the filesystem in a state Linux will refuse to write to.
-</p>
-
-<h2>How do I get rid of it?</h2>
-<p>
-  The same as any other Linux install: boot other media and remove the
-  partitions. SakuraOS keeps nothing outside the disk you installed it on and
-  writes no firmware settings beyond its own boot entry, which the firmware
-  menu can delete.
-</p>
-
-<h2>Who is behind it?</h2>
-<p>
-  A small project, in the open. Everything described in this wiki is in the
-  repository, including the build pipeline that produces the image you
-  downloaded.
-</p>
+<h3>Where can I get help?</h3>
+<p>See <a href="/help">Getting help</a>.</p>

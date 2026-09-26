@@ -1,94 +1,70 @@
-<h1>Gathering logs and reporting bugs</h1>
+<h1>Logs and bug reports</h1>
 <p class="lede">
-  A report with the right log attached is usually answered. One without it
-  usually turns into a conversation about how to produce it. This page is that
-  conversation, written down once.
+  A report with the right information attached can usually be answered in one
+  reply. This page shows how to collect it.
 </p>
 
-<h2>The one command worth knowing</h2>
+<h2 id="hardware">Your hardware</h2>
 <p>
-  <code>journalctl</code> is the system's log. Almost every question about
-  "why did that fail" is answered by one of these:
+  <code>inxi</code> prints a summary of your hardware with serial numbers and
+  network addresses removed. Install it once, then run it:
 </p>
-<pre><code>journalctl -b            # everything since this boot
-journalctl -b -1         # the boot before this one, useful after a crash
-journalctl -b -p err     # only errors, which is usually enough
-journalctl -u sddm       # one service
-journalctl -f            # follow, while you reproduce the fault</code></pre>
-<p>
-  Inside it, arrow keys and Page Up/Down scroll, <code>/</code> searches,
-  <code>G</code> jumps to the end, and <code>q</code> quits.
-</p>
+<pre><code>sudo pacman -S inxi
+inxi -Fxz</code></pre>
 
-<h2>Kernel messages</h2>
+<h2>The system log</h2>
 <p>
-  For hardware that is not detected, firmware that failed to load, or a disk
-  throwing errors, the kernel ring buffer is the place to look:
+  Most problems leave a message in the system log. Read it with
+  <code>journalctl</code>:
 </p>
-<pre><code>sudo dmesg -T | tail -50
-sudo dmesg -T | grep -i -E 'firmware|error|fail'</code></pre>
+<pre><code>journalctl -b -p err      <span class="c"># errors since the computer started</span>
+journalctl -b -1 -p err   <span class="c"># errors from the previous start, after a crash</span>
+journalctl -b             <span class="c"># everything since the computer started</span>
+journalctl -f             <span class="c"># new messages as they happen, while you reproduce the problem</span></code></pre>
+<p>
+  Inside the log, use the arrow keys and <kbd>Page Up</kbd>/<kbd>Page Down</kbd>
+  to scroll, <kbd>/</kbd> to search, and <kbd>q</kbd> to quit. To save one to a
+  file you can attach:
+</p>
+<pre><code>journalctl -b -p err > ~/errors.txt</code></pre>
+
+<h2>Hardware not detected</h2>
+<p>For a device that does not appear, or firmware that failed to load:</p>
+<pre><code>sudo dmesg -T | grep -iE 'firmware|error|fail'</code></pre>
 
 <h2>What changed recently</h2>
 <p>
-  On a rolling release this is often the whole answer:
+  The Update Center's <span class="ui">History</span> shows every change with its
+  restore point. The same list as text:
 </p>
-<pre><code>grep -E 'upgraded|installed' /var/log/pacman.log | tail -40</code></pre>
+<pre><code>grep -E 'upgraded|installed|removed' /var/log/pacman.log | tail -40</code></pre>
+
+<h2>SakuraOS's own parts</h2>
+<pre><code>journalctl -u sakura-updates        <span class="c"># the nightly update</span>
+journalctl -u sakura-boot-success   <span class="c"># counting failed starts</span>
+journalctl -u sakura-kernel-sync    <span class="c"># setting up the kernel after going back</span></code></pre>
 <p>
-  The Update Center shows the same history with restore points beside it, which
-  is easier to read and lets you act on it.
+  For a problem during installation, open Konsole in the live session before
+  restarting and run <code>journalctl -t sakura-install</code>.
+</p>
+<p>
+  The recovery screen writes to the screen only. A photo of it is a perfectly
+  good bug report.
 </p>
 
-<h2>Something specific to SakuraOS</h2>
+<h2>A program that will not open</h2>
 <p>
-  The parts we wrote log to the journal like anything else:
-</p>
-<pre><code>journalctl -u sakura-updates          # the nightly update run
-journalctl -u sakura-boot-success     # the failed-boot watchdog
-journalctl -u sakura-kernel-sync      # boot image vs installed kernel
-journalctl -t sakura-install          # the installer, on the live media</code></pre>
-<p>
-  The recovery environment prints to the screen rather than the journal,
-  because at that point there is no journal to write to. A photograph of it is
-  a legitimate bug report.
+  Start it from a terminal, where it prints why it stopped. For SakuraOS's
+  applications the commands are <code>sakura-store-ui</code> for the App Store and
+  <code>sakura-update-center</code> for the Update Center.
 </p>
 
-<h2>A program that will not start</h2>
+<h2>Before you share a log</h2>
 <p>
-  Run it from a terminal. Almost everything prints the reason and then exits,
-  and that line is worth more than any description of the symptom:
+  Logs can contain your username, your computer's name, and the names of your
+  Wi-Fi networks and files. Read through a log before posting it publicly, and
+  remove anything you would rather not share.
 </p>
-<pre><code>sakura-store 2>&amp;1 | tail -20</code></pre>
-
-<h2>What to include in a report</h2>
-<p>
-  Four things, and it does not need to be more than a few lines:
-</p>
-<ul>
-  <li>What you did, what you expected, and what happened instead.</li>
-  <li>Whether it started after an update, and which one, from the history above.</li>
-  <li>The relevant log, pasted as text rather than a screenshot where possible.</li>
-  <li>Your hardware, if it is a hardware fault: <code>inxi -Fxz</code> gives a tidy summary with serial numbers stripped.</li>
-</ul>
-
-<div class="note">
-  <p>
-    <strong>Check what you are pasting.</strong> A journal can contain network
-    names, hostnames and paths that include your name. <code>inxi -Fxz</code>
-    strips identifiers; <code>journalctl</code> does not.
-  </p>
-</div>
 
 <h2>Where to send it</h2>
-<ul>
-  <li><strong>Bugs in SakuraOS itself</strong>, meaning the installer, the store, the Update Center, Terminal Assist, Settings or the recovery environment: the issue tracker in the repository.</li>
-  <li><strong>Questions and things that might not be bugs</strong>: <a href="https://www.reddit.com/r/SakuraOS/" rel="noopener">r/SakuraOS</a>.</li>
-  <li><strong>A package that is broken upstream</strong>, meaning it behaves the same on plain Arch: report it to Arch or to the package's own project. Our nightly canary catches many of these first and holds the package back, so it is worth checking whether the Update Center already lists it as held.</li>
-</ul>
-
-<h2>Security problems</h2>
-<p>
-  If you have found something with security consequences, please do not open a
-  public issue for it. Send it privately through the contact address in the
-  repository, describe the class of problem, and give the maintainers a chance
-  to fix it before it is public.
-</p>
+<p>See <a href="/help">Getting help</a>.</p>

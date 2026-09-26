@@ -1,0 +1,63 @@
+<h1>Contributing</h1>
+<p class="lede">
+  SakuraOS is free software, developed in the open on GitHub. Reporting a
+  problem, correcting this wiki and changing the code are all welcome.
+</p>
+
+<h2>Reporting a problem</h2>
+<p>
+  Open an issue on <a href="https://github.com/dresden196/sakuraos/issues">GitHub</a>.
+  A useful report says what you did, what you expected and what happened
+  instead, with the computer's make and model. <a href="/help">Getting help</a>
+  describes how to collect the details that help most.
+</p>
+<p>
+  Security problems are the exception: report them privately, as described
+  under <a href="/security#reporting">Security</a>.
+</p>
+
+<h2>Improving this wiki</h2>
+<p>
+  If a page is wrong, unclear or missing, an issue saying so is a real help.
+  To change a page yourself, the wiki is part of the SakuraOS repository:
+</p>
+<ul>
+  <li>Each page is a file in <code>site/docs/</code>, holding only the body of the page in plain HTML.</li>
+  <li>The sidebar, page titles and page order are set in <code>build/make-docs.sh</code>, which also builds the site into <code>out/site/docs/</code>. It needs Bash and Python 3.</li>
+  <li>Pictures go in <code>site/docs/img/</code>.</li>
+</ul>
+<p>
+  The wiki is written for someone who has never used Linux: American English,
+  plain words, and instructions that name what is on the screen. Everything it
+  says should be true of the current release. If you are not sure something is,
+  say so in your pull request.
+</p>
+
+<h2>Changing SakuraOS</h2>
+<p>
+  The <a href="https://github.com/dresden196/sakuraos">repository</a> holds
+  everything: SakuraOS's own packages in <code>packages/</code>, the
+  installation media in <code>iso/</code>, and the scripts that build and test
+  both in <code>build/</code>. The
+  <a href="https://github.com/dresden196/sakuraos#readme">README</a> explains the
+  main design decisions and how to build.
+</p>
+<p>
+  Building needs Docker and QEMU; nothing is installed on your own system. The
+  packages and the installation media are built in containers, and
+  <code>build/test-vm.sh</code> starts the result in a virtual machine. The
+  test suite runs with <code>tests/run.sh</code>.
+</p>
+<p>
+  For anything larger than a small fix, open an issue first to describe what you
+  want to change, so that the work is not wasted if it does not fit.
+</p>
+
+<h2>License</h2>
+<p>
+  SakuraOS's own code and this wiki are licensed under the
+  <a href="https://github.com/dresden196/sakuraos/blob/master/LICENSE">GNU General Public License, version 3</a>.
+  By contributing, you agree that your contribution is licensed the same way.
+  Software that SakuraOS installs from Arch Linux and elsewhere keeps its own
+  license.
+</p>

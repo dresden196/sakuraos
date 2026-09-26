@@ -1,0 +1,156 @@
+<h1>Making a USB and starting from it</h1>
+<p class="lede">
+  Download SakuraOS, write it to a USB stick, and start your computer from the
+  stick. Writing the image erases everything on the USB stick, so use one
+  with nothing on it you need.
+</p>
+
+<h2>1. Download</h2>
+<p>
+  Download the image from <a href="https://sakuraos.org/#get">sakuraos.org</a>.
+  It is one file of about 3.2 GB, named <code>sakura-latest-x86_64.iso</code>.
+  There is only one version; it works on every supported computer.
+</p>
+
+<h2>2. Check the download</h2>
+<p>
+  This step is optional, but it confirms the file arrived complete and really
+  came from SakuraOS. Download the checksum file from the same place:
+  <a href="https://repo.sakuraos.org/iso/sakura-latest-x86_64.iso.sha256"><code>sakura-latest-x86_64.iso.sha256</code></a>.
+  It contains one long code. Then compute the code for your download and check
+  that the two match.
+</p>
+<p><strong>On Windows</strong>, open PowerShell in your Downloads folder and run:</p>
+<pre><code>Get-FileHash sakura-latest-x86_64.iso -Algorithm SHA256</code></pre>
+<p><strong>On macOS</strong>, open Terminal in your Downloads folder and run:</p>
+<pre><code>shasum -a 256 sakura-latest-x86_64.iso</code></pre>
+<p><strong>On Linux</strong>, with both files in the same folder:</p>
+<pre><code>sha256sum -c sakura-latest-x86_64.iso.sha256</code></pre>
+<p>
+  To also check that the image was made by SakuraOS, verify its signature. The
+  commands and the signing key's fingerprint are on the
+  <a href="https://sakuraos.org/#verify">download page</a>.
+</p>
+
+<h2>3. Write it to a USB stick</h2>
+<p>
+  You need a USB stick of 8 GB or more. Everything on it will be erased.
+</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Your current system</th><th>Use</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Windows</td><td><a href="https://rufus.ie/">Rufus</a></td><td>When Rufus asks how to write the image, choose <span class="ui">Write in DD Image mode</span>.</td></tr>
+    <tr><td>Windows or macOS</td><td><a href="https://etcher.balena.io/">balenaEtcher</a></td><td>Choose the file, choose the USB stick, and press Flash.</td></tr>
+    <tr><td>Linux</td><td><a href="https://github.com/dresden196/fubuki/releases/latest">Fubuki</a></td><td>SakuraOS's own USB writer, available as an AppImage or a Flatpak.</td></tr>
+    <tr><td>Linux</td><td><code>dd</code></td><td>See below.</td></tr>
+  </tbody>
+</table></div>
+
+<p>
+  With <code>dd</code>, first find the USB stick's name. Run <code>lsblk</code>
+  before and after plugging it in; the new entry is the stick, for example
+  <code>/dev/sdb</code>. Then run the command below with that name.
+</p>
+<pre><code>sudo dd if=sakura-latest-x86_64.iso of=/dev/sdX bs=4M status=progress oflag=sync</code></pre>
+<div class="warn">
+  <p>
+    <strong>Check the device name twice.</strong> <code>dd</code> writes to
+    whatever you name, without asking. Naming your system disk instead of the
+    USB stick erases it.
+  </p>
+</div>
+
+<h2>4. Start the computer from the USB stick</h2>
+<ol class="steps">
+  <li>
+    <p>Plug the USB stick into the computer you want to install on. Use a port directly on the computer rather than a hub.</p>
+  </li>
+  <li>
+    <p>
+      Turn the computer on, or restart it, and immediately press its
+      <strong>boot menu key</strong> a few times. Which key depends on the
+      manufacturer:
+    </p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Manufacturer</th><th>Boot menu key</th></tr></thead>
+      <tbody>
+        <tr><td>Acer, Dell, Gigabyte, Lenovo</td><td><kbd>F12</kbd></td></tr>
+        <tr><td>ASRock, MSI</td><td><kbd>F11</kbd></td></tr>
+        <tr><td>ASUS</td><td><kbd>F8</kbd> on desktops, <kbd>Esc</kbd> on laptops</td></tr>
+        <tr><td>HP</td><td><kbd>F9</kbd>, or <kbd>Esc</kbd> then <kbd>F9</kbd></td></tr>
+      </tbody>
+    </table></div>
+    <p>
+      On many laptops you have to hold <kbd>Fn</kbd> as well, for example
+      <kbd>Fn</kbd>+<kbd>F12</kbd>. Some Acer computers only show the menu
+      after it is turned on in the firmware settings, and some Lenovo laptops
+      have a small <em>Novo</em> button beside the power button instead. If none
+      of these work, the key is usually shown briefly on screen as the computer
+      starts, or listed in its manual.
+    </p>
+    <p>
+      <strong>From Windows</strong>, you can also go to
+      <span class="ui">Settings → System → Recovery</span> (on Windows 10,
+      <span class="ui">Settings → Update &amp; Security → Recovery</span>), choose
+      <span class="ui">Restart now</span> next to <span class="ui">Advanced startup</span>,
+      then <span class="ui">Use a device</span> and pick the USB stick.
+    </p>
+  </li>
+  <li>
+    <p>
+      Choose the USB stick from the menu. It may be listed by its brand name,
+      and may appear twice; choose the entry that starts with <strong>UEFI</strong>.
+    </p>
+  </li>
+  <li>
+    <p>
+      A menu appears with <span class="ui">Try or install SakuraOS</span>
+      selected. Press <kbd>Enter</kbd>, or wait 15 seconds. Use the
+      <span class="ui">with screen reader</span> entry if you need speech.
+    </p>
+  </li>
+  <li>
+    <p>
+      After a minute or two the SakuraOS installer opens. Continue with
+      <a href="/install">Installing</a>.
+    </p>
+  </li>
+</ol>
+
+<h2 id="wont-start">If the USB stick will not start</h2>
+<h3>You get an error about Secure Boot, or it goes straight back to Windows</h3>
+<p>
+  The SakuraOS USB stick does not start while Secure Boot is on. Turn it off in
+  the firmware settings:
+</p>
+<ol class="steps">
+  <li><p>Open the firmware settings. On most computers, press <kbd>Del</kbd> or <kbd>F2</kbd> as it starts. From Windows: <span class="ui">Settings → System → Recovery → Advanced startup → Restart now</span> (on Windows 10, <span class="ui">Update &amp; Security → Recovery</span>), then <span class="ui">Troubleshoot → Advanced options → UEFI Firmware Settings</span>.</p></li>
+  <li><p>Find <span class="ui">Secure Boot</span>, usually under a Security or Boot tab, and set it to <span class="ui">Disabled</span>.</p></li>
+  <li><p>Save and exit, usually with <kbd>F10</kbd>.</p></li>
+</ol>
+<p>
+  If you want to use Secure Boot with SakuraOS, there is a better option than
+  turning it off. See <a href="/install#secure-boot">Secure Boot</a> before
+  you change anything.
+</p>
+<div class="note">
+  <p>
+    <strong>If Windows uses BitLocker or Device Encryption</strong>, changing
+    Secure Boot makes Windows ask for its recovery key on the next start. Make
+    sure you have the key first. See <a href="/dual-boot#bitlocker">BitLocker</a>.
+  </p>
+</div>
+
+<h3>The USB stick is not in the boot menu</h3>
+<ul>
+  <li>Turn off <span class="ui">Fast Boot</span> in the firmware settings, which can skip USB devices.</li>
+  <li>Try another USB port, and avoid hubs and docks.</li>
+  <li>Write the image again. If you used Rufus, make sure you chose DD Image mode.</li>
+</ul>
+
+<h3>The screen stays black after choosing the stick</h3>
+<p>
+  Wait two minutes; the first start can be slow on some machines. If it still
+  shows nothing, the graphics card may need different settings. Ask in the
+  <a href="/help">community</a>, and mention your graphics card.
+</p>

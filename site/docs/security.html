@@ -1,0 +1,79 @@
+<h1>Security</h1>
+<p class="lede">
+  How SakuraOS keeps your computer up to date and your software genuine, what
+  it does not do, and how to report a security problem.
+</p>
+
+<h2 id="reporting">Reporting a security problem</h2>
+<p>
+  If you have found a security problem in SakuraOS itself, such as in the
+  installer, the App Store, the Update Center or SakuraOS's packages, please
+  report it privately rather than in a public issue:
+</p>
+<ol class="steps">
+  <li><p>Go to the <a href="https://github.com/dresden196/sakuraos/security">Security page of the SakuraOS repository</a>.</p></li>
+  <li><p>Choose <span class="ui">Report a vulnerability</span>. You need a GitHub account.</p></li>
+  <li><p>Describe the problem and how to reproduce it.</p></li>
+</ol>
+<p>
+  Only the project's maintainers can see the report, and they reply to you
+  there.
+</p>
+<p>
+  Problems in software that SakuraOS takes from Arch Linux, such as Firefox or
+  KDE Plasma, belong with that software's developers. Once they release a
+  fix and Arch Linux packages it, it reaches you with the next nightly update.
+</p>
+
+<h2>Updates</h2>
+<p>
+  Most security fixes arrive as ordinary updates, so the most important thing
+  SakuraOS does for your security is install them. It does this every night by
+  itself; see <a href="/updates">Updates</a>. An update is only held back if it
+  broke SakuraOS's test machine or needs a manual step, and the Update Center
+  tells you when that happens. If your computer cannot check for those
+  warnings, it installs updates anyway rather than falling behind.
+</p>
+<p>
+  Some updates, such as a new kernel, only take effect after a restart. The
+  Update Center tells you when one is waiting.
+</p>
+
+<h2>Genuine software</h2>
+<p>
+  Every package SakuraOS installs, from SakuraOS or from Arch Linux, is signed,
+  and pacman refuses a package whose signature does not match. This is what
+  protects you from a tampered download, whichever server it came from.
+</p>
+<p>
+  The installer image is signed too. See
+  <a href="/install-media">Getting SakuraOS</a> for how to check it before you
+  install.
+</p>
+<p>
+  Applications from Flathub and the Snap Store are checked by their own
+  systems. The AUR is different: nobody reviews its build scripts, which is why
+  it is off by default and why the App Store shows you each build script
+  before running it. See <a href="/aur">The AUR</a>.
+</p>
+
+<h2>What is protected, and what is not</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>Protection</th><th>On SakuraOS</th></tr></thead>
+  <tbody>
+    <tr><td>Disk encryption</td><td>Optional, chosen during the install. Without it, anyone with your computer can read your files by starting it from a USB stick. SakuraOS cannot add it later; that means reinstalling.</td></tr>
+    <tr><td>Secure Boot</td><td>Optional. See <a href="/install#secure-boot">Secure Boot</a>.</td></tr>
+    <tr><td>Firewall</td><td>None is installed. A fresh install runs no service that accepts logins or files from the network. It answers other computers on your local network that look it up by name, and while you are logged in, KDE Connect listens for phones and computers to pair with; it only exchanges anything with a device you have approved on this computer. If you install software that does accept connections, such as a file-sharing or remote-access service, set up a firewall with it.</td></tr>
+    <tr><td>Remote login (SSH)</td><td>Off. To log in to this computer from another one, turn it on with <code>sudo systemctl enable --now sshd</code>, and prefer SSH keys to passwords.</td></tr>
+    <tr><td>Applications in a sandbox</td><td>Flatpaks and most Snaps run in one, with the permissions shown on their App Store page. SakuraOS and AUR packages do not; they can do anything you can.</td></tr>
+    <tr><td>Known-compromised AUR packages</td><td>Checked daily against published lists of AUR packages that have been compromised. This only catches what has already been reported. It is not a virus scanner.</td></tr>
+    <tr><td>Antivirus</td><td>None. Linux desktop malware is rare, and it almost always arrives in software you chose to install. Install from the SakuraOS repositories, Flathub or the Snap Store, and treat downloads from websites with the same care as on any computer.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Terminal Assist is not a security feature</h2>
+<p>
+  <a href="/terminal">Terminal Assist</a> stops common commands that would break
+  the system by accident. Anyone with your password can switch it off or step
+  around it. It protects you from mistakes, not from an attacker.
+</p>

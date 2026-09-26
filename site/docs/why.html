@@ -1,0 +1,60 @@
+<h1>Why SakuraOS</h1>
+<p class="lede">
+  SakuraOS is based on Arch Linux. You get Arch's up-to-date software, with the
+  setup already done and a way to undo changes that go wrong.
+</p>
+
+<h2>What it is</h2>
+<p>
+  SakuraOS installs Arch Linux's own packages, straight from Arch's servers,
+  unchanged. On top of them it adds a few pieces of its own: a graphical
+  installer, restore points you can go back to from the boot menu, automatic
+  updates, an App Store, and a tuned kernel. These come from SakuraOS's own
+  package repository.
+</p>
+<p>
+  It is a <a href="/glossary#rolling-release">rolling release</a>. There are no
+  big version upgrades every six months or two years. Your system updates a
+  little at a time, and you always have the current release of every program.
+</p>
+
+<h2>What it adds to Arch</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th></th><th>Arch Linux</th><th>SakuraOS</th></tr></thead>
+  <tbody>
+    <tr><td>Installing</td><td>A guided script (<code>archinstall</code>) or a manual install</td><td>A graphical installer. Its questions are about you, such as your language and your account, not about how Linux is set up. See <a href="/install">Installing</a>.</td></tr>
+    <tr><td>Desktop</td><td>You choose and install one</td><td>KDE Plasma, set up and themed</td></tr>
+    <tr><td>Going back after a bad update</td><td>Up to you to set up</td><td>A restore point before every update, and a recovery screen in the boot menu. See <a href="/recovery">Going back</a>.</td></tr>
+    <tr><td>Updates</td><td>You run them</td><td>Installed automatically at night, after a restore point, holding back anything that needs a manual step. See <a href="/updates">Updates</a>.</td></tr>
+    <tr><td>Installing applications</td><td><code>pacman</code> in a terminal</td><td>An App Store covering Arch's packages, Flatpak, Snap, AppImage and the AUR. See <a href="/store">App Store</a>.</td></tr>
+    <tr><td>Kernel</td><td>The standard Arch kernel</td><td>A CachyOS-based kernel for processors from about 2013 onward, and the standard Arch kernel for older ones. See <a href="/kernel">Kernel</a>.</td></tr>
+    <tr><td>The AUR</td><td>No helper installed</td><td>Off until you turn it on. When on, you see each build script before it runs. See <a href="/aur">The AUR</a>.</td></tr>
+  </tbody>
+</table></div>
+
+<h2>Who it is for</h2>
+<ul>
+  <li>People who want current software and a modern desktop without assembling the system themselves.</li>
+  <li>People coming from Windows or macOS who would rather not use a terminal for everyday tasks.</li>
+  <li>Arch users who want restore points and recovery set up for them.</li>
+</ul>
+
+<h2>Who it may not suit</h2>
+<ul>
+  <li><strong>If you want to choose every part yourself</strong>, plain Arch Linux is the better starting point. SakuraOS makes those choices for you: the desktop is KDE Plasma, the file system is BTRFS, and the boot loader is Limine.</li>
+  <li><strong>If you need software that changes rarely</strong>, such as for a server or a managed office computer, a distribution with long-term support releases will suit you better than a rolling release.</li>
+  <li><strong>If your computer is not a 64-bit PC with UEFI firmware</strong>, SakuraOS will not install. See <a href="/requirements">System requirements</a>.</li>
+</ul>
+
+<h2>SakuraOS and the Arch community</h2>
+<p>
+  Because SakuraOS uses Arch's packages, most of the
+  <a href="https://wiki.archlinux.org/">Arch Wiki</a> applies to it and is an
+  excellent reference. Some things are different, though: the boot loader,
+  restore points and updates work the SakuraOS way, described in this wiki.
+</p>
+<p>
+  SakuraOS is not affiliated with the Arch Linux project. If you have a problem,
+  ask in the <a href="/help">SakuraOS community</a> first rather than in Arch's
+  forums, since the cause may be something SakuraOS does differently.
+</p>

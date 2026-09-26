@@ -1,84 +1,76 @@
 <h1>After installing</h1>
 <p class="lede">
-  Most of the setup a new Arch install usually needs is already done. This page
-  is what was done, so you are not looking for it, and the short list of things
-  actually worth doing yourself.
+  Most of the setup a new computer needs is already done. This page lists what
+  is ready, and the few things worth doing in your first hour.
 </p>
 
-<h2>Already done</h2>
-<p>
-  You do not need to enable, configure or install any of this:
-</p>
+<h2>Already set up</h2>
 <ul>
-  <li><strong>Automatic updates</strong>, at 03:00, on mains power, after a restore point, and never with an unattended reboot.</li>
-  <li><strong>Restore points</strong>, taken before every package transaction, with the boot-time recovery environment that reads them.</li>
-  <li><strong>The firewall and network</strong>: NetworkManager is running and bluetooth is enabled with it.</li>
-  <li><strong>Printing</strong>, socket-activated, so it costs nothing until you print.</li>
-  <li><strong>Compressed swap in RAM</strong>, the I/O scheduler rules and the sysctl values described in <a href="/tuning">Tuning</a>.</li>
-  <li><strong>Flatpak and Snap</strong>, both configured, so the <a href="/store">App Store</a>'s four sources all work immediately.</li>
-  <li><strong>Your browser</strong>, the one you chose during the install, pinned to the panel.</li>
+  <li><strong>Automatic updates</strong>, installed at 03:00 when the computer is on and plugged in, after a restore point. The computer never restarts by itself. See <a href="/updates">Updates</a>.</li>
+  <li><strong>Restore points</strong>, taken before every update and before system programs are installed or removed, with a recovery screen in the boot menu. See <a href="/recovery">Going back</a>.</li>
+  <li><strong>The App Store</strong>, with Flatpak and Snap ready to use. See <a href="/store">App Store</a>.</li>
+  <li><strong>Your browser</strong>, pinned to the panel.</li>
+  <li><strong>Wi-Fi, Bluetooth and printing.</strong> Printers can be added in System Settings under <span class="ui">Printers</span>.</li>
+  <li><strong>Compressed memory</strong>, so the computer copes better when memory runs short. See <a href="/tuning">Tuning</a>.</li>
 </ul>
 
-<h2>Worth doing</h2>
+<h2>Worth doing now</h2>
 
-<h3>Run the first update yourself</h3>
+<h3>1. Install the latest updates</h3>
 <p>
-  The image was built at some point before you downloaded it. Open the Update
-  Center and install what is pending rather than waiting for 03:00, so you
-  start current. A restore point is taken first, as always.
+  The image you installed from was made some time before you downloaded it.
+  Open the <span class="ui">Update Center</span> from the application menu and
+  press <span class="ui">Install now</span> rather than waiting for the night.
+  A restore point is taken first.
 </p>
 
-<h3>Decide about the AUR</h3>
+<h3>2. Check your restore points</h3>
 <p>
-  It is off. If you want it, turn it on in Settings and read
-  <a href="/aur">The AUR</a> first, particularly the part about what the review
-  screen is showing you. If you do not need it, leaving it off is a real
-  security decision rather than a default nobody thought about.
+  In the Update Center, open <span class="ui">History</span>. There should be a
+  restore point named <span class="ui">installation complete</span>. It takes
+  ten seconds, and it shows the safety net is working on your computer.
+</p>
+<figure>
+  <img src="/img/update-center-history.jpg" alt="The Update Center History tab, listing the installation complete restore point with Delete and Go back to this buttons" width="900" height="668" loading="lazy">
+</figure>
+
+<h3>3. Set up a backup</h3>
+<p>
+  Restore points undo changes to the system, but they are kept on the same
+  disk, so they do not protect your files if the disk fails or the computer is
+  lost. See <a href="/backups">Backups</a>. This is the one thing SakuraOS cannot
+  do for you, and the one most likely to matter.
 </p>
 
-<h3>Check the restore points exist</h3>
+<h3>4. Install your applications</h3>
 <p>
-  Open the Update Center, History. There should be one from the installation
-  itself. It costs ten seconds and it tells you the safety net is real on your
-  machine specifically, rather than in principle.
+  Open the <span class="ui">App Store</span>. You can also bring the list of
+  applications from another SakuraOS computer; see
+  <a href="/store#app-sync">App Sync</a>.
 </p>
 
-<h3>Set up your backups</h3>
+<h3>5. If you want Secure Boot</h3>
 <p>
-  Restore points are not backups. They live on the same disk and they protect
-  you from a bad update, not from a failed drive or a stolen laptop. Anything
-  you would be upset to lose needs a copy somewhere else.
+  If you put the firmware into Setup Mode before installing, open the firmware
+  settings now and make sure Secure Boot is on. See
+  <a href="/install#secure-boot">Secure Boot</a>.
 </p>
 
-<div class="note">
-  <p>
-    This is the one thing on this page that SakuraOS cannot do for you, and the
-    one most likely to matter.
-  </p>
-</div>
-
-<h3>If you use Secure Boot</h3>
-<p>
-  Check whether it was enrolled: if your firmware was not in setup mode during
-  the install, the installer completed with Secure Boot off and said so. See
-  <a href="/hardware">Hardware</a>.
-</p>
-
-<h2>Making it yours</h2>
-<p>
-  The accent colour, clock format, wallpaper and theme you chose during
-  installation are ordinary Plasma settings, and changing them later is done in
-  System Settings like anything else. Nothing about them is locked.
-</p>
-<p>
-  Sakura Settings holds the parts that are ours: the AUR switch, what Terminal
-  Assist does, when updates install, and whether Windows application support is
-  set up at all.
-</p>
+<h2>Where things are</h2>
+<div class="tablewrap"><table>
+  <thead><tr><th>To</th><th>Open</th></tr></thead>
+  <tbody>
+    <tr><td>Install or remove applications</td><td>App Store</td></tr>
+    <tr><td>See updates and restore points</td><td>Update Center</td></tr>
+    <tr><td>Change SakuraOS's own settings: updates, the AUR, Terminal Assist, Windows programs</td><td>System Settings → System → SakuraOS. See <a href="/settings">SakuraOS settings</a>.</td></tr>
+    <tr><td>Change the look, wallpaper, accent color and clock</td><td>System Settings</td></tr>
+    <tr><td>Browse files and other drives</td><td>Dolphin, the file manager</td></tr>
+    <tr><td>Type commands</td><td>Konsole, the terminal</td></tr>
+  </tbody>
+</table></div>
 
 <h2>If something is already wrong</h2>
 <p>
-  Go to <a href="/troubleshooting">Troubleshooting</a>. If the machine will not
-  start, <a href="/recovery">Recovery</a> covers it and you do not need
-  anything else.
+  See <a href="/troubleshooting">Troubleshooting</a>. If the computer will not
+  start, see <a href="/recovery">Going back</a>.
 </p>

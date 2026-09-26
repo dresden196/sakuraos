@@ -1,71 +1,52 @@
-<h1>Wiki</h1>
+<h1>SakuraOS wiki</h1>
 <p class="lede">
-  SakuraOS is Arch Linux with the parts that usually take a weekend already
-  decided, and a set of applications built so that deciding differently later
-  does not require a terminal. This is what each part actually does.
+  SakuraOS is a Linux distribution based on Arch Linux, with the KDE Plasma
+  desktop. It installs in a few screens, keeps itself up to date, and takes a
+  restore point before every update, so an update that goes wrong can be undone
+  from the boot menu.
 </p>
 
-<h2>Start here</h2>
+<figure>
+  <img src="/img/desktop.jpg" alt="The SakuraOS desktop with the Update Center open" width="1600" height="900">
+  <figcaption>The SakuraOS desktop, with the Update Center open.</figcaption>
+</figure>
+
+<h2>New to SakuraOS</h2>
+<p>If you are installing for the first time, read these in order.</p>
 <div class="cards">
-  <a href="/faq"><strong>FAQ</strong><span>Short answers to the questions people ask before installing, and in the first week.</span></a>
-  <a href="/install"><strong>Installing</strong><span>Making the media, what the installer asks, and the disk layout it creates.</span></a>
-  <a href="/first-run"><strong>After installing</strong><span>What is already set up, and the short list worth doing yourself.</span></a>
-  <a href="/troubleshooting"><strong>Troubleshooting</strong><span>The problems people actually hit, in the order they hit them.</span></a>
+  <a href="/requirements"><strong>1. System requirements</strong><span>Check that your computer can run it.</span></a>
+  <a href="/install-media"><strong>2. Making a USB</strong><span>Download the image, write it to a USB stick, and start the computer from it.</span></a>
+  <a href="/install"><strong>3. Installing</strong><span>Every screen of the installer, with pictures.</span></a>
+  <a href="/first-run"><strong>4. After installing</strong><span>What is already set up, and the few things worth doing yourself.</span></a>
+</div>
+<p>
+  Keeping Windows as well? Read <a href="/dual-boot">Dual boot with Windows</a>
+  before you start. Wondering whether SakuraOS is right for you? See
+  <a href="/why">Why SakuraOS</a> and the <a href="/faq">FAQ</a>.
+</p>
+
+<h2>Using SakuraOS</h2>
+<div class="cards">
+  <a href="/store"><strong>App Store</strong><span>Find and install applications, and choose where they come from.</span></a>
+  <a href="/updates"><strong>Updates</strong><span>How updates install, and how to update by hand.</span></a>
+  <a href="/settings"><strong>SakuraOS settings</strong><span>Every setting on the SakuraOS page in System Settings.</span></a>
+  <a href="/gaming"><strong>Gaming</strong><span>Steam, Proton and controllers.</span></a>
 </div>
 
-<h2>Using it</h2>
+<h2>When something goes wrong</h2>
 <div class="cards">
-  <a href="/store"><strong>App Store</strong><span>Four sources in one place, and what installing from each one means.</span></a>
-  <a href="/aur"><strong>The AUR</strong><span>Off by default, checked against known attack campaigns, reviewed before it builds.</span></a>
-  <a href="/updates"><strong>Updates</strong><span>When they run, what is held back, and the restore point taken first.</span></a>
-  <a href="/gaming"><strong>Gaming</strong><span>Steam, Proton, controllers, and what to try when a game will not start.</span></a>
-  <a href="/windows"><strong>Windows apps</strong><span>Wine installed the first time you need it, and removed again when you do not.</span></a>
+  <a href="/recovery"><strong>Going back</strong><span>Undo an update or a change, even if the computer will not start.</span></a>
+  <a href="/troubleshooting"><strong>Troubleshooting</strong><span>Common problems and how to fix them.</span></a>
+  <a href="/help"><strong>Getting help</strong><span>Where to ask, and what to include.</span></a>
+  <a href="/password"><strong>Forgotten password</strong><span>Get back into your account.</span></a>
 </div>
 
-<h2>When it goes wrong</h2>
-<div class="cards">
-  <a href="/recovery"><strong>Recovery</strong><span>Restore points, the failed-boot watchdog, and how a rollback actually works.</span></a>
-  <a href="/logs"><strong>Logs and bug reports</strong><span>What to collect before asking, and where to send it.</span></a>
-</div>
-
-<h2>Underneath</h2>
-<div class="cards">
-  <a href="/terminal"><strong>Terminal Assist</strong><span>The check inside pacman, the layer in your shell, and how to override both.</span></a>
-  <a href="/kernel"><strong>Kernel</strong><span>The CachyOS build, the processor check, and what older machines get instead.</span></a>
-  <a href="/hardware"><strong>Hardware</strong><span>Graphics, wireless, printers and laptops, and what was decided for you.</span></a>
-  <a href="/tuning"><strong>Tuning</strong><span>The sysctl values, the per-drive I/O scheduler, and compressed swap.</span></a>
-  <a href="/glossary"><strong>Glossary</strong><span>The words this wiki uses, and what they mean here.</span></a>
-</div>
-
-<h2>What SakuraOS is</h2>
+<h2>About this wiki</h2>
 <p>
-  Arch underneath, KDE Plasma on top, BTRFS with automatic restore points, and
-  a boot chain built out of limine and unified kernel images. Every one of
-  those is a choice somebody normally has to make during an Arch install, and
-  making them is most of what an opinionated distribution is for.
-</p>
-<p>
-  The parts that are ours are the ones that were missing: an installer that
-  asks in plain language, a store that covers four packaging systems at once,
-  an update engine that takes a restore point before it touches anything, and
-  a guard that sits inside pacman rather than beside it.
-</p>
-
-<h2>What it is not</h2>
-<p>
-  It is not a locked-down system. Every guard here names its own override, the
-  AUR is one checkbox away, and nothing stops you replacing any of it. The
-  defaults are opinions, not restrictions.
-</p>
-<p>
-  It is also not finished. This documentation describes what is built and
-  working today. Where something is planned rather than present, it says so
-  rather than describing it in the present tense.
-</p>
-
-<h2>Getting help</h2>
-<p>
-  Every page here is written from the code that ships. If something on this
-  site does not match what your machine does, the machine is right and the
-  page is a bug worth reporting.
+  Every page is checked against the SakuraOS release named at the bottom of it.
+  If something here does not match what your computer does, the page is wrong,
+  and a <a href="https://github.com/dresden196/sakuraos/issues">report</a> is
+  welcome. The wiki lives in the
+  <a href="https://github.com/dresden196/sakuraos/tree/master/site/docs">SakuraOS repository</a>,
+  so corrections can also be sent as a pull request.
 </p>

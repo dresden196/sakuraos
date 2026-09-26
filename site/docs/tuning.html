@@ -1,77 +1,78 @@
 <h1>Tuning defaults</h1>
 <p class="lede">
-  Linux ships defaults that have to suit a database server, a phone and a
-  laptop at once. SakuraOS is only ever a desktop, so the defaults can be set
-  for one job instead of averaged across three.
+  Linux's defaults have to suit servers, phones and desktops alike. SakuraOS
+  changes a few of them for a desktop, where a responsive screen matters more
+  than maximum throughput. All of them are ordinary configuration files you can
+  change.
 </p>
 
-<h2>Memory and writeback</h2>
-<p>
-  The kernel decides how much dirty data to hold in memory before writing it
-  out. The stock setting is a percentage of RAM, which on a machine with 64 GB
-  means many gigabytes of unwritten data and a stall when it finally flushes.
-  SakuraOS sets absolute limits instead.
-</p>
-
-<div class="tablewrap">
-<table>
-  <thead><tr><th>Setting</th><th>Value</th><th>What it does</th></tr></thead>
+<h2>Memory and disk writes</h2>
+<p>From <code>/etc/sysctl.d/99-sakura.conf</code>:</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Setting</th><th>Value</th><th>Effect</th></tr></thead>
   <tbody>
-    <tr><td><code>vm.dirty_bytes</code></td><td>256 MB</td><td>Hard ceiling on unwritten data, so a flush is never a multi-second freeze.</td></tr>
-    <tr><td><code>vm.dirty_background_bytes</code></td><td>64 MB</td><td>Start writing out quietly well before the ceiling.</td></tr>
-    <tr><td><code>vm.dirty_writeback_centisecs</code></td><td>15 s</td><td>How often the flusher wakes. Less often means fewer disk wake-ups on a laptop.</td></tr>
-    <tr><td><code>vm.vfs_cache_pressure</code></td><td>50</td><td>Keep directory and inode caches longer. A desktop revisits the same paths constantly.</td></tr>
-    <tr><td><code>vm.watermark_boost_factor</code></td><td>0</td><td>Disable a reclaim behaviour that causes stalls without helping an interactive workload.</td></tr>
-    <tr><td><code>vm.compaction_proactiveness</code></td><td>0</td><td>Do not spend CPU compacting memory in the background on a machine with a person waiting.</td></tr>
-    <tr><td><code>vm.page_lock_unfairness</code></td><td>1</td><td>Reduce the worst-case wait for a contended page, trading a little throughput for responsiveness.</td></tr>
-    <tr><td><code>kernel.nmi_watchdog</code></td><td>0</td><td>A debugging feature that costs a timer on every CPU and helps nobody on a desktop.</td></tr>
-    <tr><td><code>net.core.netdev_max_backlog</code></td><td>4096</td><td>A deeper queue before the network stack starts dropping on a fast link.</td></tr>
-    <tr><td><code>kernel.kptr_restrict</code></td><td>2</td><td>Hide kernel pointers from userspace. This one is hardening, not performance.</td></tr>
+    <tr><td><code>vm.dirty_bytes</code></td><td>256 MB</td><td>At most this much unwritten data is held in memory, so writing it out never freezes the system for seconds. Linux's default is a percentage of memory, which is many gigabytes on a large machine.</td></tr>
+    <tr><td><code>vm.dirty_background_bytes</code></td><td>64 MB</td><td>Starts writing out quietly well before that limit.</td></tr>
+    <tr><td><code>vm.dirty_writeback_centisecs</code></td><td>15 s</td><td>How often data is written out. Less often means fewer disk wake-ups on a laptop.</td></tr>
+    <tr><td><code>vm.vfs_cache_pressure</code></td><td>50</td><td>Keeps the list of recently used folders and files in memory longer.</td></tr>
+    <tr><td><code>vm.watermark_boost_factor</code></td><td>0</td><td>Turns off a memory-reclaim behavior that causes stutters on desktops.</td></tr>
+    <tr><td><code>vm.compaction_proactiveness</code></td><td>0</td><td>Stops the kernel reorganizing memory in the background.</td></tr>
+    <tr><td><code>vm.page_lock_unfairness</code></td><td>1</td><td>Shortens the worst-case wait when several programs need the same memory page.</td></tr>
+    <tr><td><code>kernel.nmi_watchdog</code></td><td>0</td><td>Turns off a debugging timer that runs on every processor core.</td></tr>
+    <tr><td><code>net.core.netdev_max_backlog</code></td><td>4096</td><td>A longer queue for incoming network traffic on fast connections.</td></tr>
+    <tr><td><code>kernel.kptr_restrict</code></td><td>2</td><td>Hides kernel memory addresses from programs. A security setting, not a speed one.</td></tr>
   </tbody>
-</table>
-</div>
+</table></div>
 
-<h2>The I/O scheduler is chosen per drive</h2>
+<h2>Disk scheduling</h2>
 <p>
-  There is no single right scheduler, because the right answer depends on
-  whether the device has to move a physical arm. A udev rule picks per device
-  as it appears:
+  Each drive gets an I/O scheduler that suits it, set by
+  <code>/etc/udev/rules.d/60-sakura-ioscheduler.rules</code>:
 </p>
-
-<div class="tablewrap">
-<table>
-  <thead><tr><th>Device</th><th>Scheduler</th><th>Why</th></tr></thead>
+<div class="tablewrap"><table>
+  <thead><tr><th>Drive</th><th>Scheduler</th><th>Why</th></tr></thead>
   <tbody>
-    <tr><td>Spinning disk</td><td><code>bfq</code></td><td>Seeking is expensive, so it is worth spending CPU ordering requests fairly.</td></tr>
-    <tr><td>SATA or USB SSD</td><td><code>mq-deadline</code></td><td>Cheap ordering with a latency bound, without BFQ's overhead.</td></tr>
-    <tr><td>NVMe</td><td><code>none</code></td><td>The device has its own deep queues. Scheduling in the kernel first only adds latency.</td></tr>
+    <tr><td>Hard disk</td><td><code>bfq</code></td><td>Moving the disk's head is slow, so it pays to order requests carefully.</td></tr>
+    <tr><td>SATA or USB SSD, SD card</td><td><code>mq-deadline</code></td><td>Light ordering with a limit on how long any request waits.</td></tr>
+    <tr><td>NVMe SSD</td><td><code>none</code></td><td>The drive schedules its own requests better than the kernel can.</td></tr>
   </tbody>
-</table>
-</div>
+</table></div>
 
-<h2>Compressed swap in RAM</h2>
+<h2 id="compressed-swap">Compressed swap</h2>
 <p>
-  <code>zram-generator</code> provides a compressed swap device in memory. When
-  a machine runs short, pages are compressed rather than written to disk, which
-  is far faster than any SSD and does not wear it.
+  Instead of a swap file on disk, SakuraOS uses <code>zram</code>: a compressed
+  area in memory, half the size of your RAM up to 8 GB, compressed with zstd.
+  When memory runs short, pages are compressed rather than written to disk,
+  which is much faster and does not wear out an SSD. It lets a computer with
+  little memory keep more programs open before something has to close.
 </p>
 <p>
-  The practical effect is that a laptop with 8 GB and a browser full of tabs
-  stays usable instead of having something killed. It is not a substitute for
-  memory, but it moves the point at which a machine becomes unpleasant.
+  Because compressed memory is so much faster than disk,
+  <code>vm.swappiness</code> is set to 180 in
+  <code>/etc/sysctl.d/99-sakura-zram.conf</code>, so the kernel uses it readily.
 </p>
 
-<div class="note">
-  <p>
-    <strong>These are defaults, not policy.</strong> Everything here is a plain
-    file in <code>/etc/sysctl.d</code> and <code>/etc/udev/rules.d</code>. They
-    are marked as configuration, so if you change them your changes survive
-    updates rather than being overwritten.
-  </p>
-</div>
-
-<h2>The kernel is separate</h2>
+<h2>Changing them</h2>
 <p>
-  Scheduling behaviour comes from the kernel itself rather than from these
-  values. See <a href="/kernel">Kernel</a>.
+  The cleanest way to change a setting is to add your own file rather than
+  editing SakuraOS's. Files in <code>/etc/sysctl.d</code> are read in
+  alphabetical order and later ones win, so a file named
+  <code>zz-local.conf</code> overrides everything above:
+</p>
+<pre><span class="c"># make swapping less eager</span>
+<span class="k">echo</span> "vm.swappiness = 60" | sudo tee /etc/sysctl.d/zz-local.conf
+sudo sysctl --system</pre>
+<p>
+  To undo it, delete your file and run <code>sudo sysctl --system</code> again,
+  or restart.
+</p>
+<p>
+  The zram size lives in <code>/etc/systemd/zram-generator.conf</code> and the
+  disk schedulers in <code>/etc/udev/rules.d/60-sakura-ioscheduler.rules</code>.
+  If you edit those directly, your version is kept through updates. Changes to
+  them take effect after a restart.
+</p>
+<p>
+  The kernel's own scheduling comes from the kernel build, not from these files.
+  See <a href="/kernel">Kernel</a>.
 </p>
