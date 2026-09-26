@@ -231,11 +231,25 @@ docker run --rm \
                 # overwritten -- and would mask a failed rebuild.
                 if [[ -n "$AUR_ONLY" ]] && wanted "$pkg"; then continue; fi
                 found=0
+                # Every package this pkgbase produced, not only the one that
+                # shares its name. Matching "$pkg-<version>" kept
+                # nvidia-580xx-utils and silently dropped nvidia-580xx-dkms
+                # and opencl-nvidia-580xx, which it builds alongside -- and the
+                # publish that followed deleted them from the server, so a
+                # GTX 900 or 1000 series install could no longer get a driver.
+                # The pkgbase recorded inside each package is the only reliable
+                # link between a manifest entry and what it built.
                 for d in /build/repo/sakura-core/os/x86_64 \
                          /build/repo/sakura-extra/os/x86_64; do
-                    for f in "$d/$pkg"-[0-9]*.pkg.tar.zst; do
+                    for f in "$d"/*.pkg.tar.zst; do
                         [[ -e "$f" ]] || continue
+                        base=$(bsdtar -xOf "$f" .PKGINFO 2>/dev/null \
+                               | sed -n "s/^pkgbase = //p")
+                        [[ -n "$base" ]] || base=$(bsdtar -xOf "$f" .PKGINFO 2>/dev/null \
+                               | sed -n "s/^pkgname = //p")
+                        [[ "$base" == "$pkg" ]] || continue
                         cp "$f" "$f.sig" "$REUSE/" 2>/dev/null || cp "$f" "$REUSE/"
+                        echo ">>>   reusing $(basename "$f")"
                         found=1
                     done
                 done
