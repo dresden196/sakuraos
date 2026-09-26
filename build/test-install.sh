@@ -546,7 +546,13 @@ check "the live SSH config is gone"        "test ! -e /etc/ssh/sshd_config.d/10-
 check "the screen lock is not disabled"    "test ! -e /etc/xdg/kscreenlockerrc"
 check "closing the lid suspends"           "test ! -e /etc/systemd/logind.conf.d/do-not-suspend.conf"
 check "logs are kept on disk"              "test -d /var/log/journal && test ! -e /etc/systemd/journald.conf.d/volatile-storage.conf"
-check "cloud-init is not installed"        "! pacman -Q cloud-init"
+if [[ "$UPGRADE" == "1" ]]; then
+    # An install script cannot remove another package mid-transaction, so an
+    # upgraded machine keeps cloud-init and has it switched off instead.
+    check "cloud-init is switched off"     "! pacman -Q cloud-init || { test -e /etc/cloud/cloud-init.disabled && test ! -e /etc/systemd/system/cloud-init.target.wants; }"
+else
+    check "cloud-init is not installed"    "! pacman -Q cloud-init"
+fi
 check "no live autologin is configured"    "test ! -e /etc/sddm.conf.d/10-sakura-live.conf"
 check "a boot entry was written"           "efibootmgr | grep -qi sakura"
 check "the store engine runs as the user"  "runuser -u $USER_NAME -- sakura-store sources"
