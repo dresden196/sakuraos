@@ -172,6 +172,17 @@ sakura_assist_preexec() {
     local cmd="$1"
     [ -n "$cmd" ] || return 0
     [ -n "${SAKURA_ASSIST_OVERRIDE:-}" ] && return 0
+    # The override as the message tells people to write it: in front of the
+    # command, or after sudo or env. An assignment in front of a command is
+    # not a shell variable when this runs -- it exists only for the command
+    # that follows -- so checking the variable alone refused the message's own
+    # advice a second time, and the only thing that worked was an export
+    # nobody was told about. Only as the leading word, so an override written
+    # further along a line cannot wave through whatever else is on it.
+    case "$cmd" in
+        SAKURA_ASSIST_OVERRIDE=*|"sudo SAKURA_ASSIST_OVERRIDE="*|"env SAKURA_ASSIST_OVERRIDE="*)
+            return 0 ;;
+    esac
 
     if ! sakura_assist_check "$cmd"; then
         if [ "$SAKURA_ASSIST_MODE" = "warn" ]; then

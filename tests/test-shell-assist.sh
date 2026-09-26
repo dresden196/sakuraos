@@ -63,6 +63,23 @@ SESSION
 )
 check "an allowed command still runs" "1" "${RAN:-0}"
 
+# The override written exactly as the refusal message suggests. It used to be
+# refused a second time, because a prefix assignment is not a shell variable
+# when the hook runs.
+OVR=$(bash -i <<'SESSION' 2>&1 | grep -c "SENTINEL-OVR"
+SAKURA_ASSIST_OVERRIDE=1 echo "SENTINEL""-OVR" pacman -Sy firefox
+SESSION
+)
+check "the override as the message writes it works" "1" "${OVR:-0}"
+
+# ...but only as the leading word. The same text further along the command
+# is an argument, not an override, and must not excuse the command.
+LATE=$(bash -i <<'SESSION' 2>&1 | grep -c "SENTINEL-LATE"
+echo "SENTINEL""-LATE" pacman -Sy firefox SAKURA_ASSIST_OVERRIDE=1
+SESSION
+)
+check "override text later in a command does not count" "0" "${LATE:-1}"
+
 ARM=$(bash -ic 'echo "$PROMPT_COMMAND" | grep -c __sakura_assist_arm' 2>/dev/null | tail -1)
 check "arm hook added to PROMPT_COMMAND" "1" "${ARM:-0}"
 
