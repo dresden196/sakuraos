@@ -320,7 +320,7 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("More:")
             text: i18n("Open Update Center")
             icon.name: "system-software-update"
-            onClicked: Qt.openUrlExternally("application:///org.sakuraos.updatecenter.desktop")
+            onClicked: cfg.openUpdateCenter()
         }
 
         QQC2.Label {

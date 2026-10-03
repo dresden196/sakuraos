@@ -86,6 +86,8 @@ public:
     QString aurHelperStatus() const { return m_aurHelperStatus; }
     Q_INVOKABLE void setWineEnabled(bool value);
     Q_INVOKABLE void refreshWine();
+    // The Update Center, launched the way Plasma launches any application.
+    Q_INVOKABLE void openUpdateCenter();
     // "none" removes whichever helper is installed and installs nothing.
     Q_INVOKABLE void applyAurHelper(const QString &name);
     Q_INVOKABLE void refreshAurHelper();

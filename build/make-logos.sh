@@ -25,6 +25,16 @@ render() {
     rsvg-convert -w "$size" -h "$size" -o "$dest" "$TMP/m.svg"
 }
 
+echo ">> hicolor: the logo as the system names it"
+# os-release says LOGO=sakura, and System Settings shows the SakuraOS page and
+# About this System under that name. The two SakuraOS icon themes carry it,
+# but only they do: with any other icon theme chosen the name resolved to
+# nothing. hicolor is every theme's fallback, so it lives there as well, in the
+# sizes a sidebar and a dialog ask for.
+for size in 16 22 24 32 48 64 128 256; do
+    render 0 "$size" "$REPO_ROOT/packages/sakura-branding/icons/${size}x${size}/sakura.png"
+done
+
 echo ">> application marks"
 # Rendered to PNG with rsvg, not handed over as SVG.
 #

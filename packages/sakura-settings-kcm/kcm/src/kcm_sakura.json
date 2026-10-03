@@ -1,7 +1,7 @@
 {
     "KPlugin": {
         "Description": "Terminal Assist, AUR safety, and automatic updates",
-        "Icon": "preferences-system",
+        "Icon": "sakura",
         "Name": "SakuraOS",
         "Category": "System Administration"
     },

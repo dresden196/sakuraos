@@ -9,6 +9,8 @@ license=('GPL-3.0-or-later')
 depends=(
     'sakura-settings-core'
     'kcmutils'
+    'kio'
+    'kservice'
     'kconfig'
     'ki18n'
     'kirigami'

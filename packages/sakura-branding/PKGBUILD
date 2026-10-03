@@ -17,4 +17,12 @@ package() {
     # forking the filesystem package just to change a few strings.
     install -Dm644 "$srcdir/os-release" "$pkgdir/etc/os-release"
     install -Dm644 "$srcdir/sakura-core.conf" "$pkgdir/etc/pacman.d/sakura-core.conf"
+    # The logo os-release names (LOGO=sakura), in hicolor so it resolves under
+    # any icon theme, not only the two SakuraOS ones. Rendered from
+    # branding/sakura-mark.svg by build/make-logos.sh.
+    local icon
+    for icon in "$startdir"/icons/*/sakura.png; do
+        install -Dm644 "$icon" \
+            "$pkgdir/usr/share/icons/hicolor/$(basename "$(dirname "$icon")")/apps/sakura.png"
+    done
 }

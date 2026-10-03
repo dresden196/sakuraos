@@ -10,6 +10,9 @@
 
 #include <QProcess>
 
+#include <KIO/ApplicationLauncherJob>
+#include <KService>
+
 namespace
 {
 constexpr auto ConfigPath = "/etc/sakura/sakura.conf";
@@ -218,6 +221,22 @@ namespace {
 const char WINE_HELPER[] = "/usr/lib/sakura/wine/sakura-wine";
 const char AUR_HELPER[] = "/usr/lib/sakura/settings/sakura-aur-helper";
 const char WINE_GUARD[] = "/usr/lib/sakura/wine/sakura-windows-app";
+}
+
+void SakuraSettings::openUpdateCenter()
+{
+    // By its desktop entry, through KIO, which gives it a launch notification
+    // and its own process scope like anything started from the menu. The
+    // button used Qt.openUrlExternally("application:///...desktop"), which is
+    // not a URL anything can open: KIO answered "could not read file".
+    const KService::Ptr service =
+        KService::serviceByDesktopName(QStringLiteral("org.sakuraos.updatecenter"));
+    if (!service) {
+        QProcess::startDetached(QStringLiteral("sakura-update-center"), {});
+        return;
+    }
+    auto *job = new KIO::ApplicationLauncherJob(service);
+    job->start();
 }
 
 void SakuraSettings::refreshWine()

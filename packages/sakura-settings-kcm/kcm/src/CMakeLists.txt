@@ -7,4 +7,6 @@ target_link_libraries(kcm_sakura PRIVATE
     KF6::ConfigCore
     KF6::I18n
     KF6::KCMUtilsQuick
+    KF6::KIOGui
+    KF6::Service
 )
