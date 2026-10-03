@@ -9,6 +9,7 @@ pkgver=0.1.0
 pkgrel=1
 pkgdesc="Snapshot rollback and boot menu generation for SakuraOS"
 arch=('any')
+install="$pkgname.install"
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
 depends=('btrfs-progs' 'limine' 'snapper' 'mkinitcpio' 'sakura-wallpapers')
@@ -23,12 +24,15 @@ source=(
     'sakura-schedule-rollback'
     'sakura-snapshot-manage'
     'sakura-boot-success'
+    'sakura-rollback-cleanup'
+    'sakura-limine-update'
+    '90-sakura-limine.hook'
     'sakura-boot-success.service'
     'sakura-kernel-sync'
     'sakura-kernel-sync.service'
     'org.sakuraos.rollback.policy'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm644 "$srcdir/lib.sh"              "$pkgdir/usr/lib/sakura/snapshot-boot/lib.sh"
@@ -39,6 +43,12 @@ package() {
     # performing one still only happens in the recovery environment.
     install -Dm755 "$srcdir/sakura-boot-success" \
         "$pkgdir/usr/lib/sakura/snapshot-boot/sakura-boot-success"
+    install -Dm755 "$srcdir/sakura-rollback-cleanup" \
+        "$pkgdir/usr/lib/sakura/snapshot-boot/sakura-rollback-cleanup"
+    install -Dm755 "$srcdir/sakura-limine-update" \
+        "$pkgdir/usr/lib/sakura/snapshot-boot/sakura-limine-update"
+    install -Dm644 "$srcdir/90-sakura-limine.hook" \
+        "$pkgdir/usr/share/libalpm/hooks/90-sakura-limine.hook"
     install -Dm644 "$srcdir/sakura-boot-success.service" \
         "$pkgdir/usr/lib/systemd/system/sakura-boot-success.service"
     install -Dm755 "$srcdir/sakura-kernel-sync" \

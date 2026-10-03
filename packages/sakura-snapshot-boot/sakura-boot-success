@@ -41,3 +41,7 @@ systemctl is-active --quiet display-manager.service || exit 0
 
 echo 0 > "$STATE/boot-count"
 sync
+
+# A boot that worked is the moment to let go of old system copies left by
+# going back. Never allowed to fail this unit: the counter is what matters.
+/usr/lib/sakura/snapshot-boot/sakura-rollback-cleanup || true

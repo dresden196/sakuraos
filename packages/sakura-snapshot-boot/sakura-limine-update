@@ -1,0 +1,50 @@
+#!/bin/sh
+# Put the limine that pacman just installed onto the EFI partition.
+#
+# The boot loader is copied there once, by the installer, and pacman only ever
+# updates /usr/share/limine. Nothing carried a new build across, so every
+# machine kept booting the limine it was installed with: Arch shipped 12.9.1
+# and machines installed on 12.9.0 went on running 12.9.0, bug fixes and all.
+#
+# With Secure Boot set up, the loader must be signed before the firmware sees
+# it, or the next start fails. So the new build is written beside the old one
+# -- signed there first when there are keys to sign with -- and only then
+# moved into place. sbctl's own hook does not cover this: it matches *.efi,
+# and limine ships BOOTX64.EFI.
+set -eu
+
+ESP=/boot
+NEW=/usr/share/limine/BOOTX64.EFI
+OURS="$ESP/EFI/sakura/limine.efi"
+FALLBACK="$ESP/EFI/BOOT/BOOTX64.EFI"
+
+# Not a SakuraOS boot chain: the live image, or a chroot with no ESP mounted.
+[ -f "$NEW" ] || exit 0
+mountpoint -q "$ESP" 2>/dev/null || exit 0
+[ -f "$OURS" ] || exit 0
+
+signed=no
+if command -v sbctl >/dev/null 2>&1 \
+   && sbctl list-files 2>/dev/null | grep -qF "$OURS"; then
+    signed=yes
+fi
+
+place() {
+    tmp="$1.new"
+    if [ "$signed" = yes ]; then
+        sbctl sign -o "$tmp" "$NEW" >/dev/null
+    else
+        cp "$NEW" "$tmp"
+    fi
+    sync
+    mv -f "$tmp" "$1"
+}
+
+place "$OURS"
+# The removable-path copy only when it is ours. Installed beside Windows it is
+# Windows' fallback boot manager, which is not ours to replace -- or to sign.
+if [ -f "$FALLBACK" ] && grep -qa 'Limine' "$FALLBACK"; then
+    place "$FALLBACK"
+fi
+sync
+echo "boot loader updated to $(pacman -Q limine 2>/dev/null | cut -d' ' -f2)"

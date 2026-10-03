@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = limine
+
+[Action]
+Description = Updating the boot loader on the EFI partition...
+When = PostTransaction
+Exec = /usr/lib/sakura/snapshot-boot/sakura-limine-update

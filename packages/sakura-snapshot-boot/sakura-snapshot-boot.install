@@ -1,0 +1,25 @@
+post_upgrade() {
+    # Machines installed before the limine hook existed are still booting the
+    # limine they were installed with. Bring them up to the installed build
+    # once; the hook keeps them there from now on.
+    /usr/lib/sakura/snapshot-boot/sakura-limine-update || true
+
+    # A plain initramfs the kernel package built before the SakuraOS preset
+    # replaced its own. Nothing boots it -- both boot entries are UKIs -- so it
+    # is 15 MB of a small partition, unless a preset still names it.
+    for img in boot/initramfs-*.img; do
+        [ -f "$img" ] || continue
+        grep -qsF "${img#boot/}" etc/mkinitcpio.d/*.preset && continue
+        rm -f "$img"
+    done
+
+    # The installer wrote the boot counter's directory from inside a chroot
+    # with a host path, so it landed in the new system's /mnt. Removed only
+    # while it holds nothing but that file; the real one is on the ESP.
+    stray=mnt/boot/EFI/sakura/state
+    if [ -d "$stray" ] && [ "$(ls -A "$stray")" = "boot-count" ]; then
+        rm -f "$stray/boot-count"
+        rmdir "$stray" mnt/boot/EFI/sakura mnt/boot/EFI mnt/boot 2>/dev/null || true
+    fi
+    return 0
+}

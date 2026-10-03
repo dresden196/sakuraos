@@ -53,5 +53,29 @@ check "identical on rerun" "$BEFORE" "$(cat "$ESP/limine.conf")"
 check "no temp files left" "0" "$(find "$ESP" -name 'limine.conf.*' | grep -c . || true)"
 
 echo
+echo "== other systems on the same EFI partition =="
+# Windows beside us: its boot manager, and the copy of it Windows keeps at
+# the removable path. One menu entry, not two.
+mkdir -p "$ESP/EFI/Microsoft/Boot" "$ESP/EFI/Boot"
+printf 'MZ windows boot manager' > "$ESP/EFI/Microsoft/Boot/bootmgfw.efi"
+cp "$ESP/EFI/Microsoft/Boot/bootmgfw.efi" "$ESP/EFI/Boot/bootx64.efi"
+SAKURA_ESP="$ESP" sakura-boot-entries >/dev/null
+check "Windows offered once"            "1" "$(grep -c '^/Windows Boot Manager$' "$ESP/limine.conf")"
+check "its fallback copy not offered"   "0" "$(grep -c '^/Other operating system$' "$ESP/limine.conf" || true)"
+
+# Our own fallback copy, signed separately from limine.efi so the bytes
+# differ: still ours, still not offered as another system.
+printf 'MZ Limine 12.9.1 signed copy' > "$ESP/EFI/Boot/bootx64.efi"
+printf 'MZ Limine 12.9.1' > "$ESP/EFI/sakura/limine.efi"
+SAKURA_ESP="$ESP" sakura-boot-entries >/dev/null
+check "our signed fallback not offered" "0" "$(grep -c '^/Other operating system$' "$ESP/limine.conf" || true)"
+
+# Something else entirely at the removable path is a real other system.
+printf 'MZ some other loader' > "$ESP/EFI/Boot/bootx64.efi"
+SAKURA_ESP="$ESP" sakura-boot-entries >/dev/null
+check "an unknown loader is offered"    "1" "$(grep -c '^/Other operating system$' "$ESP/limine.conf")"
+rm -rf "$ESP/EFI/Microsoft" "$ESP/EFI/Boot"
+
+echo
 echo "== $PASS passed, $FAIL failed =="
 [ "$FAIL" -eq 0 ]

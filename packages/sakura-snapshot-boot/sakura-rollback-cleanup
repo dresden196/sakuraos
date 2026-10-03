@@ -1,0 +1,79 @@
+#!/bin/sh
+# Remove the system copies that going back leaves behind.
+#
+# A rollback keeps the root it replaces as @rollback-<when>, on purpose: if
+# going back was the wrong call, that copy is the only record of what the
+# machine was. Nothing ever removed them, though, and each one pins a whole
+# system's worth of blocks that the restored system has since replaced -- a
+# few rollbacks in, gigabytes nobody can see, on a disk the Update Center
+# reports as full.
+#
+# So the newest is kept for KEEP_DAYS, which is time to notice that going back
+# was a mistake, and every older one goes now. Their age is measured from when
+# this first saw them rather than read from the name: the recovery
+# environment has no reliable clock, so some are called @rollback-from-<n>
+# with no date at all.
+#
+# Run after a boot that worked (sakura-boot-success), never from recovery: a
+# machine that is not booting properly is exactly the one whose copies must
+# not be touched.
+set -eu
+
+KEEP_DAYS="${SAKURA_ROLLBACK_KEEP_DAYS:-30}"
+SEEN=/var/lib/sakura/rollback-seen
+TOP=/run/sakura/top
+
+log() { echo "sakura-rollback-cleanup: $*"; }
+
+# The btrfs device under /, without findmnt's [/subvolume] suffix. Plain,
+# or the LUKS mapping.
+DEV=$(findmnt -no SOURCE / | sed 's/\[.*\]$//')
+[ "$(findmnt -no FSTYPE /)" = btrfs ] || exit 0
+
+mkdir -p "$TOP" "$SEEN"
+mount -o subvolid=5 "$DEV" "$TOP"
+trap 'umount "$TOP" 2>/dev/null || true' EXIT
+
+now=$(date +%s)
+newest="" newest_at=0 newest_id=0
+for path in "$TOP"/@rollback-*; do
+    [ -d "$path" ] || continue
+    name=${path##*/}
+    at=$(cat "$SEEN/$name" 2>/dev/null || true)
+    case "$at" in
+        ''|*[!0-9]*) at=$now; echo "$now" > "$SEEN/$name" ;;
+    esac
+    # Ties -- several seen for the first time together -- go by subvolume
+    # id. Every rollback makes a new root, so the copy preserved most
+    # recently is the root made most recently, which has the highest id.
+    # Names cannot say: without a clock they are @rollback-from-<n>, and as
+    # strings from-3 sorts after from-12.
+    id=$(btrfs inspect-internal rootid "$path" 2>/dev/null || echo 0)
+    if [ "$at" -gt "$newest_at" ] || { [ "$at" -eq "$newest_at" ] && [ "$id" -gt "$newest_id" ]; }; then
+        newest=$name newest_at=$at newest_id=$id
+    fi
+done
+# Records of copies that are no longer there.
+for f in "$SEEN"/@rollback-*; do
+    [ -e "$f" ] || continue
+    [ -d "$TOP/${f##*/}" ] || rm -f "$f"
+done
+[ -n "$newest" ] || exit 0
+
+for path in "$TOP"/@rollback-*; do
+    [ -d "$path" ] || continue
+    name=${path##*/}
+    at=$(cat "$SEEN/$name")
+    if [ "$name" = "$newest" ] && [ $((now - at)) -lt $((KEEP_DAYS * 86400)) ]; then
+        continue
+    fi
+    # A root can carry nested subvolumes of its own -- systemd makes them
+    # under /var/lib -- and a plain delete refuses a subvolume that has any.
+    if btrfs subvolume delete --recursive "$path" >/dev/null 2>&1 \
+       || btrfs subvolume delete "$path" >/dev/null 2>&1; then
+        rm -f "$SEEN/$name"
+        log "removed $name, the system as it was before going back"
+    else
+        log "could not remove $name"
+    fi
+done

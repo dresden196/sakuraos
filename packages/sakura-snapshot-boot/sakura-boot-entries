@@ -109,6 +109,7 @@ trap 'rm -f "$tmp"' EXIT
     # Matched by the paths these live at rather than by asking os-prober,
     # which needs to mount filesystems and is not available in every context
     # this script runs from -- a pacman hook during a kernel upgrade included.
+    listed_paths=""
     for other in \
         "EFI/Microsoft/Boot/bootmgfw.efi:Windows Boot Manager" \
         "EFI/ubuntu/shimx64.efi:Ubuntu" \
@@ -120,16 +121,32 @@ trap 'rm -f "$tmp"' EXIT
     do
         path="${other%%:*}"
         label="${other#*:}"
-        # Our own removable-path copy lives at EFI/Boot/bootx64.efi. Offering
-        # it as "another operating system" would be offering this one twice.
+        # The removable path, EFI/Boot/bootx64.efi, is somebody's fallback
+        # copy. Listing it is only right when it is a system not already on
+        # the menu:
+        #
+        #   ours -- limine. Recognised by what it is rather than by comparing
+        #   it with limine.efi, which fails the moment the two are signed
+        #   separately for Secure Boot or one of them is a newer build;
+        #
+        #   a copy of a loader listed above -- Windows keeps its boot manager
+        #   there, so a machine installed beside Windows offered it twice.
         case "$path" in
             EFI/Boot/bootx64.efi)
-                if cmp -s "$ESP/$path" "$ESP/$EFI_DIR/limine.efi" 2>/dev/null; then
+                if grep -qa 'Limine' "$ESP/$path" 2>/dev/null; then
                     continue
                 fi
+                dup=no
+                for listed in $listed_paths; do
+                    if cmp -s "$ESP/$path" "$ESP/$listed" 2>/dev/null; then
+                        dup=yes
+                    fi
+                done
+                [ "$dup" = no ] || continue
                 ;;
         esac
         if [ -f "$ESP/$path" ]; then
+            listed_paths="$listed_paths $path"
             echo
             echo "/$label"
             echo "    comment: Installed on this machine before SakuraOS"
