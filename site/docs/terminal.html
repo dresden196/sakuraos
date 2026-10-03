@@ -46,9 +46,11 @@
   <li>A few others: deleting all scheduled jobs, fork bombs, and writing firmware to a drive.</li>
 </ul>
 <p>
-  The terminal check looks at the first command on each line you type. A command
-  after <code>;</code> or <code>&amp;&amp;</code> on the same line is not checked,
-  though the pacman check still applies to it.
+  The terminal check looks at the whole line you type, including commands after
+  <code>;</code> or <code>&amp;&amp;</code> and every part of a pipe. If any part
+  of a line is stopped, none of the line runs. A line that starts with a space
+  may not be kept in the shell's history, depending on your settings; for those,
+  only the first command is checked.
 </p>
 
 <h2>Continuing anyway</h2>

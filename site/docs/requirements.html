@@ -34,8 +34,12 @@
 <h2>Firmware</h2>
 <p>
   SakuraOS needs <a href="/glossary#uefi">UEFI</a> firmware. Nearly every PC
-  sold with Windows 8 or later has it. On an older computer that only has a
-  legacy BIOS, the USB stick will start, but the installed system will not.
+  sold with Windows 8 or later has it. The USB stick also starts on a legacy
+  BIOS, so you can try SakuraOS there, but the installer will not install: its
+  welcome screen says why. If the computer has UEFI but started the stick in
+  legacy mode, switch the boot mode to UEFI in the firmware settings (it may be
+  called <span class="ui">UEFI only</span> or <span class="ui">disable CSM</span>)
+  and start from the stick again.
 </p>
 <p>
   Secure Boot does not need to be on. If you want it, see

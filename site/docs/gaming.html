@@ -8,8 +8,8 @@
 <h2>Installing Steam</h2>
 <ol class="steps">
   <li><p>Open the App Store and search for <strong>Steam</strong>.</p></li>
-  <li><p>Under <span class="ui">Install from</span>, choose <span class="ui">Flatpak</span>. The <span class="ui">SakuraOS</span> option cannot install Steam at the moment, so make sure Flatpak is the one highlighted.</p></li>
-  <li><p>Press <span class="ui">Install</span>, then open Steam and sign in.</p></li>
+  <li><p>Open Steam's page and press <span class="ui">Install</span>. The store installs it from Flathub, which brings everything Steam needs with it, including the 32-bit graphics libraries many games use.</p></li>
+  <li><p>Open Steam from the application menu and sign in. The first start downloads Steam's own updates, which takes a minute or two.</p></li>
 </ol>
 
 <h2>Running Windows games</h2>
@@ -53,11 +53,11 @@
   controller from the Bluetooth icon in the panel.
 </p>
 <p>
-  Steam can reconfigure most controllers under
-  <span class="ui">Settings → Controller</span>. SakuraOS does not yet include
-  Steam's own device rules, so some Steam controller features, and some less
-  common controllers, may not work in Steam. If a controller works in other
-  games but not in Steam, <a href="/help">please report it</a>.
+  SakuraOS includes the device rules Steam uses to talk to controllers
+  directly, including Valve's own controllers and VR headsets, so Steam can
+  set up and remap them under <span class="ui">Settings → Controller</span>. If
+  a controller works in other games but not in Steam,
+  <a href="/help">please report it</a> with the controller's name.
 </p>
 
 <h2>Other stores</h2>
@@ -71,5 +71,6 @@
 <p>
   The installer already set up the right driver for your graphics card. If you
   have an NVIDIA card and games are slow, check which driver you are using; see
-  <a href="/hardware#nvidia">NVIDIA</a>.
+  <a href="/hardware#nvidia">NVIDIA</a>. On a laptop with two graphics chips,
+  see <a href="/hardware#two-gpus">Laptops with two GPUs</a>.
 </p>

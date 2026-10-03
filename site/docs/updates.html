@@ -57,21 +57,29 @@
   <li>
     <strong>Arch Linux says the update needs a manual step.</strong> Arch
     publishes a news item when an update needs someone to do something first.
-    SakuraOS reads those notices and holds back only the packages they are about,
-    for as long as the notice is among Arch's recent news. The Update Center
-    shows the notice's title; the full text is on
-    <a href="https://archlinux.org/news/">archlinux.org/news</a>. Once you have
-    done what it says, install the held update from a terminal with
-    <code>sudo pacman -Syu</code>.
+    SakuraOS reads those notices and holds back only the packages they are
+    about, for two weeks after the notice is published. The Update Center shows
+    the notice, with a link to read it in full.
   </li>
   <li>
     <strong>The update broke SakuraOS's test machine.</strong> Every night a
     SakuraOS machine is installed from scratch, given the day's updates,
     restarted and checked. If it does not survive, those updates are held back
-    until they are fixed. This is the <span class="ui">Only install updates that
-    were tested first</span> setting, which is on by default.
+    until they are fixed. This is the <span class="ui">Updates that have been
+    tested first</span> setting, which is on by default.
   </li>
 </ul>
+<p>
+  An update that needs a held package waits with it, so nothing is installed
+  half-way. Everything else installs as normal.
+</p>
+<p>
+  If you have read the notice and done what it asks, or it does not apply to
+  your computer, press <span class="ui">Install held updates too</span> in the
+  Update Center. That installs them now and stops holding anything back for that
+  notice. From a terminal:
+</p>
+<pre><code>sudo sakura-update apply --include-held</code></pre>
 <p>
   If your computer cannot reach these notices, for example because it is
   offline, nothing is held back. Security updates are never blocked just

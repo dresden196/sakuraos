@@ -22,16 +22,16 @@
   </tbody>
 </table></div>
 <p>
-  The 580 driver is not on the USB stick, so it is downloaded during the
-  install. If you install without an internet connection on one of these
-  cards, you get Nouveau instead. To switch afterwards, connect to the
-  internet and run:
+  On computers that use SakuraOS's tuned kernel, the NVIDIA driver is built for
+  that kernel when it is installed, and again after each kernel update. That
+  adds a few minutes to those updates.
 </p>
-<pre><code>sudo pacman -S nvidia-580xx-dkms nvidia-580xx-utils linux-cachyos-headers</code></pre>
 <p>
-  If <code>uname -r</code> does not end in <code>cachyos</code>, your computer uses
-  the standard kernel: replace <code>linux-cachyos-headers</code> with
-  <code>linux-headers</code>. Restart when it finishes.
+  The NVIDIA drivers are not on the USB stick, so they are downloaded during the
+  install. If you install without an internet connection, the computer starts
+  with Nouveau, and the NVIDIA driver is installed by the first update once it
+  is online. To do that straight away, open the Update Center and press
+  <span class="ui">Install now</span>, then restart.
 </p>
 
 <h3>Which driver am I using?</h3>
@@ -42,21 +42,18 @@
   driver or <code>nouveau</code> for Nouveau.
 </p>
 
-<h3>Laptops with two graphics chips</h3>
+<h3 id="two-gpus">Laptops with two GPUs</h3>
 <p>
   Many laptops have Intel or AMD graphics for everyday use and an NVIDIA chip
-  for heavier work. The desktop runs on the Intel or AMD chip.
+  for heavier work. The desktop runs on the Intel or AMD chip, and the NVIDIA
+  driver is installed for the other one.
 </p>
 <p>
-  On some of these laptops the installer does not yet recognize the NVIDIA chip
-  and installs no NVIDIA driver. Check with <code>lspci -k -d 10de:</code>: if no
-  <code>Kernel driver in use</code> line says <code>nvidia</code>, install the driver
-  for your card from the table above. For an RTX or GTX 16 series chip:
-</p>
-<pre><code>sudo pacman -S nvidia-open nvidia-utils</code></pre>
-<p>
-  To run a game or program on the NVIDIA chip, start it with these settings. In
-  Steam, put this line in the game's <span class="ui">Properties → Launch Options</span>:
+  To run a program on the NVIDIA chip, right-click it in the application menu
+  and choose <span class="ui">Run using dedicated graphics card</span>. A few
+  programs ask for the faster chip by themselves; most, Steam included, do not.
+  To run a Steam game on the NVIDIA chip, put this line in the game's
+  <span class="ui">Properties → Launch Options</span>:
 </p>
 <pre><code>__NV_PRIME_RENDER_OFFLOAD=1 __VK_LAYER_NV_optimus=NVIDIA_only __GLX_VENDOR_LIBRARY_NAME=nvidia %command%</code></pre>
 

@@ -31,12 +31,16 @@
 </p>
 <pre><code>mountvol S: /S
 rmdir /S /Q S:\EFI\sakura
+del S:\limine.conf S:\vmlinuz-linux-cachyos S:\vmlinuz-linux S:\intel-ucode.img S:\amd-ucode.img
 bcdboot C:\Windows /s S: /f UEFI
 mountvol S: /D</code></pre>
 <p>
-  The first line gives the EFI system partition a drive letter, the second
-  removes SakuraOS's startup files, the third rewrites Windows' own, and the
-  last removes the drive letter again.
+  The first line gives the EFI system partition a drive letter. The next two
+  remove SakuraOS's startup files; <code>del</code> may say
+  <code>Could Not Find</code> for some of them, which is fine. The fourth
+  rewrites Windows' own startup files, and the last removes the drive letter
+  again. If another Linux system also starts from this computer, leave out the
+  <code>del</code> line: those files may be that system's too.
 </p>
 
 <h3>2. Remove the SakuraOS startup entry</h3>

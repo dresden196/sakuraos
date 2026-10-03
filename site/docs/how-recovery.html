@@ -35,10 +35,16 @@
   therefore changes what <code>@</code> is, rather than which subvolume is booted:
 </p>
 <ol class="steps">
-  <li><p>The current <code>@</code> is renamed to <code>@rollback-</code> followed by a timestamp. It is kept, not deleted.</p></li>
+  <li><p>The current <code>@</code> is renamed to a name beginning <code>@rollback-</code>. It is kept, so that if going back was the wrong call, the system you left still exists.</p></li>
   <li><p>A new, writable <code>@</code> is created from the chosen snapshot.</p></li>
   <li><p>The computer starts from the new <code>@</code>.</p></li>
 </ol>
+<p>
+  The newest of these kept copies stays for 30 days after the computer has
+  started successfully; older ones are removed then. Each one holds on to the
+  disk space of a whole system, so keeping them all would fill the disk over
+  time.
+</p>
 <p>
   Because the command line never changes, it stays inside the signed image, and
   the same mechanism works with Secure Boot on or off. A separate boot entry per

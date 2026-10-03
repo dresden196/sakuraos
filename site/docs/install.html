@@ -22,6 +22,11 @@
   from the application menu.
 </p>
 <p>
+  If the computer started the USB stick in legacy BIOS mode, the welcome screen
+  says so in place of <span class="ui">Get started</span>. See
+  <a href="/requirements#firmware">Firmware</a>.
+</p>
+<p>
   Two short screens follow: what SakuraOS does differently, and the projects it
   is built on. Then the setup itself begins, with the steps listed down the
   left side.
@@ -69,7 +74,8 @@
 </figure>
 <p>
   Search for your city to set the time zone, and choose a 24-hour or 12-hour
-  clock. The clock choice follows your time zone until you change it.
+  clock. The clock choice follows your time zone until you change it. It sets
+  the clock in the panel; dates are written the way your language writes them.
 </p>
 
 <h2>Appearance</h2>
@@ -125,12 +131,16 @@
 </figure>
 <p>
   Choose a picture, then type your name. Your username fills in from it; you
-  can change it. The password must be at least 4 characters. Your account can
-  make administrator changes, such as installing software, after typing this
+  can change it. A username starts with a letter and uses only lowercase
+  letters, digits, <code>-</code> and <code>_</code>; the screen says so if one
+  does not. The password must be at least 4 characters. Your account can make
+  administrator changes, such as installing software, after typing this
   password.
 </p>
 <p>
-  The computer is named <code>sakura</code>. To change it later, open a
+  The computer name is how other devices on your network see this computer. It
+  fills in from your username, as <code>yourname-laptop</code> or
+  <code>yourname-pc</code>, and you can change it. To change it later, open a
   terminal and run <code>sudo hostnamectl hostname new-name</code>.
 </p>
 
