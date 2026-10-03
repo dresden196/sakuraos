@@ -95,9 +95,23 @@ post_install() {
     _activate_repos
 }
 
+# The install media's image stamp, which the installer copied onto every
+# machine. It made pacman treat os-release as edited, so updates to it arrived
+# as an unused .pacnew. Nobody wrote those lines, so the file is put back to
+# what the package ships.
+_restore_os_release() {
+    grep -qs '^IMAGE_ID=sakura$' etc/os-release || return 0
+    if [ -f etc/os-release.pacnew ]; then
+        mv -f etc/os-release.pacnew etc/os-release
+    else
+        sed -i '/^IMAGE_ID=/d;/^IMAGE_VERSION=/d' etc/os-release
+    fi
+}
+
 post_upgrade() {
     _activate_repos
     _clean_live_leftovers
+    _restore_os_release
 }
 
 pre_remove() {

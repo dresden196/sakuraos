@@ -569,6 +569,10 @@ check "sudo asks this account for its password" \
       "! runuser -u $USER_NAME -- sudo -n true 2>/dev/null"
 # What both install methods have to agree on. These reached copy installs only
 # because the install media carries them, and online installs went without.
+# The install media's IMAGE_ID stamp made pacman treat os-release as edited,
+# so its updates only ever arrived as a .pacnew.
+check "os-release is the package's own, so updates reach it" \
+      "pacman -Qii sakura-branding | grep -q '/etc/os-release \\[unmodified\\]'"
 check "microcode, sound firmware and the basics are installed" \
       "pacman -Q amd-ucode intel-ucode sof-firmware exfatprogs ntfs-3g less openssh"
 if [[ "$UPGRADE" != "1" ]]; then

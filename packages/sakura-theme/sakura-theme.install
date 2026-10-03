@@ -39,8 +39,26 @@ pre_upgrade() {
     _record_browser
 }
 
+# /etc/xdg/kdeglobals joined backup= in 0.2.0-1.281. On the upgrade that adds
+# it, pacman has no record of what it originally installed, so it keeps the
+# file and writes the new defaults beside it as a .pacnew -- the only new
+# defaults being the pair System Settings offers as light and dark. Merged in
+# here, once; a later .pacnew is a real change and is left alone.
+_merge_kdeglobals() {
+    local f=etc/xdg/kdeglobals
+    [ -f "$f" ] || return 0
+    if ! grep -q '^DefaultDarkLookAndFeel=' "$f"; then
+        sed -i '/^LookAndFeelPackage=/a DefaultLightLookAndFeel=org.sakura.light.desktop\nDefaultDarkLookAndFeel=org.sakura.dark.desktop' "$f"
+    fi
+    rm -f "$f.pacnew"
+}
+
 post_upgrade() {
     # The hook does this too. Harmless twice: it checks for the launcher before
     # adding it, and on a fresh install there is nothing recorded yet anyway.
     [ -x usr/bin/sakura-pin-browser ] && usr/bin/sakura-pin-browser || true
+    if [ "$(vercmp "$2" 0.2.0-1.281)" -lt 0 ]; then
+        _merge_kdeglobals
+    fi
+    return 0
 }

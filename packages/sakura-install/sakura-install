@@ -799,6 +799,12 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
           /mnt/etc/motd
     rm -rf /mnt/usr/local/share/livecd-sound \
            /mnt/etc/systemd/system/cloud-init.target.wants
+    # mkarchiso stamps the image's name and date onto os-release. Carried
+    # over, they describe an image this machine no longer is, and they make
+    # pacman see the file as edited, so no later update to it -- links,
+    # names -- ever reached a copy install; each one became a .pacnew. The
+    # same two lines mkarchiso itself removes before stamping.
+    sed -i '/^IMAGE_ID=/d;/^IMAGE_VERSION=/d' /mnt/etc/os-release
     : > /mnt/etc/motd
     arch-chroot /mnt pacman -Rns --noconfirm cloud-init 2>/dev/null || true
     # Boot loaders SakuraOS does not use, and tools for running the live media
