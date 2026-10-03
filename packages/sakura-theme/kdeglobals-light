@@ -12,6 +12,11 @@ widgetStyle=Breeze
 [KDE]
 widgetStyle=Breeze
 LookAndFeelPackage=org.sakura.light.desktop
+# The pair System Settings offers under Quick Settings, and switches between
+# on "Automatic". Unset, it offered stock Breeze and Breeze Dark, so choosing
+# light or dark there threw the SakuraOS look away.
+DefaultLightLookAndFeel=org.sakura.light.desktop
+DefaultDarkLookAndFeel=org.sakura.dark.desktop
 
 [Icons]
 Theme=SakuraLight

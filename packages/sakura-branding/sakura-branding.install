@@ -63,6 +63,22 @@ _clean_live_leftovers() {
     grep -qs 'subject.user === "sakura"' etc/polkit-1/rules.d/49-sakura-live-install.rules \
         && rm -f etc/polkit-1/rules.d/49-sakura-live-install.rules
     grep -qs 'SakuraOS live environment' etc/motd && : > etc/motd
+    # Passwordless root for an account named "sakura". The live user is gone,
+    # so this was dormant -- until somebody picked that username, when it
+    # would have been live. Removed whatever it now applies to.
+    if grep -qs 'sakura ALL=(ALL:ALL) NOPASSWD: ALL' etc/sudoers.d/10-sakura-live; then
+        rm -f etc/sudoers.d/10-sakura-live
+        changed=1
+    fi
+    grep -qs 'For Use With The Live Arch Environment' etc/systemd/system/livecd-alsa-unmuter.service \
+        && rm -f etc/systemd/system/livecd-alsa-unmuter.service \
+                 etc/systemd/system/sound.target.wants/livecd-alsa-unmuter.service
+    grep -qs 'wiki.archlinux.org/title/Installation_guide' usr/local/bin/Installation_guide \
+        && rm -f usr/local/bin/Installation_guide
+    grep -qs 'live cd sound helper script' usr/local/bin/livecd-sound \
+        && rm -rf usr/local/bin/livecd-sound usr/local/share/livecd-sound
+    grep -qs 'archiso_http_srv' usr/local/bin/choose-mirror \
+        && rm -f usr/local/bin/choose-mirror
     rm -rf etc/systemd/system/systemd-time-wait-sync.service.d
     if [ -d etc/systemd/system/cloud-init.target.wants ]; then
         rm -rf etc/systemd/system/cloud-init.target.wants

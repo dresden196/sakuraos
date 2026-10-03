@@ -18,7 +18,10 @@ arch=('any')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
 depends=('sddm' 'plasma-desktop' 'sakura-wallpapers' 'breeze' 'breeze-icons')
-backup=('etc/sddm.conf.d/20-sakura.conf')
+# kdeglobals because a Light install replaces it with the light defaults. Not
+# listed, every update of this package put the dark ones back: the icons and
+# the theme name turned dark under a user's light colours.
+backup=('etc/sddm.conf.d/20-sakura.conf' 'etc/xdg/kdeglobals')
 install="$pkgname.install"
 source=('20-sakura.conf' 'kdeglobals' 'kdeglobals-dark' 'kdeglobals-light' 'kwinrulesrc' 'sddm-breeze-theme.conf.user'
         'sakura-pin-browser' '95-sakura-pin-browser.hook')
