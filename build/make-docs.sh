@@ -72,7 +72,7 @@ PAGES=(
 # The date of the SakuraOS release every page was last read against, as the
 # installer image names it. Bumped by hand after checking, never automatically:
 # a date that moves on its own would claim checks that nobody did.
-CHECKED_AGAINST="${CHECKED_AGAINST:-26 September 2026}"
+CHECKED_AGAINST="${CHECKED_AGAINST:-3 October 2026}"
 
 mkdir -p "$OUT"
 
