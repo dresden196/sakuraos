@@ -233,6 +233,11 @@ QQC2.ApplicationWindow {
         return ({ repo: "SakuraOS", flatpak: "Flatpak",
                   aur: "AUR", appimage: "AppImage", snap: "Snap" })[s] || s || ""
     }
+    // "Flatpak", "Flatpak and Snap", "Flatpak, Snap and AUR".
+    function listOf(names) {
+        if (names.length <= 1) return names.join("")
+        return names.slice(0, -1).join(", ") + " and " + names[names.length - 1]
+    }
     function sourceTint(s) {
         // AUR is deliberately the only warm one: it is the only source that
         // builds unreviewed code on the user's machine.
@@ -545,23 +550,42 @@ QQC2.ApplicationWindow {
                     // then run past the rounded corner with no right padding.
                     Layout.fillWidth: true
                     spacing: 8
-                    // Which source a result came from, before you click it --
-                    // otherwise two identically-named rows are indistinguishable.
+                    // Which source Install would use, before you click it --
+                    // the engine works it out by the rule the app page uses
+                    // (default_source). It showed the source the result came
+                    // from, which was Flatpak for anything on Flathub, while
+                    // the page it opened preselected SakuraOS's own package.
                     Rectangle {
-                        visible: !!appData.source
+                        readonly property string src: appData.default_source || appData.source || ""
+                        visible: src !== ""
                         implicitWidth: sl.implicitWidth + 12
                         implicitHeight: 17
                         radius: 4
-                        color: Qt.rgba(root.sourceTint(appData.source).r,
-                                       root.sourceTint(appData.source).g,
-                                       root.sourceTint(appData.source).b, 0.16)
+                        color: Qt.rgba(root.sourceTint(src).r,
+                                       root.sourceTint(src).g,
+                                       root.sourceTint(src).b, 0.16)
                         QQC2.Label {
                             id: sl
                             anchors.centerIn: parent
-                            text: root.sourceLabel(appData.source)
-                            color: root.sourceTint(appData.source)
+                            text: root.sourceLabel(parent.src)
+                            color: root.sourceTint(parent.src)
                             font.pixelSize: 10; font.weight: Font.DemiBold
                         }
+                    }
+                    // How many other sources carry it, named on hover. Only
+                    // where every source was asked -- a search -- so the number
+                    // is never part of the answer passed off as all of it.
+                    QQC2.Label {
+                        readonly property var others: appData.other_sources || []
+                        visible: others.length > 0
+                        text: "+" + others.length
+                        color: root.dim
+                        font.pixelSize: 10; font.weight: Font.DemiBold
+                        HoverHandler { id: othersHover }
+                        QQC2.ToolTip.visible: othersHover.hovered
+                        QQC2.ToolTip.delay: 300
+                        QQC2.ToolTip.text: "Also from "
+                            + root.listOf(others.map(function (x) { return root.sourceLabel(x) }))
                     }
                     // Right-aligned by filling the gap itself rather than by
                     // being pushed there with a spacer. A spacer collapses to

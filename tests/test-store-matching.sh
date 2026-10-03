@@ -124,5 +124,41 @@ check "Steam is one row, Flatpak first, Snap beside it" "1" "$(echo "$MERGE" | t
 check "two different Calculators stay two rows"        "2" "$(echo "$MERGE" | tr ';' '\n' | grep -c '^Calculator:')"
 check "an app only on Snap keeps its row"              "1" "$(echo "$MERGE" | tr ';' '\n' | grep -c '^Spotify:snap+$')"
 
+echo
+echo "== the source a tile names =="
+# The same rule as the app page: the copy already installed, otherwise
+# SakuraOS, Flatpak, Snap, AppImage, the AUR. Tiles named the source a result
+# came from -- Flatpak for anything on Flathub -- while the page preselected
+# SakuraOS's package.
+CHIP=$(python3 - "$SRC" <<'PY'
+import sys
+from dataclasses import dataclass, field
+src = open(sys.argv[1]).read()
+ns = {"dataclass": dataclass, "field": field}
+exec("from __future__ import annotations\n" + src[src.index("@dataclass\nclass App"):src.index("class Source")], ns)
+exec(src[src.index("PREFERRED = {"):src.index("def repo_ids")], ns)
+App = ns["App"]
+def a(source, installed=False, also=()):
+    return App(id="x.y.Z", name="Z", source=source, source_id="z", installed=installed,
+               also_from=[{"source": s, "installed": i} for s, i in also])
+cases = [
+    ("repo|flatpak", a("flatpak", also=[("repo", False)]), True),
+    ("flatpak|repo,snap", a("flatpak", installed=True, also=[("repo", False), ("snap", False)]), True),
+    ("snap|flatpak", a("flatpak", also=[("snap", True)]), True),
+    ("repo|", a("flatpak", also=[("repo", False)]), False),
+    ("snap|", a("snap"), True),
+    ("flatpak|aur", a("aur", also=[("flatpak", False)]), True),
+]
+bad = []
+for want, app, complete in cases:
+    ns["finish"]([app], complete)
+    got = app.default_source + "|" + ",".join(app.other_sources)
+    if got != want:
+        bad.append(f"{want}!={got}")
+print(";".join(bad) or "OK")
+PY
+)
+check "tiles name the source Install would use" "OK" "$CHIP"
+
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

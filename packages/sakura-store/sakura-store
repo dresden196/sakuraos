@@ -116,6 +116,12 @@ class App:
     rating_count: int = 0
     popularity: dict = field(default_factory=dict)
     also_from: list = field(default_factory=list)
+    # What a tile names: the source Install would use, by the same rule as
+    # the app page. And the others, where every source was asked -- empty
+    # where they were not, so a tile never shows a count that is only part
+    # of the answer.
+    default_source: str = ""
+    other_sources: list = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------
@@ -747,6 +753,62 @@ def attach_ratings(apps: list[App]) -> None:
         a.rating, a.rating_count = rating_for(a.id, ratings)
 
 
+# The order an app page prefers its sources when none is installed: what
+# SakuraOS maintains and updates with the system first, the unreviewed AUR
+# last. The store's interface ranks them the same way (sourceRank in Main.qml);
+# the two have to agree, or a tile names one source and the page it opens
+# selects another -- which is what tiles did, naming Flatpak for every app on
+# Flathub while the page preselected SakuraOS's own package.
+PREFERRED = {"repo": 0, "flatpak": 1, "snap": 2, "appimage": 3, "aur": 4}
+
+
+def finish(apps: list[App], complete: bool) -> None:
+    """Fill in the source each tile names, and the others when they are known."""
+    for app in apps:
+        options = [{"source": app.source, "installed": app.installed}] + list(app.also_from)
+        chosen = next((o for o in options if o.get("installed")), None)
+        if chosen is None:
+            chosen = min(options, key=lambda o: PREFERRED.get(o.get("source"), 9))
+        app.default_source = chosen.get("source") or app.source
+        seen = []
+        for o in options:
+            src = o.get("source")
+            if src and src != app.default_source and src not in seen:
+                seen.append(src)
+        app.other_sources = seen if complete else []
+
+
+def repo_ids() -> dict[str, str]:
+    """AppStream id -> installable repository package, cached on disk.
+
+    The front page lists Flathub's collections, and naming the right source on
+    those tiles means knowing which of them SakuraOS also packages. Working
+    that out reads the whole AppStream catalogue and the sync databases --
+    1.8 seconds measured -- on every front-page row. Kept until either
+    changes.
+    """
+    stamp_files = sorted((SWCATALOG / "xml").glob("*.xml.gz")) \
+        + sorted(Path("/var/lib/pacman/sync").glob("*.db"))
+    stamp = ";".join(f"{f.name}:{int(f.stat().st_mtime)}" for f in stamp_files
+                     if f.exists())
+    cached = CACHE / "repo-ids.json"
+    try:
+        data = json.loads(cached.read_text())
+        if data.get("stamp") == stamp:
+            return data.get("ids", {})
+    except (OSError, ValueError):
+        pass
+    installable = repo_packages()
+    ids = {norm_id(meta["id"]): pkg for pkg, meta in appstream_index().items()
+           if pkg in installable and meta.get("kind") == "desktop-application"}
+    try:
+        CACHE.mkdir(parents=True, exist_ok=True)
+        cached.write_text(json.dumps({"stamp": stamp, "ids": ids}))
+    except OSError:
+        pass
+    return ids
+
+
 def merge(results: list[list[App]]) -> list[App]:
     """One row per app, with the other sources listed on it.
 
@@ -876,6 +938,9 @@ def category(name: str, limit: int = 24) -> list[App]:
         groups.append(hits[:limit])
 
     apps = merge(groups)
+    # Flathub and the repositories only: Snap and the AUR are not asked here,
+    # so the tile names the right source but does not count the others.
+    finish(apps, complete=False)
     attach_ratings(apps)
     # Rated things first: within a category, what other people rated is a
     # better opening order than the alphabet.
@@ -894,6 +959,14 @@ def collection(name: str, limit: int = 12) -> list[App]:
                  {}, tag="Flathub")
     hits = (data.get("hits") if isinstance(data, dict) else None) or []
     have = FlatpakSource().installed()
+    repo = RepoSource()
+    in_repo = repo_ids() if repo.available() else {}
+    # Only the packages these tiles match, asked by name. Listing every
+    # installed package to answer that cost 0.37 s on each front-page row.
+    matched = [in_repo[norm_id(h.get("app_id") or h.get("id") or "")]
+               for h in hits if norm_id(h.get("app_id") or h.get("id") or "") in in_repo]
+    repo_have = {l.split()[0] for l in run(["pacman", "-Q", *matched]).splitlines()
+                 if l.strip()} if matched else set()
     out = []
     for h in hits:
         app_id = h.get("app_id") or h.get("id") or ""
@@ -909,6 +982,11 @@ def collection(name: str, limit: int = 12) -> list[App]:
             popularity={"installs": h.get("installs_last_month")}
                         if h.get("installs_last_month") else {},
         ))
+        pkg = in_repo.get(norm_id(app_id))
+        if pkg:
+            out[-1].also_from.append({"source": "repo", "id": pkg, "version": "",
+                                      "installed": pkg in repo_have, "exact": True})
+    finish(out, complete=False)
     return out
 
 
@@ -1933,6 +2011,9 @@ def cmd_search(args) -> int:
               if (not picked or s.name in picked) and s.available()]
     groups = [s.search(args.query) for s in wanted]
     apps = merge(groups)
+    # Every source the user searches was asked, so the count is the whole
+    # answer and the tiles can show it.
+    finish(apps, complete=True)
     attach_ratings(apps)
 
     # How well it matches what was typed comes before how popular it is.
