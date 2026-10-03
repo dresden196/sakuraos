@@ -525,10 +525,15 @@ check "the accent color was applied" \
 # The clock choice reaches the panel clock, and the date format is left to the
 # language: it used to be done through LC_TIME, which dragged the date order
 # along with it.
-check "the clock choice is recorded for the panel" \
-      "grep -qx 'Hours=12' /home/$USER_NAME/.config/sakura-desktoprc"
-check "dates follow the language" \
-      "! grep -q '^LC_TIME=' /home/$USER_NAME/.config/plasma-localerc"
+# What the installer writes for a new account. An upgraded machine keeps what
+# its older installer wrote in the user's own settings, which no package
+# update touches; the troubleshooting page says how to change it.
+if [[ "$UPGRADE" != "1" ]]; then
+    check "the clock choice is recorded for the panel" \
+          "grep -qx 'Hours=12' /home/$USER_NAME/.config/sakura-desktoprc"
+    check "dates follow the language" \
+          "! grep -q '^LC_TIME=' /home/$USER_NAME/.config/plasma-localerc"
+fi
 check "the full name reached the account" \
       "getent passwd $USER_NAME | cut -d: -f5 | grep -q 'Test User'"
 check "sakura-core is included before [core]" \
