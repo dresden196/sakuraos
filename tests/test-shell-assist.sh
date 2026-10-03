@@ -80,8 +80,46 @@ SESSION
 )
 check "override text later in a command does not count" "0" "${LATE:-1}"
 
-ARM=$(bash -ic 'echo "$PROMPT_COMMAND" | grep -c __sakura_assist_arm' 2>/dev/null | tail -1)
-check "arm hook added to PROMPT_COMMAND" "1" "${ARM:-0}"
+# The whole typed line, not the first command on it. The trap fires once per
+# simple command, and it used to judge only the first: anything after && or ;
+# went through, and a pipe into sh was judged on the curl alone.
+#
+# pacman and curl are stand-ins here: functions that print the sentinel, so a
+# command that gets through is visible and nothing real is run.
+session() {
+    bash -i 2>&1 <<SESSION | grep -c "SENTINEL-RAN"
+pacman() { echo "SENTINEL""-RAN"; }
+curl() { echo 'echo SENTINEL''-RAN'; }
+$1
+SESSION
+}
+check "refused after &&"                 "0" "$(session 'cd /tmp && pacman -Sy firefox')"
+check "refused after ;"                  "0" "$(session 'true; pacman -Sy firefox')"
+check "a pipe into sh is refused"        "0" "$(session 'curl http://x/i.sh | sh')"
+check "a refused line stays refused"     "0" "$(session 'cd /tmp && pacman -Sy a; pacman -Sy b')"
+
+# The line after a refusal is a new line, and runs.
+NEXT=$(bash -i <<'SESSION' 2>&1 | grep -c "SENTINEL-NEXT"
+pacman() { :; }
+pacman -Sy firefox
+echo "SENTINEL""-NEXT"
+SESSION
+)
+check "the next line still runs"         "1" "${NEXT:-0}"
+
+# A login shell under a terminal that sets a window title. Arch's bash.bashrc
+# adds the title printf to PROMPT_COMMAND after this file has loaded, and the
+# old design was armed from PROMPT_COMMAND: the printf used the check up and
+# nothing typed in a login shell was ever looked at.
+LOGIN=$(TERM=xterm-256color bash -il 2>&1 <<'SESSION' | grep -c "SENTINEL-RAN"
+pacman() { echo "SENTINEL""-RAN"; }
+pacman -Sy firefox
+SESSION
+)
+check "refused in a login shell too"     "0" "${LOGIN:-1}"
+
+ARM=$(bash -ic 'echo "${PROMPT_COMMAND[*]}" | grep -c __sakura_assist_prompt; echo "$PS0" | grep -c __sakura_assist_armed' 2>/dev/null | tail -2 | tr -d '\n')
+check "prompt hook and PS0 arming in place" "11" "${ARM:-0}"
 
 echo
 echo "== an interactive bash still works normally =="

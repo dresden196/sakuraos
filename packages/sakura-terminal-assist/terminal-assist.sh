@@ -203,48 +203,90 @@ if [ -n "${ZSH_VERSION:-}" ]; then
     add-zsh-hook preexec sakura_assist_zsh_preexec 2>/dev/null
 
 elif [ -n "${BASH_VERSION:-}" ]; then
-    # bash has no preexec, so this is built from the DEBUG trap. Two details
-    # matter and both are easy to get wrong:
+    # bash has no preexec, so this is built from the DEBUG trap, which fires
+    # before every simple command -- each side of an &&, each stage of a
+    # pipeline, every command inside a function once extdebug is on. So it is
+    # armed once per typed line and checks that line whole.
     #
-    # extdebug is what gives the trap any power at all -- without it a
-    # non-zero return is ignored and the command runs anyway, which would
-    # make every warning here purely decorative.
+    # Both halves of that were wrong before, and together they let most of
+    # what this file exists to catch straight through:
     #
-    # The DEBUG trap fires for every command, including each one inside a
-    # function, a loop, or a pipeline. Checking all of them would be slow and
-    # would warn repeatedly about a single typed line. The armed flag, reset
-    # from PROMPT_COMMAND, limits this to the first command after each prompt
-    # -- which is the line the user actually typed.
+    #   It checked $BASH_COMMAND, the current simple command, and only the
+    #   first one. "cd /tmp && sudo pacman -Sy firefox" was judged on "cd
+    #   /tmp". "curl ... | sh" was judged on "curl ...", so the rule for it
+    #   could not fire in a real shell, while its test -- which handed the
+    #   matcher the whole line -- passed.
+    #
+    #   It was armed from PROMPT_COMMAND, and anything that ran after that in
+    #   PROMPT_COMMAND used up the one check. Arch's bash.bashrc appends a
+    #   window-title printf there, which in a login shell -- a text console,
+    #   ssh -- lands after ours: the printf was checked, and nothing typed
+    #   ever was.
+    #
+    # So it is armed from PS0, which bash expands after it has read a line
+    # and before it runs any of it, whatever PROMPT_COMMAND holds. The
+    # expansion is a zero-length substring whose offset is an assignment:
+    # it prints nothing and runs no subprocess.
+    #
+    # The line itself comes from history, which bash has already added it to
+    # by then. A line history did not keep -- a leading space under
+    # HISTCONTROL=ignorespace, history switched off -- is told apart by
+    # $HISTCMD, which then does not match the number noted at the prompt,
+    # and the check falls back to the first command as before rather than
+    # judging the previous line.
+    #
+    # extdebug is what lets the trap stop a command at all: without it a
+    # non-zero return is ignored. It must not be set while the shell is
+    # starting -- bash then tries to load the bashdb debugger profile, fails,
+    # and turns it back off -- so it is set at the first prompt.
     __sakura_assist_armed=0
-    __sakura_assist_arm() {
-        # extdebug must NOT be set here at startup: bash documents that
-        # enabling it "at shell invocation, or in a shell startup file" makes
-        # it try to run the bashdb debugger profile. That fails on a system
-        # without bashdb, prints a warning, and bash then turns extdebug back
-        # off -- leaving a DEBUG trap that can warn but cannot actually stop
-        # anything. Setting it from the first prompt, after startup has
-        # finished, avoids the debugger path entirely.
+    __sakura_assist_blocked=0
+    __sakura_assist_mark=
+    __sakura_assist_nul=x
+    __sakura_assist_prompt() {
         if [ -z "${__sakura_assist_ready:-}" ]; then
             shopt -s extdebug
             __sakura_assist_ready=1
         fi
-        __sakura_assist_armed=1
+        __sakura_assist_mark=$HISTCMD
     }
 
     # bash 5.1+ allows PROMPT_COMMAND to be an array; appending to it as a
-    # string in that case silently does nothing.
+    # string in that case silently does nothing. Where in it this runs no
+    # longer matters.
     if [ "$(declare -p PROMPT_COMMAND 2>/dev/null | cut -c1-10)" = "declare -a" ]; then
-        PROMPT_COMMAND+=(__sakura_assist_arm)
+        PROMPT_COMMAND+=(__sakura_assist_prompt)
     else
-        PROMPT_COMMAND="__sakura_assist_arm${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+        PROMPT_COMMAND="__sakura_assist_prompt${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
     fi
+    PS0='${__sakura_assist_nul:0:$((__sakura_assist_armed=1,__sakura_assist_blocked=0,0))}'"${PS0:-}"
 
     __sakura_assist_debug() {
+        # The rest of a line that was refused. extdebug skips only the one
+        # command the trap ran for, so refusing "cd /tmp && pacman -Sy x"
+        # skipped the cd and ran the pacman. Every command of a line carries
+        # its history number, and the prompt commands that follow it carry
+        # the next one, so this stops exactly the refused line.
+        if [ "$__sakura_assist_blocked" != 0 ] && [ "$HISTCMD" = "$__sakura_assist_blocked" ]; then
+            return 1
+        fi
         [ "$__sakura_assist_armed" = 1 ] || return 0
         # Tab completion runs commands through the same trap.
         [ -n "${COMP_LINE:-}" ] && return 0
         __sakura_assist_armed=0
-        sakura_assist_preexec "$BASH_COMMAND"
+        local line="$BASH_COMMAND"
+        if [ -n "$__sakura_assist_mark" ] && [ "$HISTCMD" = "$__sakura_assist_mark" ]; then
+            # "  503  the line": the number and the blanks around it go.
+            # HISTTIMEFORMAT would put a date between them, so not here.
+            line=$(HISTTIMEFORMAT= builtin history 1)
+            line=${line#"${line%%[![:space:]]*}"}
+            line=${line#*[[:space:]]}
+            line=${line#"${line%%[![:space:]]*}"}
+        fi
+        if ! sakura_assist_preexec "$line"; then
+            __sakura_assist_blocked=$HISTCMD
+            return 1
+        fi
     }
     trap '__sakura_assist_debug' DEBUG
 fi
