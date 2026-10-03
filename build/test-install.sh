@@ -567,6 +567,16 @@ check "no live autologin is configured"    "test ! -e /etc/sddm.conf.d/10-sakura
 check "no live sudo rule came across"      "test -z \"\$(ls /etc/sudoers.d/ | grep -i live)\""
 check "sudo asks this account for its password" \
       "! runuser -u $USER_NAME -- sudo -n true 2>/dev/null"
+# What both install methods have to agree on. These reached copy installs only
+# because the install media carries them, and online installs went without.
+check "microcode, sound firmware and the basics are installed" \
+      "pacman -Q amd-ucode intel-ucode sof-firmware exfatprogs ntfs-3g less openssh"
+if [[ "$UPGRADE" != "1" ]]; then
+    # An upgraded machine keeps what its older installer left; a new one
+    # should not have boot loaders it never runs.
+    check "no unused boot loaders came across" \
+          "! pacman -Q grub && ! pacman -Q refind && ! pacman -Q syslinux"
+fi
 check "a boot entry was written"           "efibootmgr | grep -qi sakura"
 check "the store engine runs as the user"  "runuser -u $USER_NAME -- sakura-store sources"
 # Everything below is something that was broken and is meant to be fixed.

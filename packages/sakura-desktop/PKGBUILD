@@ -41,11 +41,26 @@ depends=(
     # names no kernel either, for the same reason.
     'base'
     'linux-firmware'
+    # Everything below in this group was on every copy install only because
+    # the install media carries it, and missing from every online install:
+    # the online path installs this package and its dependencies, nothing
+    # else, so the two methods made different systems. Processor microcode is
+    # security fixes; sof-firmware is the sound on most recent Intel laptops;
+    # the Marvell firmware and the regulatory database are Wi-Fi.
+    'amd-ucode'
+    'intel-ucode'
+    'sof-firmware'
+    'linux-firmware-marvell'
+    'wireless-regdb'
     'sudo'
     # systemd fsck's the ESP on every boot because genfstab gives it passno 2.
     # Without fsck.fat that unit fails, local-fs.target fails, and the machine
     # drops to emergency mode -- where root is locked, so there is no way in.
     'dosfstools'
+    # Formatting a stick for Windows and macOS, which the drives page tells
+    # people to do. Reading works without these; making the filesystem does not.
+    'exfatprogs'
+    'ntfs-3g'
 
     # Compressed swap in RAM. Without any swap the kernel has nowhere to put
     # cold pages and responds to memory pressure by killing something.
@@ -196,6 +211,12 @@ depends=(
     'wget'
     'git'
     'unzip'
+    # The pager journalctl and man use; the wiki's log instructions scroll
+    # with it. Not part of base.
+    'less'
+    'man-db'
+    # The ssh client, and the server the security page says to switch on.
+    'openssh'
 
     # The store itself. It was missing from this list entirely, so a freshly
     # installed machine had no way to install software -- the one thing the

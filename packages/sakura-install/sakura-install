@@ -601,8 +601,8 @@ esac
 
 # Two GPUs. switcheroo-control is what Plasma asks which GPU an application
 # should run on: without it "Run using dedicated graphics card" is missing from
-# the menus, and applications that ask for the faster GPU -- Steam among them
-# -- run on the slower one. nvidia-prime adds prime-run for a terminal.
+# the menus, and applications whose desktop entry asks for the faster GPU run
+# on the slower one. nvidia-prime adds prime-run for a terminal.
 HYBRID=no
 if [[ "$GRAPHICS" == nvidia-* ]] && hybrid_graphics; then
     HYBRID=yes
@@ -801,6 +801,16 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
            /mnt/etc/systemd/system/cloud-init.target.wants
     : > /mnt/etc/motd
     arch-chroot /mnt pacman -Rns --noconfirm cloud-init 2>/dev/null || true
+    # Boot loaders SakuraOS does not use, and tools for running the live media
+    # itself. A copy install brought every one of them along, so the machine
+    # took updates for grub, rEFInd and syslinux that nothing would ever run,
+    # and offered them in the Update Center as if they mattered. An online
+    # install never had them. One at a time, so a package something else has
+    # come to need is kept rather than failing the rest.
+    for _pkg in grub refind syslinux memtest86+ memtest86+-efi edk2-shell \
+                clonezilla darkhttpd livecd-sounds; do
+        arch-chroot /mnt pacman -Rns --noconfirm "$_pkg" >/dev/null 2>&1 || true
+    done
     # journald only keeps logs on disk when this directory exists, and /var/log
     # is a fresh, empty subvolume. Without it, removing the volatile setting
     # above changes nothing.
