@@ -92,9 +92,33 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ $EUID -eq 0 ]] || die "must run as root"
+# The installer medium also starts on old BIOS firmware, and SakuraOS cannot:
+# its boot chain is UEFI from the boot loader onward. Said before anything is
+# touched, rather than discovered when efibootmgr finds no EFI variables and
+# the disk has already been rewritten.
+[[ -d /sys/firmware/efi ]] || die "this computer started the installer in legacy BIOS mode.
+
+SakuraOS needs UEFI. Restart, open the firmware settings, switch the boot mode
+to UEFI (it may be called \"UEFI only\" or \"disable CSM\"), and start from the
+USB stick again. Nothing has been changed."
 [[ -n "$DISK" ]] || die "--disk is required"
 [[ -b "$DISK" ]] || die "$DISK is not a block device"
 [[ -n "$USERNAME" ]] || die "--user is required"
+# useradd runs near the end, after the disk has been wiped, and refuses a name
+# it does not like -- leaving a machine with a system and no way to log in to
+# it. So the same rules are checked here, before anything is touched: the
+# shape useradd accepts, and not a name the system already uses for an account
+# or a group (useradd makes a group of the same name, so "wheel" fails too).
+# The live user is the one exception, because it is deleted before the new
+# account is made.
+[[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] \
+    || die "\"$USERNAME\" cannot be a username: use lowercase letters, digits, - and _, starting with a letter, at most 32 characters"
+if [[ "$USERNAME" != "sakura" ]] \
+   && { getent passwd "$USERNAME" >/dev/null || getent group "$USERNAME" >/dev/null; }; then
+    die "\"$USERNAME\" is already used by the system; choose another username"
+fi
+[[ "$HOSTNAME_" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] \
+    || die "\"$HOSTNAME_\" cannot be a computer name: use lowercase letters, digits and -, not at the start or end"
 if [[ "$ENCRYPT" == "on" && "$CRYPTPASS_STDIN" == "1" ]]; then
     IFS= read -r CRYPTPASS || true
 fi
@@ -180,8 +204,7 @@ step "Checking this machine can reach the package repositories"
 # download fail -- leaving somebody with no operating system and none of
 # what used to be on the drive either. The check costs a second and it
 # happens while the disk is still untouched.
-if ! _reachable "https://repo.sakuraos.org/sakura-core/os/x86_64/sakura-core.db" \
-   && ! _reachable "http://173.233.87.167/sakura-core/os/x86_64/sakura-core.db"; then
+if ! _reachable "https://repo.sakuraos.org/sakura-core/os/x86_64/sakura-core.db"; then
     die "this machine cannot reach the SakuraOS repository.
 
 SakuraOS downloads most of itself while installing, so it needs a working
@@ -205,6 +228,26 @@ if [[ "$MODE" == "alongside" ]]; then
 
     ESP=$(find_existing_esp) || die "no EFI system partition found on $DISK. \
 SakuraOS can only install alongside a system that already boots in UEFI mode."
+
+    # Room on that partition, checked before anything is written. SakuraOS
+    # keeps two boot images there -- the system and recovery, around 35 MB
+    # each -- with the boot loader and a copy of the kernel, a little over
+    # 100 MB in all, and an update needs space for a new image beside the old.
+    # Windows makes this partition 100 MB by default, most of it in use, and
+    # that used to be found out halfway through the install or at the first
+    # kernel update.
+    ESP_FREE=0
+    _espmnt=$(mktemp -d)
+    if mount -o ro "$ESP" "$_espmnt" 2>/dev/null; then
+        ESP_FREE=$(df -Pm "$_espmnt" | awk 'NR == 2 {print $4}')
+        umount "$_espmnt"
+    fi
+    rmdir "$_espmnt"
+    (( ${ESP_FREE:-0} >= 180 )) || die "the EFI system partition on $DISK has ${ESP_FREE:-0} MB free; \
+SakuraOS needs 180 MB there to install beside the system already on this disk.
+
+Windows creates a 100 MB partition by default, which is too small. Installing
+SakuraOS on its own disk avoids this. Nothing has been changed."
 
     read -r FREE_START FREE_END FREE_SIZE <<<"$(largest_free_space)"
     [[ -n "${FREE_SIZE:-}" ]] || die "no unallocated space on $DISK. \
@@ -320,9 +363,28 @@ mount "$ESP" /mnt/boot
 # NVIDIA allocates IDs roughly in architecture order, so a threshold works,
 # but it is not a guarantee and a brand-new card could land outside it. The
 # decision is therefore logged, and --graphics overrides it.
+#
+# Every display class, not only VGA. The NVIDIA chip in a laptop that also has
+# Intel or AMD graphics -- most laptops with an NVIDIA chip at all -- reports
+# itself as a 3D controller (class 0302), because the other GPU drives the
+# screen. Asking for class 0300 alone found nothing on those machines, and
+# they were installed with no NVIDIA driver.
+nvidia_ids() {
+    lspci -n -d '10de:' 2>/dev/null \
+        | awk '$2 ~ /^03/ {print $3}' | cut -d: -f2
+}
+
+# A laptop with two GPUs: an Intel or AMD one for the screen, an NVIDIA one
+# for the heavy work.
+hybrid_graphics() {
+    [[ -n "$(nvidia_ids)" ]] || return 1
+    lspci -n 2>/dev/null | awk '$2 ~ /^03/ {print $3}' \
+        | grep -qE '^(8086|1002):'
+}
+
 detect_graphics() {
     local ids id
-    ids=$(lspci -n -d '10de::0300' 2>/dev/null | awk '{print $3}' | cut -d: -f2)
+    ids=$(nvidia_ids)
     [[ -n "$ids" ]] || { echo "none"; return; }
 
     local best=0
@@ -487,6 +549,17 @@ else
     info "CPU is older than x86-64-v3: using the stock kernel"
 fi
 
+# For sakura-update to install once there is a network. The units to enable
+# go with them: switcheroo-control is only enabled once it exists.
+record_pending() {
+    local pkgs="" p units=""
+    for p in "$@"; do pkgs="$pkgs\"$p\","; done
+    if [[ "$HYBRID" == "yes" ]]; then units='"switcheroo-control.service"'; fi
+    mkdir -p /mnt/var/lib/sakura/updates
+    printf '{"packages": [%s], "enable": [%s]}\n' "${pkgs%,}" "$units" \
+        > /mnt/var/lib/sakura/updates/pending.json
+}
+
 GRAPHICS="${GRAPHICS:-auto}"
 if [[ "$GRAPHICS" == "auto" ]]; then
     GRAPHICS=$(detect_graphics)
@@ -495,8 +568,18 @@ fi
 GRAPHICS_PACKAGES=""
 case "$GRAPHICS" in
     nvidia-open)
-        GRAPHICS_PACKAGES="nvidia-open nvidia-utils"
-        info "NVIDIA card, Turing or newer: installing nvidia-open"
+        # Arch's nvidia-open is built for Arch's own kernel and depends on it.
+        # On the tuned kernel it installed the stock one beside it as a
+        # dependency and booted the tuned one, which had no NVIDIA module --
+        # with nouveau blacklisted by nvidia-utils, so no driver at all. DKMS
+        # builds the same open module for whichever kernel is installed; the
+        # tuned kernel's headers bring the compiler it was built with.
+        if [[ "$KERNEL" == "linux" ]]; then
+            GRAPHICS_PACKAGES="nvidia-open nvidia-utils"
+        else
+            GRAPHICS_PACKAGES="nvidia-open-dkms nvidia-utils ${KERNEL}-headers"
+        fi
+        info "NVIDIA card, Turing or newer: installing the open NVIDIA driver"
         ;;
     nvidia-580xx)
         # DKMS builds against the running kernel, so the target needs headers
@@ -515,6 +598,17 @@ case "$GRAPHICS" in
         die "unknown --graphics value: $GRAPHICS"
         ;;
 esac
+
+# Two GPUs. switcheroo-control is what Plasma asks which GPU an application
+# should run on: without it "Run using dedicated graphics card" is missing from
+# the menus, and applications that ask for the faster GPU -- Steam among them
+# -- run on the slower one. nvidia-prime adds prime-run for a terminal.
+HYBRID=no
+if [[ "$GRAPHICS" == nvidia-* ]] && hybrid_graphics; then
+    HYBRID=yes
+    GRAPHICS_PACKAGES="$GRAPHICS_PACKAGES switcheroo-control nvidia-prime"
+    info "two GPUs: applications can be run on the NVIDIA one"
+fi
 
 # How the system gets onto the disk.
 #
@@ -597,7 +691,12 @@ there is no filesystem at $SQUASH_ROOT to copy. Use --method online."
     # home and autologin go with them.
     arch-chroot /mnt userdel -r sakura 2>/dev/null || true
     rm -rf /mnt/home/sakura
-    rm -f /mnt/etc/sudoers.d/g_wheel /mnt/etc/sudoers.d/sakura-live
+    # By pattern, not by name. The file on the media is 10-sakura-live, and
+    # this line named it sakura-live: the grant of passwordless root to an
+    # account called "sakura" reached every installed machine, dormant until
+    # somebody chose that username -- the name of the operating system and a
+    # common first name -- and then live.
+    rm -f /mnt/etc/sudoers.d/g_wheel /mnt/etc/sudoers.d/*sakura-live*
     rm -rf /mnt/etc/systemd/system/getty@tty1.service.d \
            /mnt/etc/systemd/system/serial-getty@ttyS0.service.d
 
@@ -923,16 +1022,15 @@ The disk would not boot, so the install has been stopped instead."
     if [[ "$HAVE_NET" != "yes" ]]; then
         info "no network: skipping graphics and extra packages"
         info "the open drivers are already on this system"
-        # Said separately and accurately. "The first update will fill in the
-        # rest" is true of the graphics drivers, whose open versions are
-        # already installed and only get upgraded, and false of anything that
-        # is not on this machine at all -- a browser above all. Nothing later
-        # goes and fetches it, so claiming otherwise leaves someone waiting
-        # for a package that is never coming.
-        if [[ -n "$EXTRA_PACKAGES" ]]; then
-            info "NOTE: these were not installed and nothing will install them"
-            info "      later on its own: $EXTRA_PACKAGES"
-            info "      install them from the App Store once this machine is online."
+        # Left for the first update that has a network. This used to say the
+        # first update would "fill in the rest", which it never did: an update
+        # upgrades what is installed, and the NVIDIA driver and the browser
+        # were not. An NVIDIA machine installed offline stayed without its
+        # driver for good.
+        if [[ -n "${GRAPHICS_PACKAGES}${EXTRA_PACKAGES}" ]]; then
+            record_pending ${GRAPHICS_PACKAGES} ${EXTRA_PACKAGES}
+            info "these install with the first update once this machine is online:"
+            info "  $(echo ${GRAPHICS_PACKAGES} ${EXTRA_PACKAGES})"
         fi
     elif [[ -n "${GRAPHICS_PACKAGES}${EXTRA_PACKAGES}" ]]; then
         # Pick up the network databases the swap just pointed at. Without this
@@ -982,10 +1080,15 @@ The disk would not boot, so the install has been stopped instead."
 
         # shellcheck disable=SC2086
         if [[ -n "${GRAPHICS_PACKAGES}${EXTRA_PACKAGES}" ]]; then
-            arch-chroot /mnt pacman -S --noconfirm --needed \
-                $GRAPHICS_PACKAGES $EXTRA_PACKAGES 2>&1 | tail -3 \
-                || info "WARNING: some extra packages could not be installed; \
-the system will pick them up once it is online."
+            # pacman -S is all-or-nothing, so if this fails none of them went
+            # in, and all of them are left for the first update to retry.
+            if ! arch-chroot /mnt pacman -S --noconfirm --needed \
+                    $GRAPHICS_PACKAGES $EXTRA_PACKAGES > /tmp/sakura-extras.log 2>&1; then
+                tail -3 /tmp/sakura-extras.log
+                record_pending ${GRAPHICS_PACKAGES} ${EXTRA_PACKAGES}
+                info "WARNING: the graphics driver and extras could not be installed;"
+                info "the first update will try again."
+            fi
         fi
     fi
 else
@@ -1022,17 +1125,9 @@ echo "$HOSTNAME_" > /mnt/etc/hostname
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /mnt/etc/localtime
 # en_US.UTF-8 stays alongside the chosen one: a great deal of software
 # assumes it exists, and generating a second locale costs almost nothing.
-#
-# en_GB.UTF-8 is here for the clock. KDE takes 12- or 24-hour from LC_TIME
-# rather than from a boolean, so "24-hour" is expressed as a locale that
-# writes 14:30 -- and pointing LC_TIME at a locale that was never generated
-# fails silently, leaving the clock at whatever the language implied. Asking
-# for a 24-hour clock and getting a 12-hour one is exactly the sort of quiet
-# wrong answer that is hard to trace back to the installer.
 {
     echo "$LOCALE UTF-8"
     [ "$LOCALE" = "en_US.UTF-8" ] || echo "en_US.UTF-8 UTF-8"
-    [ "$LOCALE" = "en_GB.UTF-8" ] || echo "en_GB.UTF-8 UTF-8"
 } > /mnt/etc/locale.gen
 echo "LANG=$LOCALE" > /mnt/etc/locale.conf
 
@@ -1350,23 +1445,18 @@ if [ -n "$ACCENT_RGB" ]; then
     chown "$USERNAME:$USERNAME" "\$_kdeglobals"
 fi
 
-# 12-hour or 24-hour, as chosen on the time screen.
+# 12-hour or 24-hour, as chosen on the time screen, for the panel clock.
 #
-# The installer has asked this since the beginning and passed the answer
-# nowhere, so the clock was whatever the locale happened to imply. KDE decides
-# it from LC_TIME, so the answer is expressed as a locale whose convention
-# matches: en_GB writes 14:30, en_US writes 2:30 PM. Both are generated below
-# for exactly this reason.
-if [ -n "$CLOCK" ]; then
-    case "$CLOCK" in
-        24) _lctime="en_GB.UTF-8" ;;
-        12) _lctime="en_US.UTF-8" ;;
-        *)  _lctime="" ;;
-    esac
-    if [ -n "\$_lctime" ]; then
-        sed -i "/^\[Formats\]/a LC_TIME=\$_lctime" \
-            "/home/$USERNAME/.config/plasma-localerc"
-    fi
+# This used to be done by pointing LC_TIME at a locale with the wanted clock:
+# en_GB for 24-hour, en_US for 12. LC_TIME carries the date order too, so
+# American English with a 24-hour clock showed 03/10/2026 for the third of
+# October, and British English with a 12-hour one showed it the American way.
+# No English locale writes month-first dates with a 24-hour clock. So dates
+# stay with the language, and the clock is told directly: the panel layout
+# reads this when it builds the panel at first login.
+if [ "$CLOCK" = 12 ] || [ "$CLOCK" = 24 ]; then
+    printf '[Clock]\nHours=%s\n' "$CLOCK" > "/home/$USERNAME/.config/sakura-desktoprc"
+    chown "$USERNAME:$USERNAME" "/home/$USERNAME/.config/sakura-desktoprc"
 fi
 if [ "$FEEDBACK" = "on" ]; then
     printf '[Global]\nFeedbackLevel=16\n' > "/home/$USERNAME/.config/PlasmaUserFeedback"
@@ -1438,6 +1528,12 @@ sakura-mirrors.timer; do
         echo "[sakura-install] warning: could not enable \$unit"
     fi
 done
+# Only on a machine with two GPUs, and only once it is installed: an offline
+# install has not fetched it yet, and the first update that does enables it.
+if [ "$HYBRID" = yes ] && [ -e /usr/lib/systemd/system/switcheroo-control.service ]; then
+    systemctl enable switcheroo-control.service >/dev/null 2>&1 \
+        || echo "[sakura-install] warning: could not enable switcheroo-control"
+fi
 # Per-user timers, same reasoning.
 systemctl --global enable sakura-store-updates.timer >/dev/null 2>&1 \
     || echo "[sakura-install] warning: could not enable the per-user update timer"
@@ -1459,17 +1555,34 @@ fi
 
 mkdir -p /boot/EFI/sakura /boot/EFI/BOOT
 mkinitcpio -P
+# The kernel package builds a plain initramfs from its own default preset
+# before the SakuraOS one replaces it. Nothing boots it -- both entries are
+# UKIs -- and it is 15 MB on a partition that Windows sometimes leaves us very
+# little of.
+rm -f /boot/initramfs-*.img
 
 # limine goes in the removable-media path so it boots without depending on an
 # NVRAM entry surviving. Firmware that forgets its boot order is common enough
 # that relying solely on efibootmgr is how a machine becomes unbootable.
-cp /usr/share/limine/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI
+#
+# Unless that path already holds another system's loader. Beside Windows it is
+# Windows' fallback copy of its boot manager, and replacing it took that away
+# from Windows -- which it uses when its own boot entry is lost, and which its
+# repair tools expect. There the firmware entry made below is what starts
+# SakuraOS, and limine offers Windows from its menu.
 cp /usr/share/limine/BOOTX64.EFI /boot/EFI/sakura/limine.efi
+if [ -f /boot/EFI/BOOT/BOOTX64.EFI ] && ! grep -qa 'Limine' /boot/EFI/BOOT/BOOTX64.EFI; then
+    echo "[sakura-install] leaving the other system's fallback boot loader in place"
+else
+    cp /usr/share/limine/BOOTX64.EFI /boot/EFI/BOOT/BOOTX64.EFI
+fi
 
 # Where the boot watchdog keeps its count. Created here so the first boot
 # has somewhere to write, and so sakura-boot-success has something to clear.
-install -d /mnt/boot/EFI/sakura/state
-echo 0 > /mnt/boot/EFI/sakura/state/boot-count
+# /boot, not /mnt/boot: this runs inside the chroot, where /mnt/boot is a
+# directory in the new system's /mnt, and that is where these went.
+install -d /boot/EFI/sakura/state
+echo 0 > /boot/EFI/sakura/state/boot-count
 
 sakura-boot-entries
 
@@ -1603,7 +1716,12 @@ rm -f /mnt/var/cache/pacman/pkg/*.pkg.tar.zst \
       /mnt/var/cache/pacman/pkg/*.pkg.tar.zst.sig 2>/dev/null || true
 
 step "Registering with firmware"
-efibootmgr --create --disk "$DISK" --part 1 \
+# The ESP's own partition number. It was always 1, which is right for a disk
+# SakuraOS partitioned and wrong beside another system whose ESP is anywhere
+# else -- and beside Windows this entry is now the only thing that starts
+# SakuraOS, since the fallback path is left to Windows.
+ESP_PARTN=$(cat "/sys/class/block/$(basename "$(readlink -f "$ESP")")/partition" 2>/dev/null || echo 1)
+efibootmgr --create --disk "$DISK" --part "$ESP_PARTN" \
     --loader '\EFI\sakura\limine.efi' --label "SakuraOS" --unicode >/dev/null 2>&1 \
     || info "efibootmgr entry not created; the removable path will still boot"
 
@@ -1614,7 +1732,11 @@ if [[ "$SECUREBOOT" != "off" ]]; then
         arch-chroot /mnt /bin/bash -euo pipefail <<'SB'
 sbctl create-keys
 sbctl enroll-keys --microsoft
-sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
+# Only our own copy at the removable path. Beside Windows that file is
+# Microsoft's, already signed by Microsoft, and not ours to re-sign.
+if grep -qa 'Limine' /boot/EFI/BOOT/BOOTX64.EFI 2>/dev/null; then
+    sbctl sign -s /boot/EFI/BOOT/BOOTX64.EFI
+fi
 sbctl sign -s /boot/EFI/sakura/limine.efi
 sbctl sign -s /boot/EFI/sakura/sakura.efi
 sbctl sign -s /boot/EFI/sakura/sakura-recovery.efi

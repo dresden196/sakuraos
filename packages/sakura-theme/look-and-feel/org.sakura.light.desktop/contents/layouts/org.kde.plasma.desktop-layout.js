@@ -41,7 +41,17 @@ tasks.writeConfig("launchers", [
 tasks.reloadConfig();
 panel.addWidget("org.kde.plasma.marginsseparator");
 panel.addWidget("org.kde.plasma.systemtray");
-panel.addWidget("org.kde.plasma.digitalclock");
+var clock = panel.addWidget("org.kde.plasma.digitalclock");
+// The 12- or 24-hour clock chosen in the installer, which writes it here.
+// Dates follow the language; only the clock's hours are this choice. 2 is the
+// widget's "24-hour" and 0 its "12-hour"; anything else leaves it on the
+// language's own convention.
+var hours = ConfigFile("sakura-desktoprc", "Clock").readEntry("Hours");
+if (hours == "24" || hours == "12") {
+    clock.currentConfigGroup = ["Appearance"];
+    clock.writeConfig("use24hFormat", hours == "24" ? 2 : 0);
+    clock.reloadConfig();
+}
 panel.addWidget("org.kde.plasma.showdesktop");
 
 var desktop = desktopForScreen(0) || desktops()[0];

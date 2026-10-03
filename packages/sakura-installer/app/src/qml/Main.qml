@@ -95,6 +95,9 @@ QQC2.ApplicationWindow {
     readonly property color text:   dark ? "#f6eef2" : "#2b1f25"
     readonly property color dim:    dark ? "#bfa8b4" : "#6f5c66"
     readonly property color line:   dark ? Qt.rgba(1,1,1,0.08) : Qt.rgba(0,0,0,0.10)
+    // Problems with what was typed. The pale pink these used to be written in
+    // was readable on the dark theme only.
+    readonly property color warn:   dark ? "#ff9db0" : "#b0213f"
 
     color: bg
     Behavior on color { ColorAnimation { duration: 180 } }
@@ -148,7 +151,8 @@ QQC2.ApplicationWindow {
         // name of the operating system -- but somebody who does not want a
         // pink desktop should not have to live with one.
         accent: "#ffb7c5",
-        hostname: "sakura",
+        // Filled in on the account screen, from the username.
+        hostname: "",
         password: "",
         avatar: "",
         browser: "zen-browser-bin",
@@ -285,6 +289,20 @@ QQC2.ApplicationWindow {
         answersChanged()
     }
 
+    // The username a full name suggests: "Ana Lopez" -> "analopez".
+    function usernameFrom(name) {
+        return (name || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+    }
+
+    // The computer name a username suggests: "ana-laptop", "ana-pc". Underscores
+    // are allowed in a username and not in a computer name.
+    readonly property string chassis: backend.chassisKind()
+    function hostnameFrom(user) {
+        var base = (user || "").toLowerCase().replace(/_/g, "-")
+                     .replace(/[^a-z0-9-]/g, "").replace(/^-+|-+$/g, "")
+        return (base || "sakura") + "-" + root.chassis
+    }
+
     function initialsFor(name) {
         var parts = (name || "").trim().split(/\s+/).filter(function (w) {
             return w.length > 0
@@ -303,6 +321,8 @@ QQC2.ApplicationWindow {
                     || (answers.encryptPassword.length >= 6
                         && answers.encryptPassword === answers.encryptConfirm)
         case 7: return answers.username.length > 0 && answers.password.length >= 4
+                    && backend.usernameProblem(answers.username) === ""
+                    && backend.hostnameProblem(answers.hostname) === ""
         default: return true
         }
     }
@@ -379,6 +399,18 @@ QQC2.ApplicationWindow {
             cursorShape: Qt.PointingHandCursor
             onClicked: picked()
         }
+    }
+
+    // Why the field above cannot be used, said under it while it is being
+    // typed rather than by a Continue button that silently stays grey.
+    component FieldProblem : QQC2.Label {
+        Layout.fillWidth: true
+        Layout.maximumWidth: 420
+        Layout.topMargin: -8
+        visible: text !== ""
+        wrapMode: Text.WordWrap
+        color: root.warn
+        font.pixelSize: 12
     }
 
     component Field : QQC2.TextField {
@@ -923,8 +955,26 @@ QQC2.ApplicationWindow {
 
             Item { Layout.preferredHeight: 34 }
 
+            // Said here, before any question is asked. The medium starts on
+            // legacy BIOS too, and the install script refuses there -- which
+            // used to be found out only after every screen had been answered.
+            QQC2.Label {
+                visible: !backend.uefi
+                Layout.alignment: Qt.AlignHCenter
+                Layout.maximumWidth: 520
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+                color: root.warn
+                font.pixelSize: 14
+                text: "This computer started the installer in legacy BIOS mode, and SakuraOS "
+                    + "needs UEFI. Restart, open the firmware settings, switch the boot mode to "
+                    + "UEFI (it may be called \u201cUEFI only\u201d or \u201cdisable CSM\u201d), and "
+                    + "start from the USB stick again. You can still try SakuraOS from here."
+            }
+
             QQC2.Button {
                 Layout.alignment: Qt.AlignHCenter
+                visible: backend.uefi
                 text: "Get started"
                 padding: 13
                 leftPadding: 40
@@ -1919,7 +1969,7 @@ QQC2.ApplicationWindow {
                 visible: netCol.error !== ""
                 wrapMode: Text.WordWrap
                 text: netCol.error
-                color: "#ff9db0"; font.pixelSize: 12
+                color: root.warn; font.pixelSize: 12
             }
 
             // ---- addresses by hand -----------------------------------------
@@ -2507,7 +2557,7 @@ QQC2.ApplicationWindow {
                     visible: cryptConfirm.text.length > 0
                              && cryptConfirm.text !== cryptPass.text
                     text: "These do not match."
-                    color: "#ff9db0"; font.pixelSize: 12
+                    color: root.warn; font.pixelSize: 12
                 }
                 // The one thing about disk encryption that people are not
                 // told until it is too late.
@@ -2669,6 +2719,11 @@ QQC2.ApplicationWindow {
                 // of the person who wrote it, shown to everybody else who ever
                 // installs this -- and any name put here is somebody's.
                 placeholderText: "The name you go by"
+                // This page is rebuilt every time it is shown, so coming back
+                // to it with Back showed empty fields over answers that were
+                // still kept -- and still used. Each field starts from what
+                // was already given.
+                Component.onCompleted: text = root.answers.fullname
                 onTextChanged: {
                     root.answers.fullname = text; root.answersChanged()
                     // Follow the name until the username is edited by hand.
@@ -2678,7 +2733,7 @@ QQC2.ApplicationWindow {
                     // guard was false from the second letter on and the
                     // username stayed stuck at "d" for anyone called Dresden.
                     if (!autoUser.editedByHand)
-                        autoUser.text = text.toLowerCase().replace(/[^a-z0-9]/g, "")
+                        autoUser.text = root.usernameFrom(text)
                 }
             }
             QQC2.Label { text: "Username"; color: root.dim; font.pixelSize: 13 }
@@ -2690,16 +2745,52 @@ QQC2.ApplicationWindow {
                 // textEdited fires only for typing, never for a binding or an
                 // assignment, which is exactly the distinction needed here.
                 property bool editedByHand: false
+                Component.onCompleted: {
+                    if (root.answers.username !== "") {
+                        text = root.answers.username
+                        editedByHand = root.answers.username
+                                       !== root.usernameFrom(root.answers.fullname)
+                    }
+                }
                 onTextEdited: editedByHand = true
-                onTextChanged: { root.answers.username = text; root.answersChanged() }
+                onTextChanged: {
+                    root.answers.username = text; root.answersChanged()
+                    if (!hostField.editedByHand)
+                        hostField.text = root.hostnameFrom(text)
+                }
             }
+            FieldProblem { text: backend.usernameProblem(autoUser.text) }
             QQC2.Label { text: "Password"; color: root.dim; font.pixelSize: 13 }
             Field {
                 Layout.maximumWidth: 420
                 echoMode: TextInput.Password
                 placeholderText: "At least 4 characters"
+                Component.onCompleted: text = root.answers.password
                 onTextChanged: { root.answers.password = text; root.answersChanged() }
             }
+            // Every machine used to be called "sakura", which is what every
+            // other device on the network saw -- three SakuraOS machines in
+            // one house were indistinguishable. Filled in from the username
+            // and the kind of computer, and changeable.
+            QQC2.Label { text: "Computer name"; color: root.dim; font.pixelSize: 13 }
+            Field {
+                id: hostField
+                Layout.maximumWidth: 420
+                placeholderText: "How other devices on your network see it"
+                property bool editedByHand: false
+                Component.onCompleted: {
+                    if (root.answers.hostname !== "") {
+                        text = root.answers.hostname
+                        editedByHand = root.answers.hostname
+                                       !== root.hostnameFrom(root.answers.username)
+                    } else {
+                        text = root.hostnameFrom(root.answers.username)
+                    }
+                }
+                onTextEdited: editedByHand = true
+                onTextChanged: { root.answers.hostname = text; root.answersChanged() }
+            }
+            FieldProblem { text: backend.hostnameProblem(hostField.text) }
             Item { Layout.fillHeight: true }
         }
     }
@@ -2962,7 +3053,12 @@ QQC2.ApplicationWindow {
                 Repeater {
                     model: [
                         "SakuraOS collects nothing about you or this computer.",
-                        "Nothing is sent anywhere unless you ask for it.",
+                        // It said "Nothing is sent anywhere unless you ask for
+                        // it", on a system that checks for updates every night.
+                        // What it contacts by itself, and what those servers
+                        // learn, is the honest version -- and the wiki's
+                        // privacy page lists each one.
+                        "By itself it only checks for updates, sets its clock and checks that the internet is reachable. Those servers see this computer's internet address and nothing about you.",
                         "There is no account to create and nothing to sign in to."
                     ]
                     delegate: RowLayout {

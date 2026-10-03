@@ -23,18 +23,24 @@ WORK="$(mktemp -d -p "$(dirname "$(readlink -f "$DEST")")")"
 trap 'rm -rf "$WORK"' EXIT
 
 SIZE_GB=60
-ESP_MB=512
+# SAKURA_ESP_MB=100 makes Windows' default size, which the installer has to
+# refuse before it touches anything.
+ESP_MB="${SAKURA_ESP_MB:-512}"
 OTHER_GB=20          # leaves ~39 GiB free, comfortably over the 25 GiB minimum
 
 RAW="$WORK/disk.raw"
 truncate -s "${SIZE_GB}G" "$RAW"
 
-# Somebody else's layout: an ESP and a root filesystem, then free space.
-sgdisk -n "1:2048:+${ESP_MB}M" -t 1:ef00 -c 1:"OTHER_ESP"  "$RAW" >/dev/null
-sgdisk -n "2:0:+${OTHER_GB}G"  -t 2:8300 -c 2:"OTHER_ROOT" "$RAW" >/dev/null
+# Somebody else's layout: a small partition first, then the ESP, a root
+# filesystem, then free space. The ESP is not partition 1 on purpose: Windows
+# puts its recovery partition first, and the installer registered its boot
+# entry on partition 1 whatever the disk looked like.
+sgdisk -n "1:2048:+16M"        -t 1:0700 -c 1:"OTHER_RECOVERY" "$RAW" >/dev/null
+sgdisk -n "2:0:+${ESP_MB}M"    -t 2:ef00 -c 2:"OTHER_ESP"  "$RAW" >/dev/null
+sgdisk -n "3:0:+${OTHER_GB}G"  -t 3:8300 -c 3:"OTHER_ROOT" "$RAW" >/dev/null
 
-esp_start=$(sgdisk -i 1 "$RAW" | awk '/First sector/ {print $3}')
-oth_start=$(sgdisk -i 2 "$RAW" | awk '/First sector/ {print $3}')
+esp_start=$(sgdisk -i 2 "$RAW" | awk '/First sector/ {print $3}')
+oth_start=$(sgdisk -i 3 "$RAW" | awk '/First sector/ {print $3}')
 
 # The ESP, with a bootloader that must still be there afterwards. The installer
 # is supposed to add its own directory beside this one and format nothing.

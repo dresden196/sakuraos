@@ -33,7 +33,9 @@ cleanup_vm() {
 }
 trap cleanup_vm EXIT INT TERM
 
-USER_NAME=tester
+# SAKURA_TEST_USER lets a run use a name the installer has to handle with
+# care -- "sakura", the live session's own.
+USER_NAME="${SAKURA_TEST_USER:-tester}"
 USER_PASS=tester
 HOSTNAME_=sakura-clean
 
@@ -520,8 +522,13 @@ check "the browser is pinned to the task bar" \
 # The answers the installer collects and used to drop on the floor.
 check "the accent color was applied" \
       "grep -q '^AccentColor=61,174,233' /home/$USER_NAME/.config/kdeglobals"
-check "the clock format was applied" \
-      "grep -q '^LC_TIME=en_US.UTF-8' /home/$USER_NAME/.config/plasma-localerc"
+# The clock choice reaches the panel clock, and the date format is left to the
+# language: it used to be done through LC_TIME, which dragged the date order
+# along with it.
+check "the clock choice is recorded for the panel" \
+      "grep -qx 'Hours=12' /home/$USER_NAME/.config/sakura-desktoprc"
+check "dates follow the language" \
+      "! grep -q '^LC_TIME=' /home/$USER_NAME/.config/plasma-localerc"
 check "the full name reached the account" \
       "getent passwd $USER_NAME | cut -d: -f5 | grep -q 'Test User'"
 check "sakura-core is included before [core]" \
@@ -554,6 +561,12 @@ else
     check "cloud-init is not installed"    "! pacman -Q cloud-init"
 fi
 check "no live autologin is configured"    "test ! -e /etc/sddm.conf.d/10-sakura-live.conf"
+# The live session's passwordless sudo, granted to an account named "sakura".
+# Dormant on most installs and live on any whose owner picked that name, so
+# the second check is the one that matters when SAKURA_TEST_USER=sakura.
+check "no live sudo rule came across"      "test -z \"\$(ls /etc/sudoers.d/ | grep -i live)\""
+check "sudo asks this account for its password" \
+      "! runuser -u $USER_NAME -- sudo -n true 2>/dev/null"
 check "a boot entry was written"           "efibootmgr | grep -qi sakura"
 check "the store engine runs as the user"  "runuser -u $USER_NAME -- sakura-store sources"
 # Everything below is something that was broken and is meant to be fixed.
@@ -602,8 +615,14 @@ check "the kernel matches what the CPU supports" \
 if [[ "$INSTALL_MODE" == "alongside" ]]; then
     check "the other system's ESP was reused, not reformatted" \
           "test -f /boot/EFI/otheros/grubx64.efi"
+    # Its content, not its existence: limine used to be copied over it, and
+    # the file still existed afterwards, so this passed regardless.
     check "the other system's fallback bootloader survived" \
-          "test -f /boot/EFI/BOOT/BOOTX64.EFI"
+          "grep -q 'must survive' /boot/EFI/BOOT/BOOTX64.EFI"
+    check "the other system is offered at startup" \
+          "grep -q '^/Other operating system' /boot/limine.conf"
+    check "the boot entry points at the ESP, partition 2" \
+          "efibootmgr -v | grep -i 'SakuraOS' | grep -q 'HD(2,'"
     check "our own boot files live beside theirs" \
           "test -f /boot/EFI/sakura/sakura.efi"
     check "the other system's root partition still has its label" \
@@ -612,8 +631,8 @@ if [[ "$INSTALL_MODE" == "alongside" ]]; then
           "mkdir -p /mnt/other && mount -o ro \$(blkid -L OTHER_ROOT) /mnt/other \
            && grep -q 'not touched' /mnt/other/etc/keepme; rc=\$?; \
            umount /mnt/other 2>/dev/null; exit \$rc"
-    check "nothing was renumbered: we are partition 3" \
-          "test \"\$(lsblk -lnpo NAME,PARTLABEL /dev/vda | awk '\$2 == \"SAKURA_ROOT\" {print \$1}')\" = /dev/vda3"
+    check "nothing was renumbered: we are partition 4" \
+          "test \"\$(lsblk -lnpo NAME,PARTLABEL /dev/vda | awk '\$2 == \"SAKURA_ROOT\" {print \$1}')\" = /dev/vda4"
 fi
 
 # The live image enables this so it has a trustworthy clock before checking a

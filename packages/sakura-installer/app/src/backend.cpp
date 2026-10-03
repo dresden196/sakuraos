@@ -19,6 +19,9 @@
 #include <QTimeZone>
 #include <QUrl>
 
+#include <grp.h>
+#include <pwd.h>
+
 namespace {
 
 QString runCapture(const QString &program, const QStringList &args)
@@ -195,6 +198,65 @@ int Backend::utcOffset(const QString &timezone) const
         return 0;
     }
     return zone.offsetFromUtc(QDateTime::currentDateTimeUtc());
+}
+
+QString Backend::usernameProblem(const QString &name) const
+{
+    if (name.isEmpty()) {
+        return QString();
+    }
+    // useradd's own default rule. Checked here because useradd runs near the
+    // end of the install, after the disk has been wiped.
+    static const QRegularExpression shape(QStringLiteral("^[a-z_][a-z0-9_-]{0,31}$"));
+    if (!shape.match(name).hasMatch()) {
+        if (name.size() > 32) {
+            return QStringLiteral("A username can be at most 32 characters.");
+        }
+        if (name.front().isDigit() || name.front() == QLatin1Char('-')) {
+            return QStringLiteral("A username has to start with a letter.");
+        }
+        return QStringLiteral("Use only lowercase letters, digits, - and _.");
+    }
+    // A name the system already uses, as an account or as a group: useradd
+    // makes a group with the user's name, so "wheel" fails as surely as
+    // "root". The live session's own account is the exception -- the install
+    // deletes it before making the new one.
+    const QByteArray raw = name.toUtf8();
+    if (name != QLatin1String("sakura")
+        && (getpwnam(raw.constData()) != nullptr || getgrnam(raw.constData()) != nullptr)) {
+        return QStringLiteral("\u201c%1\u201d is already used by the system. Choose another username.").arg(name);
+    }
+    return QString();
+}
+
+QString Backend::hostnameProblem(const QString &name) const
+{
+    if (name.isEmpty()) {
+        return QStringLiteral("The computer needs a name.");
+    }
+    if (name.size() > 63) {
+        return QStringLiteral("A computer name can be at most 63 characters.");
+    }
+    // A single DNS label: what other devices on the network can look up.
+    static const QRegularExpression shape(QStringLiteral("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"));
+    if (!shape.match(name).hasMatch()) {
+        return QStringLiteral("Use lowercase letters, digits and -, not at the start or end.");
+    }
+    return QString();
+}
+
+QString Backend::chassisKind() const
+{
+    // SMBIOS chassis types that are carried around: portable, laptop,
+    // notebook, sub notebook, tablet, convertible, detachable.
+    QFile f(QStringLiteral("/sys/class/dmi/id/chassis_type"));
+    if (f.open(QIODevice::ReadOnly)) {
+        static const QSet<int> portable{8, 9, 10, 14, 30, 31, 32};
+        if (portable.contains(QString::fromLatin1(f.readAll()).trimmed().toInt())) {
+            return QStringLiteral("laptop");
+        }
+    }
+    return QStringLiteral("pc");
 }
 
 QString Backend::guessTimezone() const

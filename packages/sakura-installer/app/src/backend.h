@@ -28,10 +28,14 @@ class Backend : public QObject
     // "Try SakuraOS" only means anything here: on an installed machine there
     // is nothing to drop out into.
     Q_PROPERTY(bool liveMedia READ liveMedia CONSTANT)
+    // Whether the firmware started this in UEFI mode. The medium also starts
+    // on legacy BIOS, and SakuraOS cannot be installed from there.
+    Q_PROPERTY(bool uefi READ uefi CONSTANT)
     Q_PROPERTY(QString log READ log NOTIFY logChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
+    bool uefi() const { return QFileInfo::exists(QStringLiteral("/sys/firmware/efi")); }
 
     Q_INVOKABLE QVariantList disks() const;
     // What is already on a disk, and whether there is room beside it. The
@@ -64,6 +68,15 @@ public:
                                            const QString &dns);
     Q_INVOKABLE QString useAutomaticAddress(const QString &device);
     Q_INVOKABLE QString guessTimezone() const;
+    // Why a username or computer name cannot be used, in a sentence for the
+    // screen, or empty when it can. The same rules sakura-install enforces
+    // before it touches the disk, so the account screen never lets through a
+    // name the install would then refuse.
+    Q_INVOKABLE QString usernameProblem(const QString &name) const;
+    Q_INVOKABLE QString hostnameProblem(const QString &name) const;
+    // "laptop" or "pc", from the firmware's chassis type, for the default
+    // computer name.
+    Q_INVOKABLE QString chassisKind() const;
     // Seconds from UTC for a zone, right now -- so the clock on the time
     // screen shows the time in the zone being chosen rather than the time
     // where the installer happens to be running.
