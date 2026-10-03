@@ -3,6 +3,7 @@
 #include <QAbstractListModel>
 #include <QObject>
 #include <QProcess>
+#include <QStringList>
 #include <QVariantList>
 
 /**
@@ -26,6 +27,8 @@ class Backend : public QObject
     Q_PROPERTY(bool restartRequired READ restartRequired NOTIFY dataChanged)
     Q_PROPERTY(QVariantList updates READ updates NOTIFY dataChanged)
     Q_PROPERTY(QVariantList holds READ holds NOTIFY dataChanged)
+    // Packages the installer could not fetch offline, waiting for an update.
+    Q_PROPERTY(QStringList pending READ pending NOTIFY dataChanged)
     Q_PROPERTY(QVariantList history READ history NOTIFY dataChanged)
     Q_PROPERTY(QString log READ log NOTIFY logChanged)
 
@@ -40,11 +43,14 @@ public:
     bool restartRequired() const { return m_restart; }
     QVariantList updates() const { return m_updates; }
     QVariantList holds() const { return m_holds; }
+    QStringList pending() const { return m_pending; }
     QVariantList history() const { return m_history; }
     QString log() const { return m_log; }
 
     Q_INVOKABLE void check();
-    Q_INVOKABLE void apply();
+    // includeHeld: a person read why some updates were held and chose to
+    // install them anyway.
+    Q_INVOKABLE void apply(bool includeHeld = false);
     Q_INVOKABLE void loadHistory();
     Q_INVOKABLE void rollback(const QString &number);
     Q_INVOKABLE void createRestorePoint(const QString &description);
@@ -64,6 +70,7 @@ private:
 
     QProcess *m_proc = nullptr;
     QVariantList m_updates, m_holds, m_history;
+    QStringList m_pending;
     QString m_error, m_lastChecked, m_log;
     bool m_busy = false, m_applying = false, m_restart = false;
 };

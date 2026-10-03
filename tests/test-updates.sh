@@ -42,6 +42,52 @@ PY
 check "notice matching is exact where it must be" "OK" "$M"
 
 echo
+echo "== which Arch notices hold anything =="
+# Arch keeps a notice in its feed for most of a year. Holding for that long
+# froze the NVIDIA driver after a notice about Pascal cards, so only recent
+# notices hold, and one somebody has acknowledged does not.
+N=$(python3 - <<'PY'
+import importlib.util, sys
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
+from importlib.machinery import SourceFileLoader
+loader = SourceFileLoader("su", "/usr/bin/sakura-update")
+spec = importlib.util.spec_from_file_location("su", "/usr/bin/sakura-update", loader=loader)
+m = importlib.util.module_from_spec(spec); sys.modules["su"] = m; spec.loader.exec_module(m)
+now = datetime(2026, 10, 3, 12, 0, tzinfo=timezone.utc)
+def item(title, days, date=True):
+    pub = f"<pubDate>{format_datetime(now - timedelta(days=days))}</pubDate>" if date else ""
+    return (f"<item><title>{title}</title><link>https://archlinux.org/news/x/</link>"
+            f"{pub}<description>requires manual intervention</description></item>")
+feed = "".join([
+    item("fresh notice", 2),
+    item("old notice", 40),
+    item("read notice", 1),
+    item("undated notice", 0, date=False),
+])
+got = [i["title"] for i in m.parse_news(feed, now=now, seen={"read notice"})]
+print(",".join(got))
+PY
+)
+check "only recent, unread notices hold" "fresh notice" "$N"
+
+P=$(SAKURA_STATE=/tmp/us python3 - <<'PY'
+import importlib.util, sys, json, os
+from importlib.machinery import SourceFileLoader
+os.makedirs("/tmp/us", exist_ok=True)
+open("/tmp/us/pending.json", "w").write(json.dumps(
+    {"packages": ["nvidia-open-dkms", "", 3], "enable": ["switcheroo-control.service"]}))
+loader = SourceFileLoader("su", "/usr/bin/sakura-update")
+spec = importlib.util.spec_from_file_location("su", "/usr/bin/sakura-update", loader=loader)
+m = importlib.util.module_from_spec(spec); sys.modules["su"] = m; spec.loader.exec_module(m)
+p = m.read_pending()
+open("/tmp/us/pending.json", "w").write("not json")
+print(",".join(p["packages"]) + "|" + ",".join(p["enable"]) + "|" + str(m.read_pending()))
+PY
+)
+check "pending list read, junk ignored" "nvidia-open-dkms|switcheroo-control.service|{}" "$P"
+
+echo
 echo "== config parsing survives a broken file =="
 mkdir -p /tmp/uc && printf 'garbage [[[\nnot ini\n' > /tmp/uc/sakura.conf
 R=$(SAKURA_CONFIG=/tmp/uc/sakura.conf python3 - <<'PY'

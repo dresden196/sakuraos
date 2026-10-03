@@ -288,7 +288,11 @@ KCM.SimpleKCM {
             Layout.maximumWidth: Kirigami.Units.gridUnit * 24
             wrapMode: Text.WordWrap
             font: Kirigami.Theme.smallFont
-            text: i18n("Every night a machine is installed from scratch, the day's updates are applied to it and it is restarted and checked. Anything that fails is held back from your machine until it is fixed, as is anything Arch publishes a manual step for. Turning this off installs updates as soon as they are published.")
+            // It said turning this off installs updates "as soon as they are
+            // published". Updates Arch posts a manual step for are held either
+            // way -- that is not this setting -- so the sentence promised
+            // something the switch does not do.
+            text: i18n("Every night a SakuraOS machine is installed from scratch, given the day's updates, restarted and checked. Anything that breaks it is held back from your computer until it is fixed. Turning this off installs updates without waiting for that test. Updates that Arch publishes a manual step for are held for two weeks either way, and the Update Center can install them sooner.")
         }
 
         QQC2.TextField {

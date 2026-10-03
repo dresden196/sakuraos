@@ -63,6 +63,10 @@ void Backend::check()
 
         m_updates.clear();
         m_holds.clear();
+        m_pending.clear();
+        for (const QJsonValue &v : root[QStringLiteral("pending")].toArray()) {
+            m_pending << v.toString();
+        }
         m_restart = root[QStringLiteral("restart_required")].toBool();
 
         for (const QJsonValue &v : root[QStringLiteral("updates")].toArray()) {
@@ -84,8 +88,13 @@ void Backend::check()
         for (const QJsonValue &v : root[QStringLiteral("holds")].toArray()) {
             const QJsonObject o = v.toObject();
             m_holds.append(QVariantMap{
+                // "news" for an Arch notice, "canary" for a failed test install:
+                // two different explanations, which were both captioned as
+                // "Arch published a manual step".
+                {QStringLiteral("kind"), o[QStringLiteral("kind")].toString()},
                 {QStringLiteral("title"), o[QStringLiteral("title")].toString()},
                 {QStringLiteral("reason"), o[QStringLiteral("reason")].toString()},
+                {QStringLiteral("link"), o[QStringLiteral("link")].toString()},
             });
         }
 
@@ -101,7 +110,7 @@ void Backend::check()
     p->start(QString::fromLatin1(ENGINE), {QStringLiteral("check"), QStringLiteral("--json")});
 }
 
-void Backend::apply()
+void Backend::apply(bool includeHeld)
 {
     if (m_applying) {
         return;
@@ -137,7 +146,11 @@ void Backend::apply()
 
     // The engine elevates itself through polkit, so this process never needs
     // to be root and the window never runs as uid 0.
-    m_proc->start(QString::fromLatin1(ENGINE), {QStringLiteral("apply")});
+    QStringList args{QStringLiteral("apply")};
+    if (includeHeld) {
+        args << QStringLiteral("--include-held");
+    }
+    m_proc->start(QString::fromLatin1(ENGINE), args);
 }
 
 namespace {

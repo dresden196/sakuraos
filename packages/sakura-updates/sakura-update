@@ -8,12 +8,16 @@ implementations that disagree.
 
   sakura-update check    what is available, classified, in plain language
   sakura-update apply    snapshot, then install what is not held
+  sakura-update apply --include-held
+                         the same, and the held updates too: a person
+                         read why they were held and chose to go ahead
   sakura-update status   one line: current, or not
 """
 from __future__ import annotations
 
 import argparse
 import contextlib
+import email.utils
 import fcntl
 import json
 import os
@@ -32,6 +36,18 @@ ADVISORY_URL = "https://repo.sakuraos.org/advisories.json"
 # Long enough that a real hold survives a weekend, short enough that a dead
 # canary cannot freeze anybody's machine indefinitely.
 ADVISORY_MAX_AGE_DAYS = 7
+# How long an Arch notice holds the packages it names. The feed keeps a notice
+# until ten newer ones push it out, which is most of a year, and a hold that
+# lasted that long would freeze exactly the packages that matter -- the NVIDIA
+# driver for every card, after a notice about Pascal; the boot image tool for
+# every machine, after one about TPM2 unlocking. A manual step matters when the
+# update arrives. Two weeks is time for a person to read it, or for us to.
+NEWS_HOLD_DAYS = 14
+# Notices somebody has read and chosen to install past. Titles, one per line.
+ACKNOWLEDGED = STATE / "acknowledged-news"
+# What the installer could not fetch -- the graphics driver and the browser on
+# an offline install -- for the first update with a network to install.
+PENDING = STATE / "pending.json"
 
 # A package whose upgrade means the running system no longer matches what is
 # on disk. Nothing here can take effect until a restart, so saying so is the
@@ -157,8 +173,58 @@ def describe(ups: list[Update]) -> None:
         u.restart = needs_restart(u.name)
 
 
-def news_items() -> list[str]:
-    """Arch news headlines that read like they need a human first."""
+def acknowledged() -> set[str]:
+    try:
+        return {l.strip() for l in ACKNOWLEDGED.read_text().splitlines() if l.strip()}
+    except OSError:
+        return set()
+
+
+def acknowledge(titles: list[str]) -> None:
+    known = acknowledged()
+    new = [t for t in titles if t not in known]
+    if not new:
+        return
+    STATE.mkdir(parents=True, exist_ok=True)
+    with ACKNOWLEDGED.open("a") as fh:
+        for t in new:
+            fh.write(t + "\n")
+
+
+def parse_news(feed: str, now: datetime | None = None,
+               seen: set[str] | None = None) -> list[dict]:
+    """Recent Arch notices that read like they need a human first.
+
+    Recent means NEWS_HOLD_DAYS, and a notice somebody has acknowledged is not
+    one. A notice whose date cannot be read is passed over rather than held
+    for ever: the same direction every other check here fails in.
+    """
+    now = now or datetime.now(timezone.utc)
+    seen = acknowledged() if seen is None else seen
+    items = []
+    for item in re.findall(r"<item>(.*?)</item>", feed, re.S)[:25]:
+        title = re.search(r"<title>(.*?)</title>", item, re.S)
+        if not title or not INTERVENTION.search(re.sub(r"<[^>]+>", " ", item)):
+            continue
+        t = re.sub(r"<[^>]+>", "", title.group(1))
+        t = re.sub(r"&[a-z]+;", " ", t).strip()
+        if t in seen:
+            continue
+        pub = re.search(r"<pubDate>(.*?)</pubDate>", item, re.S)
+        try:
+            when = email.utils.parsedate_to_datetime(pub.group(1).strip())
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        if now - when > timedelta(days=NEWS_HOLD_DAYS):
+            continue
+        link = re.search(r"<link>(.*?)</link>", item, re.S)
+        items.append({"title": t, "link": link.group(1).strip() if link else ""})
+    return items
+
+
+def news_items() -> list[dict]:
     try:
         with urllib.request.urlopen(NEWS_URL, timeout=15) as r:
             feed = r.read().decode("utf-8", "replace")
@@ -166,15 +232,7 @@ def news_items() -> list[str]:
         # No feed is not the same as no interventions, but refusing to update
         # because a web request failed would strand a machine offline.
         return []
-
-    items = []
-    for item in re.findall(r"<item>(.*?)</item>", feed, re.S)[:25]:
-        title = re.search(r"<title>(.*?)</title>", item, re.S)
-        if not title or not INTERVENTION.search(re.sub(r"<[^>]+>", " ", item)):
-            continue
-        t = re.sub(r"<[^>]+>", "", title.group(1))
-        items.append(re.sub(r"&[a-z]+;", " ", t).strip())
-    return items
+    return parse_news(feed)
 
 
 def _mentions(title: str, pkg: str) -> bool:
@@ -236,7 +294,7 @@ def canary_broken() -> tuple[list[str], str]:
     return broken, str(data.get("reason", ""))
 
 
-def apply_holds(ups: list[Update], cfg: dict) -> list[tuple[str, str]]:
+def apply_holds(ups: list[Update], cfg: dict) -> list[dict]:
     """Hold only the packages a notice is actually about."""
     holds = []
 
@@ -248,17 +306,62 @@ def apply_holds(ups: list[Update], cfg: dict) -> list[tuple[str, str]]:
             for u in matched:
                 u.held = "This update broke a test machine of ours."
             if matched:
-                holds.append((reason or "Held after a failed test install",
-                              ", ".join(u.name for u in matched)))
+                holds.append({"kind": "canary",
+                              "title": reason,
+                              "reason": ", ".join(u.name for u in matched),
+                              "link": ""})
 
-    for title in news_items():
-        matched = [u for u in ups if _mentions(title, u.name)]
+    for item in news_items():
+        matched = [u for u in ups if _mentions(item["title"], u.name)]
         if not matched:
             continue
         for u in matched:
             u.held = "Arch published a manual step for this update."
-        holds.append((title, ", ".join(u.name for u in matched)))
+        holds.append({"kind": "news", "title": item["title"],
+                      "reason": ", ".join(u.name for u in matched),
+                      "link": item["link"]})
     return holds
+
+
+def read_pending() -> dict:
+    try:
+        data = json.loads(PENDING.read_text())
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    pkgs = [p for p in data.get("packages", []) if isinstance(p, str) and p]
+    units = [u for u in data.get("enable", []) if isinstance(u, str) and u]
+    return {"packages": pkgs, "enable": units} if pkgs or units else {}
+
+
+def install_pending(pending: dict) -> bool:
+    """Install what the installer could not, now that there is a network.
+
+    Run after the system upgrade rather than folded into it: the databases are
+    fresh at this point, so each name can be checked first, and one that no
+    longer exists is dropped rather than failing the transaction that carries
+    everything else. Kept for the next run if the install itself fails.
+    """
+    pkgs = pending.get("packages", [])
+    have = [p for p in pkgs if run(["pacman", "-Si", p]).strip()]
+    gone = [p for p in pkgs if p not in have]
+    if gone:
+        print(f"Not available any more, so not installed: {', '.join(gone)}")
+    if have:
+        print(f"Installing what the installer could not fetch: {', '.join(have)}")
+        r = subprocess.run(["pacman", "-S", "--needed", "--noconfirm", *have])
+        if r.returncode != 0:
+            print("That did not install; it will be tried again next time.",
+                  file=sys.stderr)
+            return False
+    for unit in pending.get("enable", []):
+        subprocess.run(["systemctl", "enable", unit], capture_output=True)
+    try:
+        PENDING.unlink()
+    except OSError:
+        pass
+    return True
 
 
 def snapshot(desc: str) -> bool:
@@ -279,7 +382,8 @@ def cmd_check(args) -> int:
     if args.json:
         print(json.dumps({
             "updates": [asdict(u) for u in ups],
-            "holds": [{"title": t, "reason": r} for t, r in holds],
+            "holds": holds,
+            "pending": read_pending().get("packages", []),
             "restart_required": any(u.restart for u in ups),
         }, indent=2))
         return 0
@@ -303,10 +407,19 @@ def cmd_check(args) -> int:
                 print("      Needs a restart to take effect")
         print()
     if held:
-        print(f"{len(held)} held back, waiting for you\n")
-        for title, pkgs in holds:
-            print(f"  {pkgs}")
-            print(f"      Arch published a manual step: {title}\n")
+        print(f"{len(held)} held back\n")
+        for h in holds:
+            print(f"  {h['reason']}")
+            if h["kind"] == "news":
+                print(f"      Arch published a manual step: {h['title']}")
+                if h["link"]:
+                    print(f"      {h['link']}")
+            else:
+                print("      It broke a SakuraOS test machine."
+                      + (f" {h['title']}" if h["title"] else ""))
+            print()
+        print("They install on their own once the hold ends, or now with:")
+        print("  sakura-update apply --include-held\n")
     return 0
 
 
@@ -391,8 +504,8 @@ def cmd_apply(args) -> int:
         # made to run something else, and the flag is not needed here: the
         # timer runs as root and never elevates. Anyone reaching this line is a
         # person who asked for updates, which is the case the settings do not
-        # gate anyway.
-        rc = elevate("apply")
+        # gate anyway. --include-held is a verb of its own for the same reason.
+        rc = elevate("apply-including-held" if args.include_held else "apply")
         if rc in (126, 127):
             print("Updates were not installed: authentication was cancelled.",
                   file=sys.stderr)
@@ -412,27 +525,53 @@ def cmd_apply(args) -> int:
             print("Not installing updates: this machine is on battery.")
             return 0
 
+    pending = read_pending()
     ups = available()
-    if not ups:
+    if not ups and not pending:
         print("Everything is up to date.")
         return 0
 
     describe(ups)
     holds = apply_holds(ups, cfg)
+    if args.include_held and holds:
+        # Somebody read why these were held and chose to go ahead. The Arch
+        # notices they went past are remembered, so the next unattended run
+        # does not hold the same packages again.
+        acknowledge([h["title"] for h in holds if h["kind"] == "news"])
+        for u in ups:
+            u.held = ""
+        holds = []
+    held = [u.name for u in ups if u.held]
     ready = [u for u in ups if not u.held]
 
-    if not ready:
+    if not ready and not pending:
         print("All updates are held back:")
-        for title, pkgs in holds:
-            print(f"  {pkgs}: {title}")
+        for h in holds:
+            print(f"  {h['reason']}: {h['title']}")
         return 0
 
     # The snapshot is what makes an unattended update defensible at all. If it
     # cannot be taken, do not proceed -- an automatic update with no way back
     # is the thing this whole design exists to avoid.
-    if not snapshot(f"before installing {len(ready)} updates"):
+    what = (f"{len(ready)} updates" if ready
+            else "what the installer could not fetch")
+    if not snapshot(f"before installing {what}"):
         print("could not take a restore point; refusing to update", file=sys.stderr)
         return 1
+
+    # Held packages are held. This ran a plain pacman -Syu, which installed
+    # them along with everything else: the holds were worked out, shown in the
+    # Update Center, and then ignored, so nothing was ever held back at all.
+    #
+    # --ask=16 answers "skip the packages that cannot be upgraded" with yes.
+    # Without it, an update that needs a held package -- one that depends on a
+    # newer version of it -- makes pacman's --noconfirm answer no, and the
+    # whole night's transaction fails over that one package. With it, that
+    # update waits with the package it needs and everything else installs.
+    cmd = ["pacman", "-Syu", "--noconfirm"]
+    if held:
+        cmd += ["--ask=16", "--ignore", ",".join(held)]
+        print(f"Holding back: {', '.join(held)}")
 
     # The same lock the store takes. Without it an unattended update at 03:00
     # and an install a user started can reach pacman together; pacman's own
@@ -440,11 +579,13 @@ def cmd_apply(args) -> int:
     # "unable to lock database", which explains nothing. The store's docstring
     # already claimed this was shared -- it was not, until now.
     with store_transaction_lock():
-        r = subprocess.run(["pacman", "-Syu", "--noconfirm"])
-    if r.returncode != 0:
-        return r.returncode
+        r = subprocess.run(cmd)
+        if r.returncode != 0:
+            return r.returncode
+        installed_pending = install_pending(pending) if pending else False
 
-    if any(u.restart for u in ready):
+    if any(u.restart for u in ready) or (
+            installed_pending and any(needs_restart(p) for p in pending["packages"])):
         print("\nA restart is needed to finish.")
     return 0
 
@@ -471,6 +612,9 @@ def main() -> int:
     # machine decided to update" from "someone asked it to".
     a.add_argument("--unattended", action="store_true",
                    help="obey the automatic-update settings and skip if they say no")
+    a.add_argument("--include-held", action="store_true",
+                   help="install the held updates too, and stop holding for "
+                        "the Arch notices they were held for")
     a.set_defaults(fn=cmd_apply)
 
     s = sub.add_parser("status", help="one line")

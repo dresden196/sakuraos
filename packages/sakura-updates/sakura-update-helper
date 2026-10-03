@@ -18,6 +18,9 @@ VERBS = {
     # Only operations that move the system to already-published, signature
     # verified versions. Installing a named package is deliberately not here.
     "apply": ["/usr/bin/sakura-update", "apply"],
+    # The same, after a person has read why some updates were held and chosen
+    # to install them anyway. Still nothing but already-published versions.
+    "apply-including-held": ["/usr/bin/sakura-update", "apply", "--include-held"],
 }
 
 

@@ -373,7 +373,7 @@ QQC2.ApplicationWindow {
                     model: [
                         { k: "Held back",
                           v: backend.updates.filter(function(u){ return u.held !== "" }).length.toString(),
-                          d: "waiting on a manual step" },
+                          d: "after an Arch notice or a failed test" },
                         { k: "Needs a restart",
                           v: backend.updates.filter(function(u){ return u.restart }).length.toString(),
                           d: "replaces part of the running system" },
@@ -421,7 +421,8 @@ QQC2.ApplicationWindow {
                 spacing: 10
                 Btn {
                     text: backend.applying ? "Installing…" : "Install now"
-                    enabled: !backend.applying && !backend.busy && backend.updates.length > 0
+                    enabled: !backend.applying && !backend.busy
+                             && (backend.updates.length > 0 || backend.pending.length > 0)
                     onClicked: backend.apply()
                 }
                 Btn {
@@ -515,6 +516,18 @@ QQC2.ApplicationWindow {
                 }
             }
 
+            // What the installer could not fetch without a network -- the
+            // graphics driver, the browser -- waiting for the next update.
+            QQC2.Label {
+                visible: backend.pending.length > 0
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: root.dim; font.pixelSize: 13
+                text: "Waiting to be installed, because the computer was offline during "
+                    + "the install: " + backend.pending.join(", ") + ". They install with "
+                    + "the next update, or now with Install now."
+            }
+
             ColumnLayout {
                 visible: backend.holds.length > 0
                 Layout.fillWidth: true
@@ -526,17 +539,35 @@ QQC2.ApplicationWindow {
                 }
                 Repeater {
                     model: backend.holds
-                    delegate: QQC2.Label {
+                    delegate: ColumnLayout {
                         required property var modelData
                         Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        color: root.dim; font.pixelSize: 14
-                        // The engine puts the affected package names in
-                        // "reason" and this dropped them, so the one thing
-                        // this section exists to say -- which of your updates
-                        // it is about -- never reached the screen.
-                        text: (modelData.reason ? modelData.reason + ". " : "")
-                            + "Arch published a manual step: " + modelData.title
+                        spacing: 2
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            color: root.text; font.pixelSize: 14
+                            text: modelData.reason
+                        }
+                        // Two different reasons, which were both captioned
+                        // "Arch published a manual step".
+                        QQC2.Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            color: root.dim; font.pixelSize: 13
+                            text: modelData.kind === "canary"
+                                ? "This update broke a SakuraOS test machine, and is held until it is fixed."
+                                  + (modelData.title ? " " + modelData.title : "")
+                                : "Arch published a notice about this update: " + modelData.title
+                        }
+                        QQC2.Label {
+                            visible: modelData.kind === "news" && modelData.link !== ""
+                            text: "<a href=\"" + modelData.link + "\">Read the notice</a>"
+                            textFormat: Text.RichText
+                            color: root.accent; font.pixelSize: 13
+                            onLinkActivated: function(url) { Qt.openUrlExternally(url) }
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        }
                     }
                 }
                 QQC2.Label {
@@ -544,7 +575,16 @@ QQC2.ApplicationWindow {
                     wrapMode: Text.WordWrap
                     color: Qt.rgba(root.dim.r, root.dim.g, root.dim.b, 0.8)
                     font.pixelSize: 12
-                    text: "Everything else installs as normal. Held packages wait until the step has been done."
+                    text: "Everything else installs as normal. Held updates install on their "
+                        + "own once the hold ends: two weeks after an Arch notice, or when a "
+                        + "failed update has been fixed. If you have read the notice and done "
+                        + "what it asks, or it does not apply to you, you can install them now."
+                }
+                Btn {
+                    text: "Install held updates too"
+                    quiet: true
+                    enabled: !backend.applying && !backend.busy
+                    onClicked: backend.apply(true)
                 }
             }
             Item { Layout.fillHeight: true }
@@ -696,16 +736,15 @@ QQC2.ApplicationWindow {
                     verticalAlignment: Text.AlignVCenter
                 }
             }
-            // The canary fleet does not exist. Nothing anywhere holds an
-            // update back for want of evidence, so a switch offering that
-            // choice is describing infrastructure, not controlling it. Left
-            // visible because it is genuinely planned, switched off because
-            // the alternative is a promise about updates that is not kept.
+            // The canary runs: a SakuraOS machine is installed, updated and
+            // restarted every night, and what breaks it is published as a
+            // hold. This box used to be disabled and unticked on the grounds
+            // that it did not -- and Save wrote that unticked value back, so
+            // changing the update time switched the protection off.
             QQC2.CheckBox {
                 id: canaryBox
-                enabled: false
                 text: "Only updates that were tested first"
-                checked: false
+                checked: parent.s.canary
                 contentItem: QQC2.Label {
                     text: parent.text; color: parent.enabled ? root.text : root.dim
                     font.pixelSize: 14
@@ -760,10 +799,10 @@ QQC2.ApplicationWindow {
             QQC2.Label {
                 Layout.maximumWidth: 520
                 wrapMode: Text.WordWrap
-                text: "SakuraOS installs each update on its own machines and restarts "
-                    + "them before offering it to yours, and holds back anything that "
-                    + "breaks. Updates are also held back when Arch publishes a notice "
-                    + "about them."
+                text: "Every night a SakuraOS machine is installed from scratch, given "
+                    + "the day's updates and restarted, and anything that breaks it is held "
+                    + "back from yours. Updates that Arch publishes a manual step for are "
+                    + "held for two weeks, whichever this is set to."
                 color: root.dim; font.pixelSize: 12
             }
             Btn {
