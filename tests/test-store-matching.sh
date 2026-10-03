@@ -92,5 +92,37 @@ check "an unrelated package"   "no"  "$(run_case gitkraken 'client,spotify')"
 check "a prefix of the name"   "no"  "$(run_case spot 'spotify')"
 
 echo
+echo
+echo "== one row per app in a search =="
+# Flathub files Steam as com.valvesoftware.Steam and the Snap Store as plain
+# "steam", so a search listed it twice. A display-name match joins them when one
+# side has no reverse-DNS id; two apps that both have one stay apart.
+MERGE=$(python3 - "$SRC" <<'PY'
+import sys
+from dataclasses import dataclass, field
+src = open(sys.argv[1]).read()
+ns = {"dataclass": dataclass, "field": field}
+exec("from __future__ import annotations\n" + src[src.index("@dataclass\nclass App"):src.index("class Source")], ns)
+exec(src[src.index("def norm_id"):src.index("def _untagged")], ns)
+class S:
+    def __init__(self, n): self.name = n
+ns["SOURCES"] = [S("flatpak"), S("repo"), S("aur"), S("snap")]
+exec(src[src.index("def merge("):src.index("def read_config")], ns)
+App = ns["App"]
+def a(i, name, source, sid):
+    return App(id=i, name=name, summary="", developer="", icon="", source=source, source_id=sid)
+rows = ns["merge"]([
+    [a("steam", "Steam", "snap", "steam"), a("spotify", "Spotify", "snap", "spotify")],
+    [a("com.valvesoftware.Steam", "Steam", "flatpak", "com.valvesoftware.Steam"),
+     a("org.gnome.Calculator", "Calculator", "flatpak", "org.gnome.Calculator")],
+    [a("org.kde.kcalc", "Calculator", "repo", "kcalc")],
+])
+print(";".join(f"{r.name}:{r.source}+{','.join(e['source'] for e in r.also_from)}" for r in rows))
+PY
+)
+check "Steam is one row, Flatpak first, Snap beside it" "1" "$(echo "$MERGE" | tr ';' '\n' | grep -c '^Steam:flatpak+snap$')"
+check "two different Calculators stay two rows"        "2" "$(echo "$MERGE" | tr ';' '\n' | grep -c '^Calculator:')"
+check "an app only on Snap keeps its row"              "1" "$(echo "$MERGE" | tr ';' '\n' | grep -c '^Spotify:snap+$')"
+
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
