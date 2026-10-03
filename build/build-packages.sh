@@ -128,7 +128,14 @@ docker run --rm \
     -w /build \
     "$IMAGE" \
     bash -euo pipefail -c '
-        pacman -Sy --noconfirm >/dev/null
+        # -Syu, not -Sy. Syncing without upgrading and then installing build
+        # dependencies one package at a time is the partial upgrade Terminal
+        # Assist exists to stop: the first dependency with a newer version in
+        # the fresh database -- systemd, for sakura-game-devices -- failed with
+        # "could not satisfy dependencies" and took the run down. It also means
+        # the compiled packages are built against the Qt and KDE libraries Arch
+        # ships today rather than whatever the image was made with.
+        pacman -Syu --noconfirm >/dev/null
 
         # The mounted keyring is read-only and owned by the host user; gpg
         # insists on a private, writable home, so take a copy.
