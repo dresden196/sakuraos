@@ -34,6 +34,10 @@ from pathlib import Path
 # Installed beside the engine rather than on the default path, so the import
 # has to be told where to look.
 sys.path.insert(0, "/usr/lib/sakura/store")
+# And nothing cached there. Run as root by the nightly update service, Python
+# wrote __pycache__ beside those modules: files in /usr that no package owns,
+# carried into every restore point.
+sys.dont_write_bytecode = True
 
 CONFIG = Path(os.environ.get("SAKURA_CONFIG", "/etc/sakura/sakura.conf"))
 # Per user, not /var/cache. The store runs as whoever is logged in, and a
@@ -359,6 +363,21 @@ def appstream_index() -> dict[str, dict]:
                 "icon": icon_url,
             }
     return index
+
+
+@lru_cache(maxsize=1)
+def repo_packages() -> frozenset:
+    """Every package pacman can install from the repositories it has enabled.
+
+    The AppStream catalogue is not that list. archlinux-appstream-data ships a
+    catalogue for multilib, which SakuraOS does not enable, so Steam was
+    offered -- and preselected, as the first-choice source -- from a
+    repository pacman cannot see: the install failed every time. A catalogue
+    that is older than the package databases has the same fault for anything
+    renamed or dropped since. The sync databases are the authority on what can
+    be installed, so an entry is offered only if they carry it.
+    """
+    return frozenset(run(["pacman", "-Slq"]).split())
 
 
 class RepoSource(Source):
@@ -820,11 +839,15 @@ def category(name: str, limit: int = 24) -> list[App]:
     if repo.available():
         have = repo.installed()
         index = appstream_index()
+        installable = repo_packages()
         hits = []
         for pkg, meta in index.items():
             if meta.get("kind") != "desktop-application":
                 continue
             if name not in meta.get("categories", []):
+                continue
+            # Installed is enough to list it, so it can still be removed.
+            if pkg not in installable and pkg not in have:
                 continue
             hits.append(App(id=meta["id"], name=meta["name"],
                             summary=meta.get("summary", ""),
@@ -941,10 +964,13 @@ def find_elsewhere(app_id: str, name: str) -> list[dict]:
     matched_repo = False
     if repo.available():
         target = norm_id(app_id)
+        installable = repo_packages()
         for pkg, meta in appstream_index().items():
             if norm_id(meta["id"]) != target:
                 continue
             have = repo.installed()
+            if pkg not in installable and pkg not in have:
+                continue
             found.append({"source": "repo", "id": pkg,
                           "version": have.get(pkg) or pacman_version(pkg),
                           "installed": pkg in have, "popularity": {},

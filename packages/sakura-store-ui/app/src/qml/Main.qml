@@ -2453,9 +2453,10 @@ QQC2.ApplicationWindow {
                     Layout.leftMargin: 24; Layout.rightMargin: 24
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Which sources the store searches. They are tried in this "
-                        + "order, so an app that is in the official repositories is never "
-                        + "installed from anywhere else."
+                    text: "Which sources the store searches. When an app is available "
+                        + "from more than one, its page selects the copy you already have, "
+                        + "or else the first source in this list. You can choose a "
+                        + "different one before installing."
                     color: root.dim; font.pixelSize: 12
                 }
                 ColumnLayout {
@@ -2475,8 +2476,19 @@ QQC2.ApplicationWindow {
                         // Sources that are off are shown rather than dropped.
                         // Hiding them means nobody can discover that the AUR
                         // exists, let alone that it is theirs to switch on.
+                        //
+                        // Listed in the order an app page prefers them, which
+                        // is what the sentence above promises. The engine's
+                        // own order is not that one: it listed Flatpak first
+                        // under a sentence saying the repositories came first.
                         model: (backend.sources || [])
                                 .filter(function (s) { return s.id !== "appimage" })
+                                .slice()
+                                .sort(function (a, b) {
+                                    const ra = root.sourceRank[a.id], rb = root.sourceRank[b.id];
+                                    return (ra === undefined ? 500 : ra)
+                                         - (rb === undefined ? 500 : rb);
+                                })
                                 .map(function (s) {
                                     return {k: s.id, n: root.sourceLabel(s.id),
                                             avail: s.available, why: s.reason || ""}

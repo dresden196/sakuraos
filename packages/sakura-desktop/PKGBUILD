@@ -31,6 +31,10 @@ depends=(
     # machine that had the AUR on last month is exactly the one worth checking.
     'sakura-aur-campaign-check'
 
+    # Controllers and VR headsets for games. Steam comes from Flathub, which
+    # cannot install udev rules for itself, so the host carries Valve's.
+    'sakura-game-devices'
+
     # Base system. No kernel named here on purpose: which one a machine can
     # run depends on the machine, so the installer decides between the tuned
     # x86-64-v3 kernel and the stock one and installs that. Arch's own base
@@ -141,6 +145,11 @@ depends=(
     'filelight'
     'kolourpaint'
     'plasma-systemmonitor'
+    # "About this System" in System Settings and the application menu: the
+    # processor, memory, graphics and versions, with a button that copies them
+    # for a bug report. Without it that page is simply missing, and Getting
+    # help had to send people to a terminal to answer "what computer is this".
+    'kinfocenter'
     'kdeconnect'
     'kamoso'
     'merkuro'

@@ -23,3 +23,8 @@ openpgp-revocs.d/
 repo/
 iso/airootfs/usr/share/sakura/
 iso/airootfs/etc/pacman.conf
+
+# Python bytecode. Three .pyc files were committed under packages/sakura-store
+# by accident; they are build output, not source.
+__pycache__/
+*.pyc

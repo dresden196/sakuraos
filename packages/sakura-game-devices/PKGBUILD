@@ -1,0 +1,44 @@
+# Maintainer: dresden196 <dresden196@users.noreply.github.com>
+#
+# Permission for games and Steam to use controllers and VR headsets.
+#
+# A controller's raw device nodes are root-only by default. Steam reads them
+# directly -- that is how it supports the Steam Controller, DualShock and
+# DualSense, Switch Pro and the rest -- so without these rules a plugged-in
+# controller is visible to the kernel and useless to the game. Arch ships the
+# rules as steam-devices, but in multilib, beside a Steam SakuraOS does not use:
+# Steam comes from Flathub here, and a Flatpak cannot install udev rules for
+# itself. So the host has to carry them.
+#
+# The two rules files are Valve's own, copied unmodified from
+# https://github.com/ValveSoftware/steam-devices at commit
+# 22ec85e5ff5ea2e15c56d71a41bcbef46356cd60 (MIT). They are vendored rather than
+# fetched because the package build skips source checksums, and a pin nobody
+# checks is not a pin. To update: copy both files and LICENSE from a newer
+# commit and change the commit above.
+pkgname=sakura-game-devices
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Controller and VR headset access for games (Valve's steam-devices rules)"
+arch=('any')
+url="https://github.com/ValveSoftware/steam-devices"
+license=('MIT')
+depends=('systemd')
+# Arch's steam package depends on steam-devices. Providing it means someone who
+# turns on multilib and installs that Steam is not handed a second copy of the
+# same two files; conflicting lets pacman swap them if they ask for Arch's.
+provides=('steam-devices')
+conflicts=('steam-devices')
+source=('60-steam-input.rules' '60-steam-vr.rules' 'LICENSE.valve')
+sha256sums=('284930f83cf8fde8a247057d46f48083d5e4aefc23a54310db02cfc2dbe42e50'
+            'e12cda322c9f5f7c6336d8048264877690d3488e1b0f1b750cce18a836160420'
+            '4a8b10a725095d8be78a130dd21984d70976915a658da8fe158d3bc20ca03585')
+
+package() {
+    install -Dm644 "$srcdir/60-steam-input.rules" \
+        "$pkgdir/usr/lib/udev/rules.d/60-steam-input.rules"
+    install -Dm644 "$srcdir/60-steam-vr.rules" \
+        "$pkgdir/usr/lib/udev/rules.d/60-steam-vr.rules"
+    install -Dm644 "$srcdir/LICENSE.valve" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

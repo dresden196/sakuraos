@@ -1,0 +1,6 @@
+# Earlier versions let Python cache bytecode beside the store's modules when
+# the nightly update service ran as root. The package ships no cache, so the
+# directory is debris.
+post_upgrade() {
+    rm -rf usr/lib/sakura/store/__pycache__
+}

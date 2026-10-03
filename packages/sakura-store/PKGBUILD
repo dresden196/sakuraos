@@ -8,6 +8,7 @@ pkgver=0.1.0
 pkgrel=1
 pkgdesc="SakuraOS app store engine"
 arch=('any')
+install="$pkgname.install"
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
 # archlinux-appstream-data is what gives repository packages an icon, a
