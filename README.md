@@ -33,24 +33,28 @@ is therefore constant forever, which is what lets it stay embedded and signed.
 Snapshot selection happens inside a signed recovery image, working identically
 with Secure Boot on or off. See `packages/sakura-snapshot-boot/`.
 
-**Secure Boot via `sbctl`.** The installer generates machine-local keys, signs
-the boot chain, and enrolls them when firmware is in Setup Mode. Every other
-Arch derivative tells the user to disable Secure Boot in firmware; for a
-non-technical user that is where the install attempt ends.
+**Secure Boot via `sbctl`.** When the firmware is in Setup Mode, the installer
+generates machine-local keys, enrolls them alongside Microsoft's, and signs the
+boot chain, so Secure Boot can be on without a shim or anybody else's key.
+Otherwise the system installs and boots with Secure Boot off.
 
-**Track Arch directly, gate on evidence.** Sakura does not hold packages back on
-a schedule — that is what breaks AUR compatibility on Manjaro. Instead a fleet
-of canary VMs updates and boot-tests continuously, and the update manager
-consumes targeted hold advisories when a specific package set is shown to break.
+**Track Arch directly, gate on evidence.** SakuraOS does not hold packages back
+on a schedule: updates arrive as Arch publishes them. A canary machine is
+installed, updated and boot-tested every night, and the update manager holds
+back the specific packages a failed run names. It also holds packages that a
+recent Arch news item says need a manual step, for at most two weeks or until
+the user chooses to install them.
 
 **AUR safety is named for what it does.** There is no "malware scanner",
 because nothing can deliver what that promises — a PKGBUILD is arbitrary shell
 fetching arbitrary source. A user who believes they are protected stops reading
-PKGBUILDs, which is the behaviour the feature exists to encourage. See
+PKGBUILDs, which is the behavior the feature exists to encourage. See
 `docs/settings.md`.
 
-**Store source priority: repos → Flatpak → AUR.** AUR is available but opt-in per
-package, with the PKGBUILD shown. An app store that silently builds unreviewed
+**Store source priority: repos → Flatpak → Snap → AppImage → AUR.** The app page
+selects the copy already installed, otherwise the first available source in
+that order, and the user can pick another. The AUR is off until switched on,
+and every build shows its PKGBUILD first. An app store that silently builds unreviewed
 PKGBUILDs on a beginner's machine contradicts the entire premise.
 
 ## Repository layout
