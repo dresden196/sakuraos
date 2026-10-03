@@ -20,6 +20,7 @@ pkgrel=1
 _commit=9023c17717024d87880a2433550340bbba1a12df
 pkgdesc="Checks installed AUR packages against published attack campaigns"
 arch=('any')
+install="$pkgname.install"
 url="https://github.com/lenucksi/aur-malware-check"
 license=('GPL-3.0-or-later')
 # python 3.14 for upstream; pacman for the package query it makes.

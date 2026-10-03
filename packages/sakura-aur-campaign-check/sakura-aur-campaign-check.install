@@ -1,0 +1,18 @@
+# Earlier versions left files in /usr that no package owns: a log named for
+# the day on every pacman transaction, and Python's bytecode caches, both
+# written into the scanner's directory by the root-run hook. The package ships
+# neither, so everything matched here is that debris and nothing else.
+_clean_scanner_dir() {
+    local dir=usr/lib/sakura/aur-campaign-check
+    [ -d "$dir" ] || return 0
+    rm -f "$dir"/aur-check-*.log
+    find "$dir" -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null
+    return 0
+}
+
+post_upgrade() {
+    _clean_scanner_dir
+    # Every scheduled scan had failed, so the unit sits in the failed list
+    # until the next run. Clear it now that the cause is gone.
+    systemctl reset-failed sakura-aur-campaign-check.service >/dev/null 2>&1 || true
+}

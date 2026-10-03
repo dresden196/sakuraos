@@ -157,11 +157,25 @@ def main() -> int:
     env = dict(os.environ)
     env["AUR_CHECK_DATA_DIR"] = str(STATE)
     env["PYTHONPATH"] = str(SCANNER_DIR)
+    # Nothing written under /usr. Run as root from the pacman hook, Python
+    # cached its bytecode beside the scanner, and the scanner wrote a log named
+    # for the day into its working directory, which was the scanner's own
+    # directory: twenty-two files in /usr that no package owned after a week,
+    # carried into every restore point. Under the timer's ProtectSystem=strict
+    # the same log could not be written at all, so every scheduled scan failed
+    # before it started.
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    STATE.mkdir(parents=True, exist_ok=True)
+    log = STATE / ("last-quick.log" if quick else "last-scan.log")
+    # Upstream appends to its log. One run's log is what anybody reading it
+    # wants, and a file that grows on every pacman transaction is not.
+    log.write_text("", encoding="utf-8")
 
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "aur_check", "--json", *scan, *args],
-            cwd=str(SCANNER_DIR), env=env, capture_output=True, text=True,
+            [sys.executable, "-m", "aur_check", "--json",
+             "--log-file", str(log), *scan, *args],
+            cwd=str(STATE), env=env, capture_output=True, text=True,
             timeout=900)
     except subprocess.TimeoutExpired:
         write_report({"status": "timeout", "checked": int(time.time())})
@@ -179,8 +193,14 @@ def main() -> int:
     code = proc.returncode
     status = {OK: "clean", WARNING: "warnings",
               CRITICAL: "infected"}.get(code, "unknown")
-    write_report({"status": status, "exit": code, "quick": quick,
-                  "checked": int(time.time()), "result": result})
+    report = {"status": status, "exit": code, "quick": quick,
+              "checked": int(time.time()), "result": result}
+    # A scan that did not finish says why. The failure this replaced left
+    # {"status": "unknown", "exit": 3, "result": {}} and nothing else, because
+    # the reason went to stderr and stderr was thrown away.
+    if status == "unknown":
+        report["stderr"] = proc.stderr[-2000:]
+    write_report(report)
 
     if code == CRITICAL:
         notify("An installed package is on a campaign list",

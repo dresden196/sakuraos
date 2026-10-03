@@ -1,8 +1,10 @@
 [Unit]
-Description=Weekly AUR campaign check
+Description=Daily AUR campaign check
 
 [Timer]
-OnCalendar=weekly
+# Daily, because that is what the setting promises: "after every
+# transaction and once a day". It was weekly, under that sentence.
+OnCalendar=daily
 # A machine that was off on the day still gets its scan.
 Persistent=true
 # Nobody's list is so urgent that every SakuraOS machine should ask Arch's
