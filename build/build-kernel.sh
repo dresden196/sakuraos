@@ -155,6 +155,13 @@ docker run --rm \
         chown $HOST_UID:$HOST_GID /build/repo/sakura-core/os/x86_64/*
 
         cd /build/repo/sakura-core/os/x86_64
+        # repo-add runs as builder and writes a lockfile beside the database,
+        # so the directory has to be builder-writable. The final chown below
+        # hands the directory back to the host user along with the files, and
+        # the next kernel build then failed here with "Failed to acquire
+        # lockfile" -- after hours of compiling. build-packages.sh does the
+        # same thing for the same reason.
+        chown builder:builder /build/repo/sakura-core/os/x86_64
         # No unsigned fallback. A database added to without --sign keeps its
         # old signature, which no longer matches -- and the failure surfaces
         # later as "signature from ... is invalid" during an ISO build, a long
