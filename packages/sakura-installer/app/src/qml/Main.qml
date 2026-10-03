@@ -56,6 +56,14 @@ QQC2.ApplicationWindow {
     // lightened on a dark one. A colour already clear of the threshold is left
     // exactly as chosen, which is every swatch in dark mode.
     function relLuminance(c) {
+        // A colour written as a string -- "#3a2731", the dark ink below, or the
+        // accent as the appearance screen stores it -- has no .r, .g or .b, so
+        // the sum was NaN and every comparison with it false: the ink always
+        // came out white, which on blossom pink is 1.4:1, and the chosen
+        // accent was always lightened once even when it already passed.
+        // Qt.lighter with a factor of 1 is the identity that returns a color.
+        if (typeof c === "string")
+            c = Qt.lighter(c, 1.0)
         function ch(v) { return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
         return 0.2126 * ch(c.r) + 0.7152 * ch(c.g) + 0.0722 * ch(c.b)
     }

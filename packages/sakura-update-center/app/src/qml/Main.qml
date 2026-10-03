@@ -27,7 +27,9 @@ QQC2.ApplicationWindow {
             return (h < 10 ? "0" + h : "" + h) + ":" + m
         var h12 = h % 12
         if (h12 === 0) h12 = 12
-        return h12 + ":" + m
+        // Two digits, to fit the field's mask: "3:00" against it was shown
+        // as "3 :00", the mask having put the colon's place to a digit.
+        return (h12 < 10 ? "0" + h12 : "" + h12) + ":" + m
     }
 
     function meridiemOf(stored) {
@@ -771,11 +773,11 @@ QQC2.ApplicationWindow {
                     id: timeField
                     enabled: autoBox.checked
                     Layout.preferredWidth: 90
-                    // Follows this machine's clock. It was fixed at 24-hour,
-                    // so somebody who chose a 12-hour clock during the install
-                    // was asked for the update time in the other format, with
-                    // no AM or PM to pick.
-                    inputMask: backend.uses24Hour ? "99:99" : "x9:99"
+                    // Follows this machine's clock: the hours are 1-12 with
+                    // the AM/PM button beside them on a 12-hour clock, which
+                    // displayTime and storedTime convert. Two digits either
+                    // way, so one mask fits both.
+                    inputMask: "99:99"
                     color: root.text
                     // The stored value is always 24-hour "HH:MM": it goes into
                     // sakura.conf and is read by a timer, so only the display
