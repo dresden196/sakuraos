@@ -31,6 +31,7 @@ ENCRYPT="off"
 MODE="wipe"
 CRYPTPASS=""
 CRYPTPASS_STDIN=0
+USERPASS_STDIN=0
 SECUREBOOT="auto"
 THEME="dark"
 EXTRA_PACKAGES=""
@@ -51,6 +52,14 @@ CANARY_ONLY="on"
 UPDATE_TIME="03:00"
 AC_ONLY="on"
 
+# No restore points from the package installs in the chroot. snap-pac's hooks
+# talk to snapperd over D-Bus, which does not exist in there, and every
+# transaction ended with "fatal library error, lookup self" -- harmless, but
+# the last line of the log, and so the first thing anyone blamed when an
+# install failed for some other reason. The install takes its own restore
+# point when it is finished, without D-Bus.
+export SNAP_PAC_SKIP=y
+
 die() { printf '\n[sakura-install] %s\n\n' "$*" >&2; exit 1; }
 step() { printf '\n[sakura-install] == %s ==\n' "$*"; }
 info() { printf '[sakura-install] %s\n' "$*"; }
@@ -61,6 +70,11 @@ while [[ $# -gt 0 ]]; do
         --hostname)   HOSTNAME_="$2"; shift 2 ;;
         --user)       USERNAME="$2"; shift 2 ;;
         --password)   USERPASS="$2"; shift 2 ;;
+        # The graphical installer's way in, for the reason given below for the
+        # disk passphrase. It passed --password, and pkexec writes the whole
+        # command line it was asked to run into the journal: every install
+        # left the new account's password there in plain text.
+        --password-stdin) USERPASS_STDIN=1; shift ;;
         --root-password) ROOTPASS="$2"; shift 2 ;;
         --timezone)   TIMEZONE="$2"; shift 2 ;;
         --locale)     LOCALE="$2"; shift 2 ;;
@@ -119,9 +133,19 @@ if [[ "$USERNAME" != "sakura" ]] \
 fi
 [[ "$HOSTNAME_" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] \
     || die "\"$HOSTNAME_\" cannot be a computer name: use lowercase letters, digits and -, not at the start or end"
+# One line each, in this order: the account password, then the disk
+# passphrase.
+if [[ "$USERPASS_STDIN" == "1" ]]; then
+    IFS= read -r USERPASS || true
+    [[ -n "$USERPASS" ]] || die "--password-stdin was given but no password arrived on stdin"
+fi
 if [[ "$ENCRYPT" == "on" && "$CRYPTPASS_STDIN" == "1" ]]; then
     IFS= read -r CRYPTPASS || true
 fi
+# useradd refuses a comment containing a colon or a newline -- they are the
+# field and record separators of /etc/passwd -- and it runs after the disk
+# has been wiped. Nobody's name needs either.
+FULLNAME=${FULLNAME//[$':\n']/}
 if [[ "$ENCRYPT" == "on" ]]; then
     # Checked here rather than at the point of use: discovering an empty
     # passphrase after the disk has been wiped leaves a machine with neither
@@ -1279,9 +1303,28 @@ if [[ "$ENCRYPT" == "on" ]]; then
 else
     HOOKS_LINE="HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont plymouth block btrfs filesystems fsck)"
 fi
+MODULES_LINE="MODULES=(btrfs)"
+# Not kms with the NVIDIA driver, which is what Arch's own NVIDIA guide says
+# too. autodetect takes whatever driver is bound to a device, blacklist or
+# not, and on this live system nouveau drives the NVIDIA chip -- so kms put
+# nouveau and the firmware for every NVIDIA chip there is into both images:
+# 158 MB each where 40 is normal, on a Dell with a 3050 Ti. Beside Windows,
+# whose EFI partition we only require 180 MB free on, the second one does not
+# fit. The other GPU's driver goes in by name instead, so the built-in screen
+# of a two-GPU laptop still lights up early for the splash and the passphrase
+# prompt; with no other GPU the splash draws on the firmware's framebuffer
+# until the NVIDIA driver loads.
+if [[ "$GRAPHICS" == nvidia-* ]]; then
+    HOOKS_LINE=${HOOKS_LINE/ kms / }
+    for _dev in /sys/bus/pci/devices/*; do
+        [[ "$(cat "$_dev/class")" == 0x03* && "$(cat "$_dev/vendor")" != 0x10de ]] || continue
+        _mod=$(readlink -e "$_dev/driver/module" 2>/dev/null) || continue
+        [[ -n "$_mod" ]] && MODULES_LINE="${MODULES_LINE%)} ${_mod##*/})"
+    done
+fi
 sed -i "s/^HOOKS=.*/$HOOKS_LINE/" \
     /mnt/etc/mkinitcpio.conf
-sed -i 's/^MODULES=.*/MODULES=(btrfs)/' /mnt/etc/mkinitcpio.conf
+sed -i "s/^MODULES=.*/$MODULES_LINE/" /mnt/etc/mkinitcpio.conf
 
 # plymouth-set-default-theme writes the theme and would rebuild the initramfs
 # on its own; -R is deliberately not passed because mkinitcpio runs once at the
@@ -1406,10 +1449,16 @@ pacman-key --updatedb >/dev/null 2>&1
 # -c is the full name. Plasma's lock screen, the login greeter and the user
 # switcher all show it, and without it they show the login name instead, so a
 # machine set up for "Adam Biggs" greeted him as "abiggs".
-useradd -m -G wheel -s /bin/bash -c "$FULLNAME" "$USERNAME"
-echo "$USERNAME:$USERPASS" | chpasswd
-if [ -n "$ROOTPASS" ]; then
-    echo "root:$ROOTPASS" | chpasswd
+#
+# The name and the passwords are quoted with %q because this script's text is
+# read twice: once here, which fills them in, and again by the shell in the
+# chroot. A password with a \$ in it ended the install there on an unbound
+# variable, and a quote was a syntax error -- both after the disk had been
+# wiped. printf is a builtin, so the passwords are on no command line.
+useradd -m -G wheel -s /bin/bash -c $(printf '%q' "$FULLNAME") "$USERNAME"
+printf '%s\n' $(printf '%q' "$USERNAME:$USERPASS") | chpasswd
+if [ -n $(printf '%q' "$ROOTPASS") ]; then
+    printf '%s\n' $(printf '%q' "root:$ROOTPASS") | chpasswd
 else
     passwd -l root >/dev/null
 fi
@@ -1745,9 +1794,21 @@ if [[ "$SECUREBOOT" != "off" ]]; then
     step "Secure Boot"
     SETUP_MODE=$(arch-chroot /mnt sbctl status 2>/dev/null | grep -i "setup mode" || true)
     if [[ "$SETUP_MODE" == *"Enabled"* ]]; then
-        arch-chroot /mnt /bin/bash -euo pipefail <<'SB'
+        # Setup Mode only means the platform key is gone. Firmware reset that
+        # way -- the reset our install guide tells people to do -- usually
+        # keeps the maker's KEK and db, and efivarfs marks every existing key
+        # variable immutable. sbctl refuses to write over them until that is
+        # cleared, and this step used to end the install there, on a Dell with
+        # everything else already in place. The flag lives only in memory and
+        # is back after a restart.
+        chattr -i /sys/firmware/efi/efivars/{PK,KEK,db}-* 2>/dev/null || true
+        # Signed before anything is enrolled. Enrolling the platform key ends
+        # Setup Mode, and firmware whose Secure Boot switch is already on
+        # starts enforcing from the next boot: a failure between the two
+        # orders used to leave a machine that refused its own boot loader.
+        # This way round, whatever goes wrong leaves one that starts.
+        if arch-chroot /mnt /bin/bash -euo pipefail <<'SB'; then
 sbctl create-keys
-sbctl enroll-keys --microsoft
 # Only our own copy at the removable path. Beside Windows that file is
 # Microsoft's, already signed by Microsoft, and not ours to re-sign.
 if grep -qa 'Limine' /boot/EFI/BOOT/BOOTX64.EFI 2>/dev/null; then
@@ -1756,8 +1817,15 @@ fi
 sbctl sign -s /boot/EFI/sakura/limine.efi
 sbctl sign -s /boot/EFI/sakura/sakura.efi
 sbctl sign -s /boot/EFI/sakura/sakura-recovery.efi
+sbctl enroll-keys --microsoft
 SB
-        info "Secure Boot keys enrolled and boot chain signed"
+            info "Secure Boot keys enrolled and boot chain signed"
+        else
+            # Optional, and the system is complete by now: not a reason to
+            # report the whole install as failed.
+            info "WARNING: Secure Boot could not be set up; the messages above say why."
+            info "SakuraOS starts normally with Secure Boot off."
+        fi
     else
         info "firmware is not in Setup Mode; skipping Secure Boot enrollment"
         info "the system boots normally with Secure Boot disabled"

@@ -224,7 +224,9 @@
 <p>
   Microsoft's keys are added so that Windows, and hardware whose firmware is
   signed by Microsoft, such as many graphics cards, keep working. If the firmware
-  is not in Setup Mode, the install finishes normally without Secure Boot.
+  is not in Setup Mode, the install finishes normally without Secure Boot. If
+  the firmware does not accept the keys, the installer says so and finishes
+  the install without Secure Boot; nothing else about the install changes.
 </p>
 <div class="note">
   <p>
@@ -234,7 +236,9 @@
   </p>
 </div>
 <p>
-  This has been tested in virtual machines. Firmware on real computers varies;
+  This has been tested in virtual machines, including firmware that keeps its
+  maker's keys when it is reset, as many computers do. Firmware on real
+  computers varies;
   if it does not work on yours, <a href="/help">please tell us</a> which
   computer it is.
 </p>

@@ -118,6 +118,12 @@ VARS_TEMPLATE=$(pick_firmware \
 # with one disk the picker looks right whether or not it enumerates.
 [[ -f "$DISK2" ]] || qemu-img create -f qcow2 "$DISK2" 32G >/dev/null
 
+# The Secure Boot build keeps its variables behind SMM, and only works when
+# the flash holding them is marked secure; without this it never gets as far
+# as the boot menu.
+secure_flash=()
+(( secboot )) && secure_flash=(-global driver=cfi.pflash01,property=secure,value=on)
+
 rm -f "$QMP_SOCK" "$QGA_SOCK"
 
 # --installed leaves the ISO out entirely rather than just reordering boot:
@@ -192,6 +198,7 @@ fi
 exec qemu-system-x86_64 \
     -enable-kvm \
     -machine q35,smm=on \
+    "${secure_flash[@]}" \
     -cpu "${SAKURA_VM_CPU:-host}" \
     -smp "${SAKURA_VM_CPUS:-8}" \
     -m "${SAKURA_VM_RAM:-6G}" \

@@ -23,6 +23,20 @@ if [[ "$OFFLINE" == "1" ]]; then
     export SAKURA_VM_OFFLINE=1
 fi
 
+# SECBOOT=vendor starts both the installer and the installed system on Secure
+# Boot firmware in Setup Mode that still holds a maker's KEK and db -- a Dell
+# after "Reset to Setup Mode", the state the install guide asks for.
+# SECBOOT=empty is Setup Mode with no keys at all. Unset, the firmware has no
+# Secure Boot, and the installer's enrollment never ran here: it first ran on
+# that Dell, and failed there.
+SECBOOT="${SECBOOT:-}"
+VM_FLAGS=()
+[[ -n "$SECBOOT" ]] && VM_FLAGS+=(--secboot)
+
+# SAKURA_TEST_GRAPHICS is passed to --graphics, so the NVIDIA path can be
+# installed on a VM that has no NVIDIA chip to detect.
+GRAPHICS_ARG="${SAKURA_TEST_GRAPHICS:-}"
+
 # A failed run used to leave its 6 GiB VM running. Several dead runs then
 # starved the host, and the next run's Plasma session timed out waiting for a
 # compositor -- which reads as a product bug and is not one. The harness now
@@ -36,7 +50,11 @@ trap cleanup_vm EXIT INT TERM
 # SAKURA_TEST_USER lets a run use a name the installer has to handle with
 # care -- "sakura", the live session's own.
 USER_NAME="${SAKURA_TEST_USER:-tester}"
-USER_PASS=tester
+# Every character the installer's chroot script once choked on: a password
+# with a $ in it ended the install on an unbound variable, and one with a
+# quote was a syntax error. Real passwords have these.
+USER_PASS=$'te$t "pa ss\' `x` \\ \u00fc'
+FULL_NAME=$'Test "User" O\'Neil $HOME'
 HOSTNAME_=sakura-clean
 
 # Which way the system gets onto the disk. copy is the default the installer
@@ -171,7 +189,18 @@ if (( ! verify_only )); then
     # tears its session down -- which pct exec does. The symptom is a live
     # session that never appears, fifteen minutes later, with the reason
     # discarded into /dev/null.
-    setsid "$REPO_ROOT/build/test-vm.sh" --headless \
+    if [[ "$SECBOOT" == "vendor" ]]; then
+        # A maker's keys without a platform key: KEK and db present, PK gone.
+        _vk="$REPO_ROOT/out/vendor-key"
+        openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=Test Vendor KEK" \
+            -keyout "$_vk.key" -out "$_vk.crt" >/dev/null 2>&1
+        virt-fw-vars --input /usr/share/edk2/x64/OVMF_VARS.4m.fd \
+            --output "$REPO_ROOT/out/OVMF_VARS-clean.fd" \
+            --add-kek 11111111-2222-3333-4444-555555555555 "$_vk.crt" \
+            --add-db 11111111-2222-3333-4444-555555555555 "$_vk.crt" >/dev/null \
+            || { echo "test-install: could not build vendor-key firmware variables" >&2; exit 1; }
+    fi
+    setsid "$REPO_ROOT/build/test-vm.sh" --headless "${VM_FLAGS[@]}" \
         > "$REPO_ROOT/out/live-boot.log" 2>&1 &
     vm_must_be_running clean "$REPO_ROOT/out/live-boot.log"
     "$REPO_ROOT/build/vm-ready.sh"
@@ -202,13 +231,14 @@ if (( ! verify_only )); then
     # ships no agent, so without it the machine is unreachable and none of the
     # checks below can run. --extra-packages is the installer's own mechanism
     # for this, so nothing test-specific leaks into the installer itself.
-    CRYPT_IN="< /dev/null"
-    if (( encrypt )); then
-        # The passphrase goes down stdin, the same path the graphical
-        # installer uses -- testing a different one would prove nothing about
-        # the code that ships.
-        CRYPT_IN="<<< $CRYPTPASS"
-    fi
+    # The secrets go down stdin, one line each -- the account password, then
+    # the disk passphrase -- the same path the graphical installer uses.
+    # Testing a different one would prove nothing about the code that ships.
+    # base64 for the same reason as the command below.
+    _stdin="$USER_PASS"$'\n'
+    (( encrypt )) && _stdin+="$CRYPTPASS"$'\n'
+    run "echo $(printf '%s' "$_stdin" | base64 -w0) | base64 -d > /tmp/install.in" >/dev/null 2>&1 || true
+    CRYPT_IN="< /tmp/install.in"
     # Built as an array here, shipped as base64, and run from a file in the
     # guest.
     #
@@ -226,7 +256,7 @@ if (( ! verify_only )); then
         sakura-install
         --disk /dev/vda
         --user "$USER_NAME"
-        --password "$USER_PASS"
+        --password-stdin
         --hostname "$HOSTNAME_"
         --timezone UTC
         --theme dark
@@ -235,12 +265,13 @@ if (( ! verify_only )); then
         --browser "$BROWSER_PKG"
         --accent "#3daee9"
         --clock 12
-        --fullname "Test User"
+        --fullname "$FULL_NAME"
         --method "$METHOD"
         --mode "$INSTALL_MODE"
         --yes
     )
     (( encrypt )) && install_args+=(--encrypt on --encryption-password-stdin)
+    [[ -n "$GRAPHICS_ARG" ]] && install_args+=(--graphics "$GRAPHICS_ARG")
 
     # printf %q quotes each argument for the shell that will read the file.
     INSTALL_CMD="$(printf '%q ' "${install_args[@]}")"
@@ -335,7 +366,7 @@ if (( ! verify_only )); then
     # --installed leaves the ISO out entirely, so a firmware that prefers
     # optical cannot quietly boot the live environment and pass these checks
     # against the wrong system.
-    setsid "$REPO_ROOT/build/test-vm.sh" --installed --headless \
+    setsid "$REPO_ROOT/build/test-vm.sh" --installed --headless "${VM_FLAGS[@]}" \
         > "$REPO_ROOT/out/installed-boot.log" 2>&1 &
     vm_must_be_running clean "$REPO_ROOT/out/installed-boot.log"
 
@@ -535,7 +566,37 @@ if [[ "$UPGRADE" != "1" ]]; then
           "! grep -q '^LC_TIME=' /home/$USER_NAME/.config/plasma-localerc"
 fi
 check "the full name reached the account" \
-      "getent passwd $USER_NAME | cut -d: -f5 | grep -q 'Test User'"
+      "test \"\$(printf %s \"\$(getent passwd $USER_NAME | cut -d: -f5)\" | base64 -w0)\" = $(printf '%s' "$FULL_NAME" | base64 -w0)"
+# The password itself, checked against the hash the way login does. Nothing
+# here ever looked: an install whose password came out different would have
+# passed every check and locked its owner out.
+PWCHECK_B64=$(base64 -w0 <<'PY'
+import base64, ctypes, sys
+user, pw = sys.argv[1], base64.b64decode(sys.argv[2])
+c = ctypes.CDLL("libcrypt.so.2")
+c.crypt.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+c.crypt.restype = ctypes.c_char_p
+h = next(l.split(":")[1] for l in open("/etc/shadow") if l.split(":")[0] == user).encode()
+sys.exit(0 if c.crypt(pw, h) == h else 1)
+PY
+)
+check "the account password logs in" \
+      "echo $PWCHECK_B64 | base64 -d > /tmp/pwcheck.py && python3 /tmp/pwcheck.py $USER_NAME $(printf '%s' "$USER_PASS" | base64 -w0)"
+if [[ -n "$SECBOOT" ]]; then
+    # Enforcing, not just enrolled: the firmware started this system's boot
+    # loader and kernel only because they are signed with the keys it now
+    # holds.
+    check "Secure Boot is on and enforcing" \
+          "test \"\$(od -An -tu1 -j4 -N1 /sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c | tr -d ' ')\" = 1"
+    check "the firmware has left Setup Mode" \
+          "test \"\$(od -An -tu1 -j4 -N1 /sys/firmware/efi/efivars/SetupMode-8be4df61-93ca-11d2-aa0d-00e098032b8c | tr -d ' ')\" = 0"
+fi
+if [[ "$GRAPHICS_ARG" == nvidia-* ]]; then
+    check "the NVIDIA driver is installed"   "pacman -Q nvidia-utils"
+    check "kms is not in the boot image hooks" "! grep -E '^HOOKS=.* kms ' /etc/mkinitcpio.conf"
+    check "the display's own driver is loaded early" \
+          "grep -E '^MODULES=\(btrfs [a-z]' /etc/mkinitcpio.conf"
+fi
 check "sakura-core is included before [core]" \
       "test \"\$(grep -n '^Include = /etc/pacman.d/sakura-core.conf' /etc/pacman.conf | cut -d: -f1)\" -lt \"\$(grep -n '^\\[core\\]' /etc/pacman.conf | cut -d: -f1)\""
 # These two are the only checks that need a route out. Offline they are not

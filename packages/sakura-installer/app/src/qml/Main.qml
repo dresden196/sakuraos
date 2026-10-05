@@ -100,6 +100,11 @@ QQC2.ApplicationWindow {
     readonly property color bg:     dark ? "#26161e" : "#faf6f8"
     readonly property color panel:  dark ? "#2f1f28" : "#f1e7ec"
     readonly property color card:   dark ? "#3a2731" : "#ffffff"
+    // Hovered and pressed rows and buttons. Used in five places and never
+    // declared, so each of them evaluated to undefined -- "Unable to assign
+    // [undefined] to QColor" in the journal -- and nothing ever highlighted.
+    // Translucent, because the rows sit on cards and on the panel alike.
+    readonly property color cardUp: dark ? Qt.rgba(1,1,1,0.07) : Qt.rgba(0,0,0,0.05)
     readonly property color text:   dark ? "#f6eef2" : "#2b1f25"
     readonly property color dim:    dark ? "#bfa8b4" : "#6f5c66"
     readonly property color line:   dark ? Qt.rgba(1,1,1,0.08) : Qt.rgba(0,0,0,0.10)

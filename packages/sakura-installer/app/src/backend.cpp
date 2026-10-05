@@ -699,7 +699,11 @@ void Backend::install(const QVariantMap &answers)
     QStringList args{
         QStringLiteral("--disk"), answers[QStringLiteral("disk")].toString(),
         QStringLiteral("--user"), answers[QStringLiteral("username")].toString(),
-        QStringLiteral("--password"), answers[QStringLiteral("password")].toString(),
+        // The password itself goes down the pipe below. As an argument it was
+        // in /proc for every process to read, and pkexec writes the command
+        // line it runs into the journal: every install left the new
+        // account's password there in plain text.
+        QStringLiteral("--password-stdin"),
         QStringLiteral("--hostname"), answers[QStringLiteral("hostname")].toString(),
         QStringLiteral("--timezone"), answers[QStringLiteral("timezone")].toString(),
         // The keyboard screen warns that getting this wrong locks you out at
@@ -809,13 +813,14 @@ void Backend::install(const QVariantMap &answers)
     m_proc->start(QStringLiteral("pkexec"),
                   QStringList{QStringLiteral("/usr/bin/sakura-install")} + args);
 
+    // Written down the pipe rather than passed as arguments, one line each in
+    // the order sakura-install reads them, and the channel closed straight
+    // after so it sees end of input. Anything in argv is readable from /proc
+    // by every process on the machine.
+    m_proc->write(answers[QStringLiteral("password")].toString().toUtf8() + '\n');
     if (encrypting) {
-        // Written down the pipe rather than passed as an argument, and the
-        // channel closed straight after so the installer sees end of input.
-        // A passphrase in argv is readable from /proc by every process on the
-        // machine, and this is the one secret here that outlives the install.
         m_proc->write(answers[QStringLiteral("encryptPassword")]
                           .toString().toUtf8() + '\n');
-        m_proc->closeWriteChannel();
     }
+    m_proc->closeWriteChannel();
 }
