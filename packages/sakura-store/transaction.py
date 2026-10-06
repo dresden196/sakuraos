@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -756,6 +757,53 @@ def _aur_srcinfo_deps(name: str) -> list:
     return sorted(set(deps))
 
 
+def _aur_unresolvable(deps: list) -> tuple[list, list, list]:
+    """Split deps into (to install, only in the AUR, nowhere at all).
+
+    Two things went wrong by handing the whole list to pacman -S. A
+    dependency that is only in the AUR -- gdbuspp for openvpn3, or electron37
+    once Arch dropped it -- failed the install with "the dependencies could
+    not be installed" and no name, so nobody could tell what to do. And one
+    that is already installed but no longer in any repository failed too,
+    because -S --needed still has to find it in a sync database: the same
+    package that installed on a machine that had electron37 from before
+    could not be reinstalled there.
+    """
+    if not deps:
+        return [], [], []
+    # pacman -T prints the ones the installed system does not satisfy,
+    # versioned provides included.
+    r = subprocess.run(["pacman", "-T", "--"] + deps,
+                       capture_output=True, text=True)
+    unmet = r.stdout.split()
+    if not unmet:
+        return [], [], []
+    # -Sp resolves names the way -S will, provides included, without
+    # installing anything; every name it cannot find is reported.
+    r = subprocess.run(["pacman", "-Sp", "--print-format", "%n", "--"] + unmet,
+                       capture_output=True, text=True)
+    missing = re.findall(r"target not found: (\S+)", r.stderr)
+    if not missing:
+        return unmet, [], []
+    in_aur = set()
+    try:
+        query = "&".join(f"arg[]={urllib.parse.quote(m)}" for m in missing)
+        req = urllib.request.Request(
+            f"https://aur.archlinux.org/rpc/v5/info?{query}",
+            headers={"User-Agent": "sakura-store/0.1"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            in_aur = {p["Name"] for p in json.load(resp).get("results", [])}
+    except Exception:
+        pass
+    return ([d for d in unmet if d not in missing],
+            [m for m in missing if m in in_aur],
+            [m for m in missing if m not in in_aur])
+
+
+def _names(items: list) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
 def install_aur(name: str) -> int:
     """Build and install an AUR package the user has read the script for.
 
@@ -808,7 +856,27 @@ def install_aur(name: str) -> int:
     # FileNotFoundError naming 'git' after the dependencies had already been
     # installed -- which only showed up on a machine that had never been
     # developed on. Every VM used for testing already had it.
-    deps = ["base-devel", "git"] + _aur_srcinfo_deps(name)
+    deps, aur_only, nowhere = _aur_unresolvable(
+        ["base-devel", "git"] + _aur_srcinfo_deps(name))
+    if nowhere:
+        emit(FAILED, error=f"{name} needs {_names(nowhere)}, which "
+                           f"{'is' if len(nowhere) == 1 else 'are'} not in "
+                           f"Arch's repositories or the AUR. The package "
+                           f"needs updating by its maintainer.",
+             recoverable=False)
+        return 2
+    if aur_only:
+        one = len(aur_only) == 1
+        emit(FAILED, error=f"{name} needs {_names(aur_only)}, which "
+                           f"{'is' if one else 'are'} not in Arch's "
+                           f"repositories, only in the AUR. Install "
+                           f"{'it' if one else 'them'} from the AUR first, "
+                           f"then {name}. If {'it is' if one else 'they are'} "
+                           f"an old version of something Arch now ships "
+                           f"newer, the package needs updating by its "
+                           f"maintainer instead.",
+             recoverable=False)
+        return 2
     if deps:
         rc = stream(["pkexec", "pacman", "-S", "--noconfirm", "--needed",
                      "--asdeps", "--"] + deps, DOWNLOADING, _pacman_progress)

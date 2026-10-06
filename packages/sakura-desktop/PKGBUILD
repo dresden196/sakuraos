@@ -96,11 +96,35 @@ depends=(
     # The Settings page for the login screen; without it there is no way to
     # change the greeter from the GUI.
     'sddm-kcm'
+    # GTK applications on Plasma. Without kde-gtk-config nothing tells them
+    # where they are, so every one fell back to GNOME's defaults: Adwaita, and
+    # a title bar with a close button and nothing else -- which is how Chrome
+    # looked on a fresh install. It copies the theme, colours, fonts, cursor
+    # and button layout across; breeze-gtk is the theme it points them at.
+    'kde-gtk-config'
+    'breeze-gtk'
+    # Thunderbolt docks and drives stay unauthorised, and so do nothing,
+    # until something approves them; this is that something in Plasma.
+    'plasma-thunderbolt'
+    # A notification when a drive's own health data says it is failing, while
+    # there is still time to copy things off it.
+    'plasma-disks'
+    # Media controls and notifications for the browser, in Plasma's own
+    # player and notification areas.
+    'plasma-browser-integration'
+    # Plasma's standard widgets beyond the basics -- the colour picker,
+    # weather, the dictionary and the rest people look for in "Add Widgets".
+    'kdeplasma-addons'
     'sakura-theme'
     'sakura-wallpapers'
 
     # Services
     'networkmanager'
+    # OpenVPN in the network settings: "Import VPN connection" with a .ovpn
+    # file from the provider, connected from the panel like any network.
+    # Without it the import has no OpenVPN to offer, and the next place
+    # people look is an AUR client.
+    'networkmanager-openvpn'
     'power-profiles-daemon'
 
     # Audio

@@ -32,6 +32,14 @@
   real protection. If a script downloads something from an unexpected place, or
   does more than building the program, do not accept it.
 </p>
+<p>
+  Some packages need another package that is itself only in the AUR. The App
+  Store does not build that one for you; it says which package it is. Install
+  that one first, reading its script the same way, and then the one you wanted.
+  If what is missing is an old version of something, such as
+  <code>electron37</code>, the package needs updating by its maintainer
+  instead; building an old Electron from source takes hours.
+</p>
 
 <h2>Using yay or paru</h2>
 <p>

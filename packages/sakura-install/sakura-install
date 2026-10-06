@@ -311,6 +311,9 @@ else
     ROOT=$(partname 2)
 
     step "Partitioning $DISK"
+    # The partitions about to be destroyed. Firmware boot entries that point
+    # at them are removed when ours is registered -- see there.
+    OLD_PARTUUIDS=$(lsblk -nro PARTUUID "$DISK" 2>/dev/null | tr 'A-F' 'a-f' | grep . || true)
     # Anything still holding the disk makes partitioning silently not take
     # effect.
     wipefs -af "$DISK" >/dev/null
@@ -1786,6 +1789,20 @@ step "Registering with firmware"
 # else -- and beside Windows this entry is now the only thing that starts
 # SakuraOS, since the fallback path is left to Windows.
 ESP_PARTN=$(cat "/sys/class/block/$(basename "$(readlink -f "$ESP")")/partition" 2>/dev/null || echo 1)
+# Entries for the partitions this install just destroyed. Reinstalling left
+# the previous install's "SakuraOS" in the boot menu beside the new one, and
+# a wiped Windows left its "Windows Boot Manager", both pointing at partitions
+# that no longer exist. Only those go: an entry for another disk, or for a
+# partition that is still there, is not ours to remove.
+if [[ -n "${OLD_PARTUUIDS:-}" ]]; then
+    while read -r _num _guid; do
+        if grep -qixF "$_guid" <<<"$OLD_PARTUUIDS"; then
+            efibootmgr -b "$_num" -B >/dev/null 2>&1 \
+                && info "removed firmware boot entry Boot$_num: its partition was replaced by this install"
+        fi
+    done < <(efibootmgr -v 2>/dev/null \
+             | sed -nE 's/^Boot([0-9A-Fa-f]{4})\*? .*HD\([0-9]+,GPT,([0-9A-Fa-f-]{36}).*/\1 \2/p')
+fi
 efibootmgr --create --disk "$DISK" --part "$ESP_PARTN" \
     --loader '\EFI\sakura\limine.efi' --label "SakuraOS" --unicode >/dev/null 2>&1 \
     || info "efibootmgr entry not created; the removable path will still boot"

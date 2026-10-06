@@ -222,6 +222,14 @@ if (( ! verify_only )); then
             echo "the pushed installer does not parse in the guest" >&2; exit 1; }
     fi
 
+    # A previous system on the disk, with its own firmware boot entry: what a
+    # reinstall, or a wiped Windows, leaves behind. The install has to remove
+    # that entry -- its partition is gone -- and nothing else.
+    if [[ "$INSTALL_MODE" == "wipe" ]]; then
+        run "sgdisk --zap-all /dev/vda >/dev/null 2>&1; sgdisk -n 1:0:+100M -t 1:ef00 /dev/vda >/dev/null && partprobe /dev/vda && udevadm settle && efibootmgr -c -d /dev/vda -p 1 -L 'Old System' -l '\\EFI\\old\\boot.efi' >/dev/null" >/dev/null 2>&1 \
+            || echo ">> note: could not plant an old boot entry; the stale-entry check will say so"
+    fi
+
     echo ">> installing to /dev/vda"
     # Detached, with the exit status left in a file. guest-run gives up after
     # 60s, and an install takes many minutes -- waiting on it directly means
@@ -582,6 +590,15 @@ PY
 )
 check "the account password logs in" \
       "echo $PWCHECK_B64 | base64 -d > /tmp/pwcheck.py && python3 /tmp/pwcheck.py $USER_NAME $(printf '%s' "$USER_PASS" | base64 -w0)"
+# GTK applications fell back to GNOME's defaults -- a close button and
+# nothing else on Chrome's title bar -- because nothing synced Plasma's
+# settings to them.
+check "GTK applications follow Plasma's settings" "pacman -Q kde-gtk-config breeze-gtk"
+check "an OpenVPN profile can be imported"         "pacman -Q networkmanager-openvpn"
+if [[ "$INSTALL_MODE" == "wipe" ]]; then
+    check "the replaced system's boot entry was removed" "! efibootmgr | grep -q 'Old System'"
+    check "exactly one SakuraOS boot entry" "test \"\$(efibootmgr | grep -c SakuraOS)\" = 1"
+fi
 if [[ -n "$SECBOOT" ]]; then
     # Enforcing, not just enrolled: the firmware started this system's boot
     # loader and kernel only because they are signed with the keys it now
