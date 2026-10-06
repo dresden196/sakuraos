@@ -58,5 +58,9 @@ var desktop = desktopForScreen(0) || desktops()[0];
 if (desktop) {
     desktop.wallpaperPlugin = "org.kde.image";
     desktop.currentConfigGroup = ["Wallpaper", "org.kde.image", "General"];
-    desktop.writeConfig("Image", "Sakura");
+    // A URL, not the package name. "Sakura" is right in the look-and-feel
+    // defaults, which name packages; the wallpaper's own config takes a path,
+    // and given a bare name Plasma logged "unknown wallpaper provider type"
+    // at every first login and showed the right picture only by falling back.
+    desktop.writeConfig("Image", "file:///usr/share/wallpapers/Sakura/");
 }

@@ -188,6 +188,31 @@ class Source:
         return {}
 
 
+# Sizes to try for an application's own icon, best first. Raster sizes near
+# what a tile shows come ahead of scalable, which every theme renders but
+# some apps ship as a near-blank symbolic outline.
+_ICON_SIZES = ("128x128", "256x256", "512x512", "96x96", "64x64", "48x48", "scalable")
+
+
+def _icon_file(icon: str, roots: list) -> str:
+    """An icon name resolved to a file under the given share/icons roots."""
+    if not icon:
+        return ""
+    if icon.startswith("/"):
+        return f"file://{icon}" if Path(icon).is_file() else ""
+    for root in roots:
+        for size in _ICON_SIZES:
+            for ext in ("png", "svg"):
+                f = Path(root) / "hicolor" / size / "apps" / f"{icon}.{ext}"
+                if f.is_file():
+                    return f"file://{f}"
+    for ext in ("png", "svg"):
+        f = Path("/usr/share/pixmaps") / f"{icon}.{ext}"
+        if f.is_file():
+            return f"file://{f}"
+    return ""
+
+
 class FlatpakSource(Source):
     name = "flatpak"
     label = "Flathub"
@@ -233,12 +258,23 @@ class FlatpakSource(Source):
         # /var/lib/flatpak/appstream/<remote>/<arch>/active/icons/.
         icons: dict[str, str] = {}
         base = Path("/var/lib/flatpak/appstream")
-        if not base.is_dir():
-            return icons
-        for size in ("128x128", "64x64"):
-            for d in base.glob(f"*/*/active/icons/{size}"):
-                for f in d.glob("*.png"):
-                    icons.setdefault(f.stem, f"file://{f}")
+        if base.is_dir():
+            for size in ("128x128", "64x64"):
+                for d in base.glob(f"*/*/active/icons/{size}"):
+                    for f in d.glob("*.png"):
+                        icons.setdefault(f.stem, f"file://{f}")
+        # Then each installed application's own icon, which flatpak exports
+        # for the menu. The catalog above is only there once flatpak has
+        # fetched the remote's AppStream data, which a fresh install has not
+        # done: Slack and Termius sat in the Installed list with no icon while
+        # the application menu showed both.
+        roots = ["/var/lib/flatpak/exports/share/icons",
+                 str(Path.home() / ".local/share/flatpak/exports/share/icons")]
+        for app in self.installed():
+            if app not in icons:
+                found = _icon_file(app, roots)
+                if found:
+                    icons[app] = found
         return icons
 
     def installed(self) -> dict[str, str]:
@@ -528,6 +564,33 @@ class AurSource(Source):
         # listing yay-debug beside yay in a store is noise.
         return {k: v for k, v in self.installed().items()
                 if not k.endswith("-debug")}
+
+    def local_icons(self) -> dict[str, str]:
+        """The icon named by each AUR package's own menu entry.
+
+        Nothing describes an AUR package the way AppStream describes a
+        repository one, so its tile in the Installed list had no icon at all.
+        The package's .desktop file says which icon it installed.
+        """
+        pkgs = list(self.installed_apps())
+        if not pkgs:
+            return {}
+        out = run(["pacman", "-Ql", "--"] + pkgs) or ""
+        icons: dict[str, str] = {}
+        for line in out.splitlines():
+            pkg, _, path = line.partition(" ")
+            if pkg in icons or not (path.startswith("/usr/share/applications/")
+                                    and path.endswith(".desktop")):
+                continue
+            try:
+                text = Path(path).read_text(errors="replace")
+            except OSError:
+                continue
+            m = re.search(r"^Icon=(.+)$", text, re.M)
+            found = _icon_file(m.group(1).strip(), ["/usr/share/icons"]) if m else ""
+            if found:
+                icons[pkg] = found
+        return icons
 
     def updates(self) -> list[dict]:
         """AUR packages with a newer version published.

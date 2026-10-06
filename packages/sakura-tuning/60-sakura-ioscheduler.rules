@@ -6,15 +6,19 @@
 # on a single-queue rotational disk, and is pure overhead in front of an NVMe
 # that can service many queues at once.
 
+# Whole disks only. A scheduler belongs to the device's queue, and partitions
+# have none: nvme[0-9]*n[0-9]* matched nvme0n1p1 too (the * takes "1p1"), and
+# every partition logged "Could not chase sysfs attribute" at every boot.
+
 # Rotating disks: BFQ, whose whole purpose is keeping one greedy reader from
 # starving everything else on a device that seeks.
-ACTION=="add|change", KERNEL=="sd[a-z]|mmcblk[0-9]*", ATTR{queue/rotational}=="1", \
+ACTION=="add|change", ENV{DEVTYPE}=="disk", KERNEL=="sd[a-z]|mmcblk[0-9]*", ATTR{queue/rotational}=="1", \
     ATTR{queue/scheduler}="bfq"
 
 # SSDs on a single queue: still worth scheduling, but deadline is enough.
-ACTION=="add|change", KERNEL=="sd[a-z]|mmcblk[0-9]*", ATTR{queue/rotational}=="0", \
+ACTION=="add|change", ENV{DEVTYPE}=="disk", KERNEL=="sd[a-z]|mmcblk[0-9]*", ATTR{queue/rotational}=="0", \
     ATTR{queue/scheduler}="mq-deadline"
 
 # NVMe: none. The device has more queues than the scheduler has opinions, and
 # anything we add here is latency we introduced ourselves.
-ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ATTR{queue/scheduler}="none"
+ACTION=="add|change", ENV{DEVTYPE}=="disk", KERNEL=="nvme[0-9]*n[0-9]*", ATTR{queue/scheduler}="none"
