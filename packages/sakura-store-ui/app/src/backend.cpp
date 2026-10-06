@@ -12,6 +12,8 @@
 #include <QUrl>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusVariant>
+#include <QTimer>
 #include <QDateTime>
 #include <QNetworkInformation>
 #include <pwd.h>
@@ -59,13 +61,42 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             using R = QNetworkInformation::Reachability;
             const R r = ni->reachability();
             QString state = QStringLiteral("online");
-            if (r == R::Disconnected || r == R::Local) {
+            if (r == R::Unknown) {
+                // Networking switched off puts NetworkManager to sleep, and
+                // Qt reports that as Unknown rather than Disconnected -- so the
+                // store went on calling itself online. Asked directly: asleep,
+                // disconnected, connecting or local-only is offline.
+                QDBusMessage m = QDBusMessage::createMethodCall(
+                    QStringLiteral("org.freedesktop.NetworkManager"),
+                    QStringLiteral("/org/freedesktop/NetworkManager"),
+                    QStringLiteral("org.freedesktop.DBus.Properties"),
+                    QStringLiteral("Get"));
+                m << QStringLiteral("org.freedesktop.NetworkManager")
+                  << QStringLiteral("State");
+                const QDBusMessage reply =
+                    QDBusConnection::systemBus().call(m, QDBus::Block, 1000);
+                const uint nm = reply.type() == QDBusMessage::ReplyMessage
+                                    && !reply.arguments().isEmpty()
+                    ? reply.arguments().first().value<QDBusVariant>().variant().toUInt()
+                    : 0;
+                if (nm != 0 && nm <= 50) {
+                    state = QStringLiteral("offline");
+                }
+            } else if (r == R::Disconnected || r == R::Local) {
                 state = QStringLiteral("offline");
             } else if (ni->supports(QNetworkInformation::Feature::CaptivePortal)
                        && ni->isBehindCaptivePortal()) {
                 state = QStringLiteral("portal");
             } else if (r == R::Site) {
-                state = QStringLiteral("limited");
+                // Every reconnect passes through this for a second or two
+                // before NetworkManager's check finds the internet. Only
+                // said if it is still true a few seconds later.
+                QTimer::singleShot(4000, this, [this, ni] {
+                    if (ni->reachability() == QNetworkInformation::Reachability::Site) {
+                        setNetworkState(QStringLiteral("limited"));
+                    }
+                });
+                return;
             }
             setNetworkState(state);
         };
