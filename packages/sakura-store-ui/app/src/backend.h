@@ -248,6 +248,8 @@ private:
         QString kind;        // install | remove | update
         QString stage;       // queued | resolving | downloading | ... | failed
         QString detail;
+        // Which package of an AUR chain is in hand: "gdbuspp (1 of 2)".
+        QString step;
         QString error;
         QString errorDetail;
         int percent = 0;

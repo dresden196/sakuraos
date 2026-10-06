@@ -33,12 +33,24 @@
   does more than building the program, do not accept it.
 </p>
 <p>
-  Some packages need another package that is itself only in the AUR. The App
-  Store does not build that one for you; it says which package it is. Install
-  that one first, reading its script the same way, and then the one you wanted.
-  If what is missing is an old version of something, such as
-  <code>electron37</code>, the package needs updating by its maintainer
-  instead; building an old Electron from source takes hours.
+  Some packages need others that are also only in the AUR. The App Store finds
+  every one of them before anything is built, and the review shows each build
+  script with what needs it, so you can read them all in one place. Accepting
+  builds them in order, the ones that are needed first, and asks for your
+  password once if the builds are quick; a long build asks again before the
+  last install. Removing the application later removes them too, unless
+  something else needs them.
+</p>
+<p>
+  Packages that build a kernel module with DKMS, such as
+  <code>evdi-dkms</code> for DisplayLink docks, also need the headers for your
+  kernel. The App Store installs those as well.
+</p>
+<p>
+  If something a package needs is in neither Arch's repositories nor the AUR,
+  the App Store says which one and does not start. That usually means the
+  package needs updating by its maintainer, for example one that still asks
+  for an old version of Electron.
 </p>
 
 <h2>Using yay or paru</h2>

@@ -1419,8 +1419,12 @@ def aur_meta(name: str) -> dict:
     return meta
 
 
-def aur_review(name: str) -> dict:
-    """The PKGBUILD, and what changed since this user last accepted one."""
+def aur_review(name: str, pkgname: str = "") -> dict:
+    """The PKGBUILD, and what changed since this user last accepted one.
+
+    name is the pkgbase, which is what the AUR keeps the script under;
+    pkgname, when it differs, is the package the metadata is about.
+    """
     # A distinct tag: "there is no such package" and "the AUR is unreachable"
     # are different answers and the caller has to be able to tell them apart.
     # Sharing the "AUR" tag with the metadata lookups loses whichever failed
@@ -1430,7 +1434,8 @@ def aur_review(name: str) -> dict:
                       tag=tag)
     if not text:
         why = FAILURES.get(tag, "")
-        if why.startswith("HTTP 404"):
+        # The wording is fetch_text's: "returned an error (HTTP 404)".
+        if "HTTP 404" in why:
             return {"name": name, "reason": "missing",
                     "error": f"There is no AUR package called {name}."}
         return {"name": name, "reason": "unreachable",
@@ -1455,7 +1460,7 @@ def aur_review(name: str) -> dict:
         "name": name,
         "pkgbuild": text,
         "sha256": digest,
-        "meta": aur_meta(name),
+        "meta": aur_meta(pkgname or name),
         "seen_before": bool(prev),
         "unchanged": prev.get("sha256") == digest,
         "previously_accepted": prev.get("accepted", ""),
@@ -1467,8 +1472,43 @@ def aur_review(name: str) -> dict:
     }
 
 
+def aur_review_chain(name: str) -> dict:
+    """The review of name and of every AUR package installing it needs.
+
+    The requested package's review is at the top level, as it always was;
+    "chain" lists every script to be read, the requested one first, each
+    with what needs it. One dialog, one acceptance: the way yay and paru
+    show a chain, and the same rule as a single package -- nothing runs that
+    was not shown.
+    """
+    import transaction as tx
+    chain = tx.aur_chain(name)
+    if chain["error"]:
+        missing = chain["error"].startswith("There is no AUR package")
+        return {"name": name, "reason": "missing" if missing else "unreachable",
+                "error": chain["error"], "retryable": not missing}
+    reviews = []
+    for e in chain["packages"]:
+        r = aur_review(e["pkgbase"], e["pkgnames"][0])
+        if r.get("error"):
+            return {**r, "name": name}
+        r.update(pkgnames=e["pkgnames"], needed_by=e["needed_by"],
+                 provides_for=e["provides_for"])
+        reviews.append(r)
+    top = {**reviews[0], "name": name, "chain": reviews,
+           "repo": chain["repo"], "missing": chain["missing"]}
+    if chain["missing"]:
+        one = len(chain["missing"]) == 1
+        top["blocked"] = (f"{name} needs {tx._names(chain['missing'])}, which "
+                          f"{'is' if one else 'are'} not in Arch's repositories or "
+                          f"the AUR, under that name or provided by another "
+                          f"package. It cannot be installed until its "
+                          f"maintainer updates it.")
+    return top
+
+
 def cmd_aur_review(args) -> int:
-    r = aur_review(args.name)
+    r = aur_review_chain(args.name)
     print(json.dumps(r, indent=2))
     # A failed review exits non-zero so a script can tell, while still
     # printing the JSON that says which kind of failure it was.
@@ -1482,21 +1522,40 @@ def cmd_aur_accept(args) -> int:
     changed script under the same version number, and that is precisely the
     case worth catching.
     """
-    r = aur_review(args.name)
-    if r.get("error"):
-        print(json.dumps(r))
+    r = aur_review_chain(args.name)
+    if r.get("error") or r.get("blocked"):
+        print(json.dumps({"error": r.get("error") or r.get("blocked")}))
         return 1
+    chain = r["chain"]
+    # --expect pkgbase=sha256 for every script the window showed. Without
+    # it, whatever the AUR serves at this moment was recorded as read --
+    # including a script changed in the minute somebody spent reading the
+    # old one. Each is checked, and so is the set: a dependency that
+    # appeared since was not shown at all.
+    expect = dict(e.split("=", 1) for e in (args.expect or []) if "=" in e)
+    if expect:
+        if set(expect) != {c["name"] for c in chain}:
+            print(json.dumps({"error": f"What {args.name} needs from the AUR "
+                                       f"changed while you were reading. Review "
+                                       f"it again."}))
+            return 1
+        for c in chain:
+            if expect[c["name"]] != c["sha256"]:
+                print(json.dumps({"error": f"The build script for {c['name']} "
+                                           f"changed while you were reading it. "
+                                           f"Review it again."}))
+                return 1
     from datetime import datetime, timezone
     acc = aur_accepted()
-    acc[args.name] = {
-        "sha256": r["sha256"],
-        "pkgbuild": r["pkgbuild"],
-        "accepted": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    }
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for c in chain:
+        acc[c["name"]] = {"sha256": c["sha256"], "pkgbuild": c["pkgbuild"],
+                          "accepted": now}
     path = aur_accept_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(acc, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"accepted": args.name, "sha256": r["sha256"]}))
+    print(json.dumps({"accepted": args.name,
+                      "packages": [c["name"] for c in chain]}))
     return 0
 
 
@@ -2384,6 +2443,8 @@ def main() -> int:
 
     aa = sub.add_parser("aur-accept", help="record that a build script was read")
     aa.add_argument("name")
+    # pkgbase=sha256, once per script shown: refuse if any changed since.
+    aa.add_argument("--expect", action="append")
     aa.set_defaults(fn=cmd_aur_accept)
 
     ex = sub.add_parser("export-list", help="write the installed app list")

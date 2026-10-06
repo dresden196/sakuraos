@@ -748,120 +748,318 @@ def _aur_accepted_sha(name: str) -> str:
     return (acc.get(name) or {}).get("sha256", "")
 
 
-def _aur_srcinfo_deps(name: str) -> list:
-    """Dependencies declared by the package, from .SRCINFO.
+AUR = "https://aur.archlinux.org"
+# More than any real application needs. A chain longer than this is not
+# something to build from a store window, and it bounds a dependency loop the
+# visited check below somehow missed.
+_AUR_CHAIN_LIMIT = 25
+_DEP_KEYS = ("depends", "makedepends", "checkdepends",
+             "depends_x86_64", "makedepends_x86_64", "checkdepends_x86_64")
+
+
+def _bare(dep: str) -> str:
+    """A dependency without its version constraint: pacman resolves that."""
+    return re.split(r"[<>=]", dep.strip())[0]
+
+
+def _aur_get(path: str) -> str:
+    """GET from the AUR, or "" when it cannot be had."""
+    req = urllib.request.Request(f"{AUR}{path}",
+                                 headers={"User-Agent": "sakura-store/0.1"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return r.read().decode("utf-8", "replace")
+    except Exception:
+        return ""
+
+
+def _aur_info(names: list) -> dict:
+    """pkgname -> the AUR's record, for those of them that exist."""
+    if not names:
+        return {}
+    query = "&".join(f"arg[]={urllib.parse.quote(n)}" for n in names)
+    try:
+        data = json.loads(_aur_get(f"/rpc/v5/info?{query}") or "{}")
+    except ValueError:
+        return {}
+    return {r["Name"]: r for r in data.get("results", []) if r.get("Name")}
+
+
+def _aur_provider(dep: str) -> dict:
+    """The AUR package that provides dep under another name, most voted first.
+
+    displaylink depends on "evdi", and no AUR package is called that:
+    evdi-dkms provides it. Looking names up alone said "evdi" did not exist
+    anywhere -- wrong, and a dead end for the person reading it.
+    """
+    try:
+        data = json.loads(
+            _aur_get(f"/rpc/v5/search/{urllib.parse.quote(dep)}?by=provides") or "{}")
+    except ValueError:
+        return {}
+    candidates = sorted(data.get("results", []),
+                        key=lambda r: -(r.get("NumVotes") or 0))[:10]
+    info = _aur_info([c["Name"] for c in candidates])
+    for c in candidates:
+        r = info.get(c["Name"]) or {}
+        if dep == r.get("Name") or dep in [_bare(p) for p in r.get("Provides") or []]:
+            return r
+    return {}
+
+
+def _srcinfo_deps(pkgbase: str, pkgname: str):
+    """What building pkgbase and installing pkgname from it need, or None.
+
+    From .SRCINFO, which is what makepkg itself reads: the build-time
+    dependencies, the package's own runtime ones, and the x86_64-only ones of
+    both. A split package's section can replace the shared depends with its
+    own, so the one being installed is the one that counts.
 
     makepkg -s would resolve these itself, but it does that by calling sudo,
     and there is no terminal behind a store window to answer it. So they are
     installed first, through the same polkit prompt as any other install, and
     makepkg is then run with no privileges at all.
     """
-    import urllib.request
-    url = f"https://aur.archlinux.org/cgit/aur.git/plain/.SRCINFO?h={name}"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "sakura-store/0.1"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            text = r.read().decode("utf-8", "replace")
-    except Exception:
-        return []
-    deps = []
+    text = _aur_get(f"/cgit/aur.git/plain/.SRCINFO?h={urllib.parse.quote(pkgbase)}")
+    if not text.strip():
+        return None
+    shared: dict[str, list] = {}
+    own: dict[str, list] = {}
+    section = None
     for line in text.splitlines():
-        k, _, v = line.partition("=")
-        if k.strip() in ("depends", "makedepends") and v.strip():
-            # Strip any version constraint: pacman resolves that itself.
-            deps.append(re.split(r"[<>=]", v.strip())[0])
-    return sorted(set(deps))
+        key, _, value = line.strip().partition(" = ")
+        if not value:
+            continue
+        if key == "pkgname":
+            section = value.strip()
+            continue
+        if key in _DEP_KEYS:
+            target = shared if section is None else own if section == pkgname else None
+            if target is not None:
+                target.setdefault(key.split("_")[0], []).append(_bare(value))
+    runtime = own.get("depends") if "depends" in own else shared.get("depends", [])
+    deps = (shared.get("makedepends", []) + shared.get("checkdepends", [])
+            + list(runtime))
+    return list(dict.fromkeys(d for d in deps if d))
 
 
-def _aur_unresolvable(deps: list) -> tuple[list, list, list]:
-    """Split deps into (to install, only in the AUR, nowhere at all).
+def _classify(deps: list) -> tuple[set, list]:
+    """(repository packages still to install, names pacman cannot find).
 
-    Two things went wrong by handing the whole list to pacman -S. A
-    dependency that is only in the AUR -- gdbuspp for openvpn3, or electron37
-    once Arch dropped it -- failed the install with "the dependencies could
-    not be installed" and no name, so nobody could tell what to do. And one
-    that is already installed but no longer in any repository failed too,
-    because -S --needed still has to find it in a sync database: the same
-    package that installed on a machine that had electron37 from before
-    could not be reinstalled there.
+    Anything the system already satisfies is neither, versioned provides
+    included. Handing those to pacman -S failed too: an installed package no
+    repository carries any more -- electron37 on a machine that had it from
+    before -- could not be "installed" again.
     """
     if not deps:
-        return [], [], []
-    # pacman -T prints the ones the installed system does not satisfy,
-    # versioned provides included.
-    r = subprocess.run(["pacman", "-T", "--"] + deps,
-                       capture_output=True, text=True)
+        return set(), []
+    r = subprocess.run(["pacman", "-T", "--"] + deps, capture_output=True, text=True)
     unmet = r.stdout.split()
     if not unmet:
-        return [], [], []
-    # -Sp resolves names the way -S will, provides included, without
-    # installing anything; every name it cannot find is reported.
+        return set(), []
     r = subprocess.run(["pacman", "-Sp", "--print-format", "%n", "--"] + unmet,
                        capture_output=True, text=True)
     missing = re.findall(r"target not found: (\S+)", r.stderr)
-    if not missing:
-        return unmet, [], []
-    in_aur = set()
-    try:
-        query = "&".join(f"arg[]={urllib.parse.quote(m)}" for m in missing)
-        req = urllib.request.Request(
-            f"https://aur.archlinux.org/rpc/v5/info?{query}",
-            headers={"User-Agent": "sakura-store/0.1"})
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            in_aur = {p["Name"] for p in json.load(resp).get("results", [])}
-    except Exception:
-        pass
-    return ([d for d in unmet if d not in missing],
-            [m for m in missing if m in in_aur],
-            [m for m in missing if m not in in_aur])
+    return {d for d in unmet if d not in missing}, missing
+
+
+def _kernel_headers() -> list:
+    """Headers for each installed kernel: what DKMS builds against.
+
+    Nothing asks for them by name -- evdi-dkms depends on dkms, and dkms only
+    suggests headers -- so a DKMS package installed without them builds
+    nothing and leaves no module, with the error in a pacman hook's output
+    that a store window does not show.
+    """
+    out = []
+    for f in sorted(Path("/usr/lib/modules").glob("*/pkgbase")):
+        try:
+            base = f.read_text().strip()
+        except OSError:
+            continue
+        if base and f"{base}-headers" not in out:
+            out.append(f"{base}-headers")
+    return out
+
+
+def aur_chain(name: str) -> dict:
+    """Every AUR package that installing name needs, and in what order.
+
+    {"packages": [...], "order": [pkgbase, ...], "repo": [...],
+     "missing": [...], "error": ""}
+
+    packages are in the order they were found, the requested one first, each
+    {"pkgbase", "pkgnames", "version", "needed_by", "provides_for"}. order
+    puts every dependency before what needs it, the requested package last.
+    repo is what the repositories supply for the whole chain; missing is what
+    nothing supplies.
+    """
+    result = {"packages": [], "order": [], "repo": [], "missing": [], "error": ""}
+    root = _aur_info([name]).get(name)
+    if not root:
+        result["error"] = f"There is no AUR package called {name}."
+        return result
+
+    entries: dict[str, dict] = {}       # pkgbase -> entry
+    owner: dict[str, str] = {}          # name or provided name -> pkgbase
+    links: list[tuple[str, str]] = []   # (needing pkgbase, needed name)
+    repo: set = set()
+    missing: list = []
+    queued = {name}
+    dkms = False
+    todo = [(root, "", "")]
+    while todo:
+        info, needed_by, provides_for = todo.pop(0)
+        pkg = info["Name"]
+        base = info.get("PackageBase") or pkg
+        if base in entries:
+            # Another package from a pkgbase already in the chain: one build
+            # makes both.
+            if pkg not in entries[base]["pkgnames"]:
+                entries[base]["pkgnames"].append(pkg)
+            owner[pkg] = base
+            continue
+        if len(entries) >= _AUR_CHAIN_LIMIT:
+            result["error"] = (f"{name} needs more than {_AUR_CHAIN_LIMIT} packages "
+                               f"from the AUR, which is more than the store will "
+                               f"build. yay or paru can, from a terminal.")
+            return result
+        deps = _srcinfo_deps(base, pkg)
+        if deps is None:
+            result["error"] = (f"The build information for {base} could not be "
+                               f"fetched from the AUR.")
+            return result
+        entries[base] = {"pkgbase": base, "pkgnames": [pkg],
+                         "version": info.get("Version", ""),
+                         "needed_by": needed_by, "provides_for": provides_for}
+        owner[pkg] = base
+        for prov in info.get("Provides") or []:
+            owner.setdefault(_bare(prov), base)
+        dkms = dkms or "dkms" in deps
+
+        # Already in the chain, or on its way into it: only the ordering
+        # needs recording.
+        fresh = []
+        for d in deps:
+            if d in owner or d in queued:
+                links.append((base, d))
+            else:
+                fresh.append(d)
+        found_repo, not_found = _classify(fresh)
+        repo |= found_repo
+        if not not_found:
+            continue
+        by_name = _aur_info(not_found)
+        for d in not_found:
+            hit, via = by_name.get(d), ""
+            if not hit:
+                hit, via = _aur_provider(d), d
+            if not hit:
+                missing.append(d)
+                continue
+            links.append((base, d))
+            if hit["Name"] in queued or hit["Name"] in owner:
+                continue
+            queued.update({d, hit["Name"]})
+            todo.append((hit, pkg, via))
+
+    if dkms:
+        headers, _ = _classify(_kernel_headers())
+        repo |= headers
+
+    needs: dict[str, set] = {b: set() for b in entries}
+    for frm, dep in links:
+        to = owner.get(dep)
+        if to and to != frm:
+            needs[frm].add(to)
+    order: list[str] = []
+    seen: set = set()
+
+    def visit(b: str) -> None:
+        if b in seen:
+            return
+        seen.add(b)
+        for dep in sorted(needs[b]):
+            visit(dep)
+        order.append(b)
+
+    visit(root.get("PackageBase") or name)
+    for b in entries:                       # anything only reached sideways
+        visit(b)
+
+    result.update(packages=list(entries.values()), order=order,
+                  repo=sorted(repo), missing=missing)
+    return result
 
 
 def _names(items: list) -> str:
     return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def install_aur(name: str) -> int:
-    """Build and install an AUR package the user has read the script for.
+def _pkgbuild(pkgbase: str) -> str:
+    return _aur_get(f"/cgit/aur.git/plain/PKGBUILD?h={urllib.parse.quote(pkgbase)}")
 
-    An AUR package is an unreviewed build script that compiles on this
-    machine. The store shows it first and records the acceptance by hash;
-    this refuses anything that does not match what was accepted, so the
-    check cannot be walked past by calling the engine directly either.
+
+def install_aur(name: str) -> int:
+    """Build and install an AUR package, and the AUR packages it needs.
+
+    Each is an unreviewed build script that compiles on this machine. The
+    store shows every one of them first and records each acceptance by hash;
+    this refuses any that does not match what was accepted, so the check
+    cannot be walked past by calling the engine directly either.
+
+    It used to build the one package and install the rest from the
+    repositories, which works until something it needs is itself only in the
+    AUR -- openvpn3 needs gdbuspp, displaylink needs evdi -- and then the
+    install stopped there.
     """
     import hashlib
     import shutil
     import tempfile
-    import urllib.request
 
-    # 1. The script must be the exact one this user read. Not the package, not
-    #    the version -- the bytes. A maintainer can publish a changed script
-    #    under an unchanged version number, and that is the case worth
-    #    catching.
-    accepted = _aur_accepted_sha(name)
-    if not accepted:
-        emit(FAILED, error=f"{name} has not been reviewed yet. Read its build "
-                           f"script first -- SakuraOS will not run one it has "
-                           f"not shown you.", recoverable=False)
-        return 2
-    try:
-        req = urllib.request.Request(
-            f"https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h={name}",
-            headers={"User-Agent": "sakura-store/0.1"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            current = r.read().decode("utf-8", "replace")
-    except Exception as e:
-        emit(FAILED, error=f"The build script for {name} could not be "
-                           f"fetched: {e}", recoverable=True)
-        return 2
-    if hashlib.sha256(current.encode()).hexdigest() != accepted:
-        emit(FAILED, error=f"The build script for {name} has changed since you "
-                           f"read it. Review it again before installing.",
-             recoverable=False)
-        return 2
-
-    # 2. Dependencies, through polkit, before anything of the package's own
-    #    runs. Marked --asdeps so removing the package can take them with it.
     emit(RESOLVING, source="aur", app=name)
+    chain = aur_chain(name)
+    if chain["error"]:
+        emit(FAILED, error=chain["error"], recoverable=True)
+        return 2
+    if chain["missing"]:
+        one = len(chain["missing"]) == 1
+        emit(FAILED, error=f"{name} needs {_names(chain['missing'])}, which "
+                           f"{'is' if one else 'are'} not in Arch's repositories "
+                           f"or the AUR, under that name or provided by another "
+                           f"package. The package needs updating by its "
+                           f"maintainer.", recoverable=False)
+        return 2
+    entries = {e["pkgbase"]: e for e in chain["packages"]}
+    root_base = chain["packages"][0]["pkgbase"]
+
+    # 1. Every script must be the exact one this user read. Not the package,
+    #    not the version -- the bytes. A maintainer can publish a changed
+    #    script under an unchanged version number, and that is the case
+    #    worth catching.
+    for e in chain["packages"]:
+        base = e["pkgbase"]
+        what = name if base == root_base else f"{base} (which {e['needed_by']} needs)"
+        accepted = _aur_accepted_sha(base)
+        if not accepted:
+            emit(FAILED, error=f"The build script for {what} has not been reviewed "
+                               f"yet. SakuraOS will not run one it has not shown "
+                               f"you.", recoverable=False)
+            return 2
+        current = _pkgbuild(base)
+        if not current:
+            emit(FAILED, error=f"The build script for {what} could not be "
+                               f"fetched.", recoverable=True)
+            return 2
+        if hashlib.sha256(current.encode()).hexdigest() != accepted:
+            emit(FAILED, error=f"The build script for {what} has changed since "
+                               f"you read it. Review it again before installing.",
+                 recoverable=False)
+            return 2
+
+    # 2. What the repositories supply, for the whole chain at once, through
+    #    polkit, before anything of the packages' own runs. --asdeps so
+    #    removing the application can take them with it.
     # base-devel first: building from source needs a compiler and the rest of
     # the toolchain, and a desktop install rightly does not ship one. It is
     # pulled in on the first AUR install rather than on every machine that
@@ -872,81 +1070,86 @@ def install_aur(name: str) -> int:
     # FileNotFoundError naming 'git' after the dependencies had already been
     # installed -- which only showed up on a machine that had never been
     # developed on. Every VM used for testing already had it.
-    deps, aur_only, nowhere = _aur_unresolvable(
-        ["base-devel", "git"] + _aur_srcinfo_deps(name))
-    if nowhere:
-        emit(FAILED, error=f"{name} needs {_names(nowhere)}, which "
-                           f"{'is' if len(nowhere) == 1 else 'are'} not in "
-                           f"Arch's repositories or the AUR. The package "
-                           f"needs updating by its maintainer.",
-             recoverable=False)
-        return 2
-    if aur_only:
-        one = len(aur_only) == 1
-        emit(FAILED, error=f"{name} needs {_names(aur_only)}, which "
-                           f"{'is' if one else 'are'} not in Arch's "
-                           f"repositories, only in the AUR. Install "
-                           f"{'it' if one else 'them'} from the AUR first, "
-                           f"then {name}. If {'it is' if one else 'they are'} "
-                           f"an old version of something Arch now ships "
-                           f"newer, the package needs updating by its "
-                           f"maintainer instead.",
-             recoverable=False)
-        return 2
-    if deps:
+    repo, _ = _classify(sorted({"base-devel", "git"} | set(chain["repo"])))
+    if repo:
         rc = stream(["pkexec", "pacman", "-S", "--noconfirm", "--needed",
-                     "--asdeps", "--"] + deps, DOWNLOADING, _pacman_progress)
+                     "--asdeps", "--"] + sorted(repo), DOWNLOADING, _pacman_progress)
         if rc != 0:
-            emit(FAILED, error=f"The dependencies of {name} could not be "
-                               f"installed.", recoverable=True)
+            emit(FAILED, error=f"The packages {name} needs from the repositories "
+                               f"could not be installed.", recoverable=True)
             return rc
 
-    # 3. Build as the ordinary user. makepkg refuses to run as root and it is
-    #    right to: this is the step that executes somebody else's shell script.
+    # 3. Build each as the ordinary user, dependencies first, and install it
+    #    before the next one builds against it. makepkg refuses to run as root
+    #    and it is right to: this is the step that executes somebody else's
+    #    shell script.
     work = tempfile.mkdtemp(prefix="sakura-aur-")
     try:
         if not shutil.which("git"):
             emit(FAILED, error="git is needed to fetch from the AUR and is "
                                "not installed.", recoverable=True)
             return 2
-        # Each step below says what it is, with percent=0 so the ring spins.
-        # Without it the ring stayed full from the dependency download through
-        # the whole compile, under "Installing", which read as finished or
-        # stuck for as long as the build took.
-        emit(DOWNLOADING, percent=0, detail="Fetching the build script")
-        rc = stream(["git", "clone", "--depth", "1",
-                     f"https://aur.archlinux.org/{name}.git",
-                     f"{work}/{name}"], DOWNLOADING)
-        if rc != 0:
-            emit(FAILED, error=f"{name} could not be fetched from the AUR.",
-                 recoverable=True)
-            return rc
+        total = len(chain["order"])
+        for i, base in enumerate(chain["order"], 1):
+            e = entries[base]
+            is_root = base == root_base
+            label = base if total == 1 else f"{base} ({i} of {total})"
+            # Shown beside the stage in the window, so a chain says which of
+            # its packages is building rather than "Building" three times.
+            step = {"step": label} if total > 1 else {}
+            # Each step says what it is, with percent=0 so the ring spins.
+            # Without it the ring stayed full from the dependency download
+            # through the whole compile, under "Installing", which read as
+            # finished or stuck for as long as the build took.
+            emit(DOWNLOADING, percent=0, detail=f"Fetching the build script for {label}",
+                 **step)
+            rc = stream(["git", "clone", "--depth", "1", f"{AUR}/{base}.git",
+                         f"{work}/{base}"], DOWNLOADING)
+            if rc != 0:
+                emit(FAILED, error=f"{base} could not be fetched from the AUR.",
+                     recoverable=True)
+                return rc
 
-        built = Path(work) / name
-        emit(BUILDING, percent=0,
-             detail="Building from source. This can take a while.")
-        rc = stream(["env", "-C", str(built), "makepkg", "--noconfirm",
-                     "--noprogressbar", "--nodeps"], BUILDING)
-        if rc != 0:
-            emit(FAILED, error=f"{name} failed to build. The build script ran "
-                               f"but did not produce a package.",
-                 recoverable=False)
-            return rc
+            built = Path(work) / base
+            emit(BUILDING, percent=0,
+                 detail=f"Building {label} from source. This can take a while.", **step)
+            rc = stream(["env", "-C", str(built), "makepkg", "--noconfirm",
+                         "--noprogressbar", "--nodeps"], BUILDING)
+            if rc != 0:
+                emit(FAILED, error=(f"{name} failed to build. The build script "
+                                    f"ran but did not produce a package."
+                                    if is_root else
+                                    f"{base}, which {e['needed_by']} needs, "
+                                    f"failed to build, so {name} was not "
+                                    f"installed."),
+                     recoverable=False)
+                return rc
 
-        # makepkg also emits a -debug package when debug symbols are on, which
-        # they are by default on Arch. Installing it would silently double the
-        # download and leave symbol packages nobody asked for on the machine.
-        pkgs = sorted(str(f) for f in built.glob("*.pkg.tar.*")
-                      if not str(f).endswith(".sig")
-                      and "-debug-" not in f.name)
-        if not pkgs:
-            emit(FAILED, error=f"{name} built without producing a package "
-                               f"file.", recoverable=False)
-            return 2
+            # makepkg also emits a -debug package when debug symbols are on,
+            # which they are by default on Arch, and a split pkgbase builds
+            # packages nobody asked for. Only the ones the chain needs go in.
+            keep = []
+            for f in sorted(built.glob("*.pkg.tar.*")):
+                if f.name.endswith(".sig"):
+                    continue
+                q = subprocess.run(["pacman", "-Qqp", str(f)],
+                                   capture_output=True, text=True)
+                if q.stdout.strip() in e["pkgnames"]:
+                    keep.append(str(f))
+            if not keep:
+                emit(FAILED, error=f"{base} built without producing a package "
+                                   f"file.", recoverable=False)
+                return 2
 
-        # 4. Install what was just built, again through polkit.
-        emit(INSTALLING, percent=0)
-        return stream(["pkexec", "pacman", "-U", "--noconfirm", "--"] + pkgs,
-                      INSTALLING, _pacman_progress)
+            # Through polkit, which keeps the authorisation for a few
+            # minutes, so a chain asks for the password once rather than at
+            # every package. Dependencies --asdeps, like the repository ones.
+            emit(INSTALLING, percent=0, **step)
+            rc = stream(["pkexec", "pacman", "-U", "--noconfirm"]
+                        + ([] if is_root else ["--asdeps"]) + ["--"] + keep,
+                        INSTALLING, _pacman_progress)
+            if rc != 0:
+                return rc
+        return 0
     finally:
         shutil.rmtree(work, ignore_errors=True)

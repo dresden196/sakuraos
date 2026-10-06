@@ -1626,9 +1626,16 @@ QQC2.ApplicationWindow {
                         visible: !confirmRemove.blocked
                         enabled: !backend.planningRemoval && !backend.busy
                         text: "Uninstall"
-                        onClicked: backend.remove(confirmRemove.plan.id,
-                                                  confirmRemove.plan.source,
-                                                  alsoData.checked)
+                        // The sheet closes once the removal is queued: its
+                        // progress is in the queue panel and on the app page
+                        // like any other job. Left open it sat over the window
+                        // after the removal had finished, taking the keyboard.
+                        onClicked: {
+                            backend.remove(confirmRemove.plan.id,
+                                           confirmRemove.plan.source,
+                                           alsoData.checked)
+                            backend.clearRemovalPlan()
+                        }
                     }
                 }
             }
@@ -2892,9 +2899,21 @@ QQC2.ApplicationWindow {
                                     border.width: 1; border.color: root.line }
 
             readonly property var rv: backend.aurReview || ({})
-            readonly property string kind: rv.kind || ""
-            readonly property var meta: rv.meta || ({})
+            // Every script installing this needs, the requested one first.
+            // An AUR package that needs another AUR package used to stop at
+            // "could not be installed"; now each of them is read here, and
+            // accepting is accepting all of them.
+            readonly property var chain: rv.chain && rv.chain.length ? rv.chain : [rv]
+            property int sel: 0
+            readonly property var cur: chain[Math.min(sel, chain.length - 1)] || ({})
+            readonly property string kind: cur.kind || ""
+            readonly property var meta: cur.meta || ({})
+            readonly property bool allUnchanged:
+                chain.every(function (c) { return c.kind === "unchanged" })
             readonly property bool ready: !backend.aurReviewLoading && !!rv.pkgbuild
+                                          && !rv.blocked
+            onRvChanged: { sel = 0; showWhole = false }
+            onSelChanged: showWhole = false
             // The diff is the point when there is one. Package takeover shows
             // up as four changed lines, and four lines are readable where two
             // hundred are not -- so the changed case opens on the diff and
@@ -2913,25 +2932,98 @@ QQC2.ApplicationWindow {
                     QQC2.Label {
                         Layout.fillWidth: true
                         text: root.aurName === "" ? "Build script"
-                                                  : "The build script for " + root.aurName
+                              : aurReviewDialog.chain.length > 1
+                                ? "The build scripts for " + root.aurName
+                                : "The build script for " + root.aurName
                         elide: Text.ElideRight
                         color: root.text; font.pixelSize: 19; font.weight: Font.DemiBold
+                    }
+
+                    // ---- the chain: one entry per script to be read -------
+                    QQC2.Label {
+                        Layout.fillWidth: true
+                        visible: aurReviewDialog.ready && aurReviewDialog.chain.length > 1
+                        wrapMode: Text.WordWrap
+                        readonly property int more: aurReviewDialog.chain.length - 1
+                        text: root.aurName + " needs " + more + " more package"
+                              + (more === 1 ? "" : "s") + " from the AUR. Each is a "
+                              + "build script that will run on this machine; read every "
+                              + "one. Installing builds them in order, what is needed "
+                              + "first, and removing " + root.aurName
+                              + " later removes them too."
+                        color: root.dim; font.pixelSize: 12
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        visible: aurReviewDialog.ready && aurReviewDialog.chain.length > 1
+                        spacing: 8
+                        Repeater {
+                            model: aurReviewDialog.chain
+                            delegate: Rectangle {
+                                id: chainChip
+                                required property var modelData
+                                required property int index
+                                readonly property bool picked: aurReviewDialog.sel === index
+                                implicitWidth: chipCol.implicitWidth + 24
+                                implicitHeight: chipCol.implicitHeight + 12
+                                radius: 8
+                                color: picked ? Qt.rgba(root.accent.r, root.accent.g,
+                                                        root.accent.b, 0.16)
+                                              : (chipHover.hovered ? root.cardUp : "transparent")
+                                border.width: 1
+                                border.color: picked ? root.accent : root.line
+                                HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: aurReviewDialog.sel = chainChip.index }
+                                ColumnLayout {
+                                    id: chipCol
+                                    anchors.centerIn: parent
+                                    spacing: 1
+                                    RowLayout {
+                                        spacing: 6
+                                        // Read already, changed, or never seen:
+                                        // the same three states as one script.
+                                        Rectangle {
+                                            width: 6; height: 6; radius: 3
+                                            color: chainChip.modelData.kind === "unchanged"
+                                                   ? root.dim : root.warn
+                                        }
+                                        QQC2.Label {
+                                            text: chainChip.modelData.name
+                                            color: root.text; font.pixelSize: 13
+                                            font.weight: chainChip.picked ? Font.DemiBold
+                                                                          : Font.Normal
+                                        }
+                                    }
+                                    QQC2.Label {
+                                        text: !chainChip.modelData.needed_by
+                                              ? "the one you asked for"
+                                              : chainChip.modelData.provides_for
+                                                ? "provides " + chainChip.modelData.provides_for
+                                                  + " for " + chainChip.modelData.needed_by
+                                                : "needed by " + chainChip.modelData.needed_by
+                                        color: root.dim; font.pixelSize: 11
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     QQC2.Label {
                         Layout.fillWidth: true
                         visible: aurReviewDialog.ready
                         wrapMode: Text.WordWrap
-                        text: aurReviewDialog.kind === "changed"
+                        text: (aurReviewDialog.chain.length > 1
+                               ? aurReviewDialog.cur.name + ": " : "")
+                              + (aurReviewDialog.kind === "changed"
                               ? "You accepted a different version of this script. "
                                 + "What changed is below; the whole script is a click away."
                               : aurReviewDialog.kind === "unchanged"
                               ? "This is the same script you read before"
-                                + (aurReviewDialog.rv.previously_accepted
-                                   ? " on " + aurReviewDialog.rv.previously_accepted.slice(0, 10) + "."
+                                + (aurReviewDialog.cur.previously_accepted
+                                   ? " on " + aurReviewDialog.cur.previously_accepted.slice(0, 10) + "."
                                    : ".")
                               : "Nobody has reviewed this. It is shell written by "
-                                + "another user and it will run on this machine."
+                                + "another user and it will run on this machine.")
                         color: aurReviewDialog.kind === "unchanged" ? root.dim : root.warn
                         font.pixelSize: 12
                     }
@@ -3000,11 +3092,12 @@ QQC2.ApplicationWindow {
                 }
 
                 QQC2.Label {
-                    visible: !backend.aurReviewLoading && !!aurReviewDialog.rv.error
+                    visible: !backend.aurReviewLoading
+                             && !!(aurReviewDialog.rv.error || aurReviewDialog.rv.blocked)
                     Layout.margins: 24
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: aurReviewDialog.rv.error || ""
+                    text: aurReviewDialog.rv.error || aurReviewDialog.rv.blocked || ""
                     color: "#ff9db0"; font.pixelSize: 13
                 }
 
@@ -3041,8 +3134,8 @@ QQC2.ApplicationWindow {
                             spacing: 0
                             Repeater {
                                 model: codeView.parent.diffMode
-                                       ? (aurReviewDialog.rv.diff || [])
-                                       : (aurReviewDialog.rv.pkgbuild || "").split("\n")
+                                       ? (aurReviewDialog.cur.diff || [])
+                                       : (aurReviewDialog.cur.pkgbuild || "").split("\n")
                                 delegate: QQC2.Label {
                                     required property string modelData
                                     text: modelData
@@ -3078,14 +3171,18 @@ QQC2.ApplicationWindow {
                     Item { Layout.fillWidth: true }
                     QQC2.Label {
                         visible: aurReviewDialog.ready
-                        text: aurReviewDialog.kind === "unchanged"
-                              ? "Already read" : "Read this before accepting"
+                        text: aurReviewDialog.allUnchanged ? "Already read"
+                              : aurReviewDialog.chain.length > 1
+                                ? "Read every one before accepting"
+                                : "Read this before accepting"
                         color: root.dim; font.pixelSize: 12
                     }
                     Action {
                         enabled: aurReviewDialog.ready && !backend.busy
-                        text: aurReviewDialog.kind === "unchanged"
-                              ? "Install" : "I have read it \u2014 install"
+                        text: aurReviewDialog.allUnchanged ? "Install"
+                              : aurReviewDialog.chain.length > 1
+                                ? "I have read them \u2014 install"
+                                : "I have read it \u2014 install"
                         onClicked: {
                             backend.acceptAurAndInstall(root.aurName)
                             aurReviewDialog.close()

@@ -511,7 +511,20 @@ void Backend::acceptAurAndInstall(const QString &name)
     }
     // Recorded first and separately: the acceptance is what a later install
     // is checked against, and it has to survive a build that fails.
-    auto *p = run({QStringLiteral("aur-accept"), name});
+    //
+    // With the hash of every script this dialog showed. Without them the
+    // engine recorded whatever the AUR served at the moment of accepting,
+    // which need not be what was on screen -- and with a chain, a dependency
+    // that appeared since would be accepted without ever being shown.
+    QStringList args{QStringLiteral("aur-accept"), name};
+    const QVariantList chain = m_aurReview.value(QStringLiteral("chain")).toList();
+    for (const QVariant &v : chain) {
+        const QVariantMap m = v.toMap();
+        args << QStringLiteral("--expect")
+             << m.value(QStringLiteral("name")).toString() + QLatin1Char('=')
+                    + m.value(QStringLiteral("sha256")).toString();
+    }
+    auto *p = run(args);
     connect(p, &QProcess::finished, this, [this, p, name] {
         const QVariantMap m = QJsonDocument::fromJson(p->readAllStandardOutput())
                                   .object().toVariantMap();
@@ -629,9 +642,11 @@ QVariantMap Backend::jobToMap(const Job &j) const
     m.insert(QStringLiteral("queued"),
              j.proc == nullptr && j.stage == QLatin1String("queued"));
     m.insert(QStringLiteral("failed"), j.stage == QLatin1String("failed"));
-    m.insert(QStringLiteral("progress"), formatProgress(j.bytes, j.total,
-                                                        j.count, j.countTotal,
-                                                        j.stage));
+    // A download count when there is one; otherwise, in an AUR chain, which
+    // package this is.
+    const QString progress = formatProgress(j.bytes, j.total, j.count,
+                                            j.countTotal, j.stage);
+    m.insert(QStringLiteral("progress"), progress.isEmpty() ? j.step : progress);
     return m;
 }
 
@@ -791,6 +806,9 @@ void Backend::onJobLine(int index, const QJsonObject &o)
         const QString d = o[QStringLiteral("detail")].toString();
         if (!d.isEmpty()) {
             j.detail = d;
+        }
+        if (o.contains(QStringLiteral("step"))) {
+            j.step = o[QStringLiteral("step")].toString();
         }
     }
     Q_EMIT jobsChanged();
