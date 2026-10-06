@@ -129,6 +129,19 @@ private Q_SLOTS:
                  "an AUR build must not run beside a pacman transaction");
     }
 
+    // "repo" is the engine's name for the repositories, and it is a pacman
+    // transaction like the rest. Missing from the lane, a repository install
+    // ran beside an AUR build and the second met the first one's lock.
+    void repoSharesThePacmanLane()
+    {
+        Backend b;
+        b.install(QStringLiteral("one"), QStringLiteral("repo"));
+        b.install(QStringLiteral("two"), QStringLiteral("aur"));
+        QVERIFY(waitForIdle(b));
+        QVERIFY2(!overlapped(QStringLiteral("one"), QStringLiteral("two")),
+                 "a repository install must not run beside an AUR build");
+    }
+
     // A double click is one install, not two.
     void duplicatesAreIgnored()
     {

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>SakuraOS</vendor>
+  <vendor_url>https://sakuraos.org</vendor_url>
+  <!--
+    The App Store installs and removes repository and AUR packages through
+    pkexec pacman. With no action describing pacman, polkit fell back to its
+    generic one, and the password prompt showed the truncated pacman command
+    line, flags and package list and all. That is not something anyone should
+    be asked to judge.
+
+    auth_admin_keep, so an AUR install asks once rather than twice: it needs
+    pacman for the dependencies, then builds as the user, then needs pacman
+    again for the package it built. polkit keeps the authorisation for the
+    process that asked, for a few minutes. That is the store's own install,
+    not the build script it runs, which is a different process; and that
+    process installs the package it built whichever way this is set. A build
+    longer than the window asks a second time.
+  -->
+  <action id="org.sakuraos.store.pacman">
+    <description>Install or remove software</description>
+    <message>Authentication is required to install or remove software</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/pacman</annotate>
+  </action>
+</policyconfig>

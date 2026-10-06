@@ -1254,6 +1254,9 @@ def aur_meta(name: str) -> dict:
     # has never used the AUR, and "two people have voted for this" does. The
     # levels are for ordering and colour, not for a verdict: none of these is
     # proof of anything, and a package can be perfectly fine with all of them.
+    def ago(d: int) -> str:
+        return "today" if d == 0 else "yesterday" if d == 1 else f"{d} days ago"
+
     flags = []
     if meta["orphaned"]:
         flags.append({"level": "warn",
@@ -1262,17 +1265,24 @@ def aur_meta(name: str) -> dict:
         d = meta["out_of_date_days"]
         flags.append({"level": "warn",
                       "text": "Flagged out of date"
-                              + (f" {d} days ago." if d is not None else ".")})
+                              + (f" {ago(d)}." if d is not None else ".")})
     if meta["age_days"] is not None and meta["age_days"] < 30:
         flags.append({"level": "warn",
-                      "text": f"First published {meta['age_days']} days ago."})
+                      "text": f"First published {ago(meta['age_days'])}."})
     if meta["modified_days"] is not None and meta["modified_days"] < 7:
         flags.append({"level": "note",
-                      "text": f"The build script changed {meta['modified_days']} "
-                              "days ago. Read the diff below."})
+                      # "Read the diff below" was said even when there was
+                      # no diff -- on a package never installed here, there
+                      # is nothing to compare against.
+                      "text": f"The build script changed "
+                              f"{ago(meta['modified_days'])}."})
     if meta["votes"] < 10:
         flags.append({"level": "note",
-                      "text": f"{meta['votes']} people have voted for this."})
+                      "text": "Nobody has voted for this yet."
+                              if meta["votes"] == 0 else
+                              "1 person has voted for this."
+                              if meta["votes"] == 1 else
+                              f"{meta['votes']} people have voted for this."})
     meta["flags"] = flags
     return meta
 

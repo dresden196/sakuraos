@@ -100,7 +100,14 @@ void Backend::search(const QString &query, const QString &source)
         return;
     }
     m_searching = true;
+    // The last search's results are not this one's. Left in place they sat
+    // under "Searching…" for as long as the new search took, so the page
+    // showed the answer to a question nobody was asking any more.
+    m_results.clear();
+    m_unavailable.clear();
+    const int serial = ++m_searchSerial;
     Q_EMIT stateChanged();
+    Q_EMIT resultsChanged();
 
     QStringList args{QStringLiteral("search"), query, QStringLiteral("--json")};
     if (!source.isEmpty() && source != QLatin1String("all")) {
@@ -108,10 +115,15 @@ void Backend::search(const QString &query, const QString &source)
     }
 
     auto *p = run(args);
-    connect(p, &QProcess::finished, this, [this, p] {
+    connect(p, &QProcess::finished, this, [this, p, serial] {
         const QJsonObject root =
             QJsonDocument::fromJson(p->readAllStandardOutput()).object();
         p->deleteLater();
+        // A search that was overtaken by a newer one. Its answer arriving
+        // later would replace the newer one's.
+        if (serial != m_searchSerial) {
+            return;
+        }
 
         m_results.clear();
         for (const QJsonValue &v : root[QStringLiteral("apps")].toArray()) {
@@ -426,7 +438,11 @@ QString Backend::laneOf(const QString &source)
     // those two share a lane and everything else gets one of its own. Two
     // flatpaks in a row is a queue; a flatpak beside a pacman install is two
     // things happening at once, which is the whole point.
+    // "repo" is what the engine calls the repositories. Only "pacman" was
+    // listed, so a repository install and an AUR build ran side by side and
+    // the second one met the first one's lock.
     if (source.isEmpty() || source == QLatin1String("pacman")
+            || source == QLatin1String("repo")
             || source == QLatin1String("aur")) {
         return QStringLiteral("pacman");
     }
@@ -592,6 +608,12 @@ void Backend::onJobLine(int index, const QJsonObject &o)
         j.error = o[QStringLiteral("error")].toString();
         j.errorDetail = o[QStringLiteral("detail")].toString();
     } else {
+        // A new step starts from nothing. Carried over, the last step's 100%
+        // sat on the ring through steps that had no percentage of their own,
+        // so a ten-minute build looked finished.
+        if (stage != j.stage && !o.contains(QStringLiteral("percent"))) {
+            j.percent = 0;
+        }
         j.stage = stage;
         if (o.contains(QStringLiteral("percent"))) {
             j.percent = o[QStringLiteral("percent")].toInt();

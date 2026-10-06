@@ -265,6 +265,7 @@ private:
     int m_count = 0;
     int m_countTotal = 0;
     bool m_searching = false, m_loadingApp = false, m_busy = false;
+    int m_searchSerial = 0;
     bool m_exporting = false;
     QString m_busyId;
     bool m_reviewBusy = false;

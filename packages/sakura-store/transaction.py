@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 import urllib.request
 from contextlib import contextmanager
@@ -39,6 +40,10 @@ VERIFYING = "verifying"
 INSTALLING = "installing"
 CONFIGURING = "configuring"
 REMOVING = "removing"
+# Waiting for another install or update to let go of the lock.
+QUEUED = "queued"
+# Compiling an AUR package: long, with no honest percentage to show.
+BUILDING = "building"
 DONE = "done"
 FAILED = "failed"
 
@@ -72,9 +77,15 @@ def transaction_lock():
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            emit(FAILED, error="Another install or update is already running.",
-                 recoverable=True)
-            raise SystemExit(4)
+            # Wait our turn rather than fail. Refusing made the store look
+            # broken whenever two things were asked for close together -- a
+            # Flatpak downloading while an AUR package was started, or an
+            # install during the nightly update -- and the person had to
+            # notice, wait, and ask again for something that would simply
+            # have worked a minute later.
+            emit(QUEUED, percent=0,
+                 detail="Waiting for another install or update to finish")
+            fcntl.flock(fd, fcntl.LOCK_EX)
         yield
     finally:
         os.close(fd)
@@ -139,6 +150,10 @@ def stream(args: list[str], stage: str, parse=None) -> int:
     proc = subprocess.Popen(args, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, bufsize=1)
     tail: list[str] = []
+    # Raw output is passed on a few times a second at most. A build prints
+    # thousands of lines, and every one of them was an event the window
+    # redrew for -- the store stuttered for the length of a compile.
+    last = 0.0
     for line in proc.stdout:
         line = line.rstrip()
         if not line:
@@ -149,7 +164,8 @@ def stream(args: list[str], stage: str, parse=None) -> int:
             parsed = parse(line)
             if parsed:
                 emit(**parsed)
-        else:
+        elif time.monotonic() - last >= 0.25:
+            last = time.monotonic()
             emit(stage, detail=line[:160])
     proc.wait()
     if proc.returncode != 0:
@@ -893,6 +909,11 @@ def install_aur(name: str) -> int:
             emit(FAILED, error="git is needed to fetch from the AUR and is "
                                "not installed.", recoverable=True)
             return 2
+        # Each step below says what it is, with percent=0 so the ring spins.
+        # Without it the ring stayed full from the dependency download through
+        # the whole compile, under "Installing", which read as finished or
+        # stuck for as long as the build took.
+        emit(DOWNLOADING, percent=0, detail="Fetching the build script")
         rc = stream(["git", "clone", "--depth", "1",
                      f"https://aur.archlinux.org/{name}.git",
                      f"{work}/{name}"], DOWNLOADING)
@@ -902,8 +923,10 @@ def install_aur(name: str) -> int:
             return rc
 
         built = Path(work) / name
+        emit(BUILDING, percent=0,
+             detail="Building from source. This can take a while.")
         rc = stream(["env", "-C", str(built), "makepkg", "--noconfirm",
-                     "--noprogressbar", "--nodeps"], INSTALLING)
+                     "--noprogressbar", "--nodeps"], BUILDING)
         if rc != 0:
             emit(FAILED, error=f"{name} failed to build. The build script ran "
                                f"but did not produce a package.",
@@ -922,6 +945,7 @@ def install_aur(name: str) -> int:
             return 2
 
         # 4. Install what was just built, again through polkit.
+        emit(INSTALLING, percent=0)
         return stream(["pkexec", "pacman", "-U", "--noconfirm", "--"] + pkgs,
                       INSTALLING, _pacman_progress)
     finally:

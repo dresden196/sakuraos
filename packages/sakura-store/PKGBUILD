@@ -32,8 +32,9 @@ source=('sakura-store' 'appimage.py' 'transaction.py'
         'sakura-store-updates.service'
         'sakura-store-updates.timer'
         'sakura-store-updates-user.service'
-        'sakura-store-updates-user.timer')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        'sakura-store-updates-user.timer'
+        'org.sakuraos.store.policy')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm755 "$srcdir/sakura-store" "$pkgdir/usr/bin/sakura-store"
@@ -55,4 +56,8 @@ package() {
         "$pkgdir/usr/lib/systemd/user/sakura-store-updates.timer"
     install -Dm644 "$srcdir/sakura-store.tmpfiles" \
         "$pkgdir/usr/lib/tmpfiles.d/sakura-store.conf"
+    # What the password prompt says when the store needs pacman. See the
+    # file for why the authorisation is kept for a few minutes.
+    install -Dm644 "$srcdir/org.sakuraos.store.policy" \
+        "$pkgdir/usr/share/polkit-1/actions/org.sakuraos.store.policy"
 }

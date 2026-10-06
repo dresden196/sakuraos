@@ -199,6 +199,10 @@ QQC2.ApplicationWindow {
             // a word of its own. Falling through to the raw "queued" read as a
             // stage name leaking out of the engine.
             queued:      "Waiting",
+            // An AUR package compiling. It said "Installing" for the whole
+            // build, which is not what was happening and took far longer
+            // than installing ever does.
+            building:    "Building",
             failed:      "Failed",
         })[stage] || stage
     }
@@ -851,18 +855,41 @@ QQC2.ApplicationWindow {
                                 // show. A queued job has none, and a bar at
                                 // zero that never moves reads as a stall.
                                 Rectangle {
+                                    id: jobTrack
                                     visible: modelData.running
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 3
                                     radius: 2
+                                    clip: true
                                     color: Qt.rgba(1, 1, 1, 0.10)
                                     Rectangle {
-                                        width: parent.width
-                                               * Math.max(0, Math.min(100, modelData.percent)) / 100
+                                        id: jobFill
+                                        // Running with no percentage -- fetching
+                                        // a build script, compiling -- slides
+                                        // rather than sitting empty, which is
+                                        // the stall the comment above means.
+                                        readonly property bool indeterminate:
+                                            (modelData.percent || 0) <= 0
+                                        width: indeterminate
+                                               ? jobTrack.width * 0.3
+                                               : jobTrack.width
+                                                 * Math.min(100, modelData.percent) / 100
                                         height: parent.height
                                         radius: parent.radius
                                         color: root.accent
-                                        Behavior on width { NumberAnimation { duration: 180 } }
+                                        onIndeterminateChanged: if (!indeterminate) x = 0
+                                        Behavior on width {
+                                            enabled: !jobFill.indeterminate
+                                            NumberAnimation { duration: 180 }
+                                        }
+                                        SequentialAnimation on x {
+                                            running: jobFill.indeterminate && jobTrack.visible
+                                            loops: Animation.Infinite
+                                            NumberAnimation { from: 0; to: jobTrack.width * 0.7
+                                                              duration: 900; easing.type: Easing.InOutQuad }
+                                            NumberAnimation { from: jobTrack.width * 0.7; to: 0
+                                                              duration: 900; easing.type: Easing.InOutQuad }
+                                        }
                                     }
                                 }
                             }
@@ -2884,13 +2911,16 @@ QQC2.ApplicationWindow {
                             color: root.dim; font.pixelSize: 12
                         }
                         QQC2.Label {
-                            text: (aurReviewDialog.meta.votes || 0) + " votes"
+                            readonly property int n: aurReviewDialog.meta.votes || 0
+                            text: n === 1 ? "1 vote" : n + " votes"
                             color: root.dim; font.pixelSize: 12
                         }
                         QQC2.Label {
                             visible: aurReviewDialog.meta.age_days !== undefined
                                      && aurReviewDialog.meta.age_days !== null
-                            text: "Published " + aurReviewDialog.meta.age_days + " days ago"
+                            readonly property int d: aurReviewDialog.meta.age_days || 0
+                            text: "Published " + (d === 0 ? "today" : d === 1 ? "yesterday"
+                                                  : d + " days ago")
                             color: root.dim; font.pixelSize: 12
                         }
                         QQC2.Label {
