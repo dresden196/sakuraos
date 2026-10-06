@@ -46,6 +46,23 @@ def main() -> int:
     # log as jobs with no source and an id of "*" -- so a test counting lines
     # counted four startup queries as two installs. What the queue schedules is
     # what belongs here.
+    # search --stream: the results so far, then the final answer, the way the
+    # engine sends them. Logged as SEARCH so a test can tell whether the
+    # window asked the engine at all or answered from its cache.
+    if verb == "search":
+        query = args[1]
+        stamp("SEARCH", source or "-", query.replace(" ", "_"))
+        app = lambda n, src: {"id": n, "name": n, "source": src}
+        time.sleep(float(os.environ.get("SAKURA_STUB_SEARCH_MS", "200")) / 2000.0)
+        emit({"apps": [app(query + "-repo", "repo")], "pending": ["Flathub"],
+              "done": False})
+        time.sleep(float(os.environ.get("SAKURA_STUB_SEARCH_MS", "200")) / 2000.0)
+        unavailable = ({"Flathub": "did not answer in time"}
+                       if os.environ.get("SAKURA_STUB_SEARCH_INCOMPLETE") == "1" else {})
+        emit({"apps": [app(query + "-repo", "repo"), app(query + "-flatpak", "flatpak")],
+              "unavailable": unavailable, "offline": "", "done": True})
+        return 0
+
     if verb not in ("install", "remove", "update"):
         emit({"stage": "done"})
         return 0

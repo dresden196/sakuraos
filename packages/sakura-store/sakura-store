@@ -18,8 +18,11 @@ import gzip
 import hashlib
 import json
 import os
+import queue
 import re
+import socket
 import subprocess
+import threading
 import time
 import sys
 import urllib.error
@@ -84,12 +87,46 @@ def fetch(url: str, default=None, *, post: dict | None = None, tag: str = "",
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
-        FAILURES[tag or url] = f"HTTP {e.code}"
+        FAILURES[tag or url] = f"returned an error (HTTP {e.code})"
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        FAILURES[tag or url] = f"unreachable ({type(e).__name__})"
+        FAILURES[tag or url] = failure_reason(e)
     except ValueError:
-        FAILURES[tag or url] = "unreadable response"
+        FAILURES[tag or url] = "sent an answer the store could not read"
     return default
+
+
+def failure_reason(e: BaseException) -> str:
+    """Why a service could not be asked, as the rest of a sentence.
+
+    The window says "<service> <this>.", so these read as English rather than
+    the exception's class name -- "unreachable (URLError)" told nobody
+    anything.
+    """
+    cause = getattr(e, "reason", e)
+    if isinstance(cause, socket.gaierror):
+        return "could not be reached; this computer seems to be offline"
+    if isinstance(cause, (TimeoutError, socket.timeout)):
+        return "did not answer in time"
+    if isinstance(cause, ConnectionRefusedError):
+        return "refused the connection"
+    return "could not be reached"
+
+
+def connectivity() -> str:
+    """NetworkManager's own verdict: full, limited, portal, none or unknown.
+
+    NetworkManager already checks whether the internet is really there, every
+    few minutes. Asking it costs a few milliseconds; finding out by trying
+    cost a search 163 seconds on a network with no way out -- Flathub's
+    timeout, then the AUR's, then the Snap Store's, which tries each of its
+    addresses in turn.
+    """
+    try:
+        out = subprocess.run(["nmcli", "-t", "-f", "CONNECTIVITY", "general"],
+                             capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return out.strip() or "unknown"
 
 
 def run(args: list[str]) -> str:
@@ -129,6 +166,9 @@ class App:
 # --------------------------------------------------------------------------
 class Source:
     """The whole contract. A new source implements these four."""
+    # Whether searching it needs the internet. Offline, only the sources that
+    # do not are asked.
+    network = True
     name = ""
     label = ""
 
@@ -355,7 +395,34 @@ def _untagged(component, tag: str) -> str:
 
 @lru_cache(maxsize=1)
 def appstream_index() -> dict[str, dict]:
-    """pkgname -> metadata, merged across the repository catalogues."""
+    """pkgname -> metadata, merged across the repository catalogues.
+
+    Kept on disk until a catalogue changes. Parsing them took 1.4 seconds,
+    and every search is a new process, so every search paid it.
+    """
+    xml = sorted((SWCATALOG / "xml").glob("*.xml.gz"))
+    stamp = ";".join(f"{f.name}:{int(f.stat().st_mtime)}:{f.stat().st_size}"
+                     for f in xml if f.exists())
+    cached = CACHE / "appstream-index.json"
+    try:
+        data = json.loads(cached.read_text())
+        if data.get("stamp") == stamp:
+            return data.get("index", {})
+    except (OSError, ValueError):
+        pass
+    index = _build_appstream_index()
+    if stamp and "The software catalogue" not in FAILURES:
+        try:
+            CACHE.mkdir(parents=True, exist_ok=True)
+            tmp = cached.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"stamp": stamp, "index": index}))
+            tmp.replace(cached)
+        except OSError:
+            pass
+    return index
+
+
+def _build_appstream_index() -> dict[str, dict]:
     index: dict[str, dict] = {}
     xmldir = SWCATALOG / "xml"
     if not xmldir.is_dir():
@@ -366,7 +433,8 @@ def appstream_index() -> dict[str, dict]:
             with gzip.open(path, "rb") as fh:
                 root = ET.parse(fh).getroot()
         except Exception as exc:                     # a corrupt catalogue must
-            FAILURES["appstream"] = str(exc)         # not take the search down
+            FAILURES["The software catalogue"] = (    # not take the search down
+                f"could not be read ({exc})")
             continue
         for c in root.findall("component"):
             pkg = c.findtext("pkgname")
@@ -431,6 +499,7 @@ class RepoSource(Source):
     libraries, and updated by the same engine that handles everything else --
     which is why the documented priority puts it ahead of Flatpak.
     """
+    network = False
     name = "repo"
     label = "SakuraOS"
 
@@ -1259,9 +1328,9 @@ def fetch_text(url: str, tag: str = "") -> str:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             return r.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
-        FAILURES[tag or url] = f"HTTP {e.code}"
+        FAILURES[tag or url] = f"returned an error (HTTP {e.code})"
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        FAILURES[tag or url] = str(e)
+        FAILURES[tag or url] = failure_reason(e)
     return ""
 
 
@@ -2076,25 +2145,19 @@ def cmd_sources(args) -> int:
     return 0
 
 
-def cmd_search(args) -> int:
-    # --source takes one name or a comma-separated set, so the store can
-    # search the subset the user has left switched on.
-    picked = [x for x in (args.source or "").split(",") if x]
-    wanted = [s for s in SOURCES
-              if (not picked or s.name in picked) and s.available()]
-    groups = [s.search(args.query) for s in wanted]
-    apps = merge(groups)
-    # Every source the user searches was asked, so the count is the whole
-    # answer and the tiles can show it.
-    finish(apps, complete=True)
-    attach_ratings(apps)
+# How long a search waits for its slowest source. Flathub usually answers in
+# two or three seconds; a source that has not answered in ten is not going to
+# be worth the wait, and its absence is said rather than waited for.
+SEARCH_DEADLINE = 10.0
 
+
+def rank_results(apps: list[App], query: str) -> None:
     # How well it matches what was typed comes before how popular it is.
     # Sorting on ratings alone put Flathub's "Calculator" above "KCalc" for
     # the query "kcalc": a more popular app that merely mentions the word beat
     # the one actually named it. Somebody typing an exact name has told you
     # precisely what they want, and no rating count outranks that.
-    q = args.query.strip().lower()
+    q = query.strip().lower()
 
     def rank(a):
         name = (a.name or "").lower()
@@ -2114,15 +2177,107 @@ def cmd_search(args) -> int:
 
     apps.sort(key=rank)
 
-    if args.json:
+
+def cmd_search(args) -> int:
+    # --source takes one name or a comma-separated set, so the store can
+    # search the subset the user has left switched on.
+    picked = [x for x in (args.source or "").split(",") if x]
+    wanted = [s for s in SOURCES
+              if (not picked or s.name in picked) and s.available()]
+
+    # Offline, only the sources that need no internet are asked, and the
+    # answer says why the rest are missing instead of each one timing out.
+    net = connectivity()
+    offline = net if net in ("none", "portal") else ""
+    asked = [s for s in wanted if not (offline and s.network)]
+
+    # Shared by every source's results; built once, before the threads.
+    appstream_index()
+
+    # Every source at once. They used to be asked one after another, so a
+    # search took the sum of them -- 6.4 seconds for "spotify", of which the
+    # slowest single source was 2.5 -- and on a network that drops packets,
+    # the sum of their timeouts. Daemon threads, so one that never answers
+    # cannot hold the process open after the deadline.
+    done: "queue.Queue[tuple[Source, list[App]]]" = queue.Queue()
+
+    def ask(src: Source) -> None:
+        try:
+            done.put((src, src.search(args.query)))
+        except Exception as exc:            # one source must not end the search
+            FAILURES[src.label] = f"could not be searched ({exc})"
+            done.put((src, []))
+
+    for src in asked:
+        threading.Thread(target=ask, args=(src,), daemon=True).start()
+    ratings: dict = {}
+    ratings_ready = threading.Event()
+
+    def fetch_ratings() -> None:
+        ratings.update(odrs_ratings())
+        ratings_ready.set()
+
+    if not offline:
+        threading.Thread(target=fetch_ratings, daemon=True).start()
+    else:
+        ratings_ready.set()
+
+    def snapshot(groups: dict, complete: bool) -> list[App]:
+        apps = merge([groups[s] for s in asked if s in groups])
+        finish(apps, complete=complete)
+        if ratings_ready.is_set():
+            for a in apps:
+                a.rating, a.rating_count = rating_for(a.id, ratings)
+        rank_results(apps, args.query)
+        return apps
+
+    groups: dict = {}
+    pending = list(asked)
+    deadline = time.monotonic() + SEARCH_DEADLINE
+    while pending:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            src, found = done.get(timeout=remaining)
+        except queue.Empty:
+            break
+        groups[src] = found
+        pending.remove(src)
+        # --stream: the results so far, as soon as each source answers, so
+        # the window shows what this computer's own repositories have in
+        # under a second instead of waiting on Flathub for all of it.
+        if getattr(args, "stream", False) and pending:
+            print(json.dumps({
+                "apps": [asdict(a) for a in snapshot(groups, False)],
+                "pending": [p.label for p in pending],
+                "done": False}), flush=True)
+    for src in pending:
+        FAILURES[src.label] = "did not answer in time"
+    # Ratings decorate results; their absence is visible as missing stars and
+    # is not a source missing from the answer.
+    ratings_ready.wait(timeout=max(0.0, deadline - time.monotonic()))
+    FAILURES.pop("ODRS", None)
+    apps = snapshot(groups, True)
+
+    if args.json or getattr(args, "stream", False):
         print(json.dumps({"apps": [asdict(a) for a in apps],
-                          "unavailable": FAILURES}, indent=2))
+                          "unavailable": dict(FAILURES),
+                          "offline": offline,
+                          "done": True},
+                         indent=None if getattr(args, "stream", False) else 2),
+              flush=True)
         return 0
 
+    if offline == "none":
+        print("  (offline: only this computer's own repositories were searched)")
+    elif offline == "portal":
+        print("  (this network wants you to sign in first; only this computer's "
+              "own repositories were searched)")
     if not apps:
         print("Nothing found.")
     for tag, why in FAILURES.items():
-        print(f"  ({tag} could not be reached: {why})")
+        print(f"  ({tag} {why})")
     if not apps:
         return 0
     for a in apps[:20]:
@@ -2146,6 +2301,9 @@ def main() -> int:
     s.add_argument("query")
     s.add_argument("--source")
     s.add_argument("--json", action="store_true")
+    # One JSON object per line: the results so far each time a source
+    # answers, then the final answer with "done": true.
+    s.add_argument("--stream", action="store_true")
     s.set_defaults(fn=cmd_search)
 
     v = sub.add_parser("sources")

@@ -7,6 +7,7 @@
 #include "../src/backend.h"
 
 #include <QCoreApplication>
+#include <functional>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QSignalSpy>
@@ -140,6 +141,104 @@ private Q_SLOTS:
         QVERIFY(waitForIdle(b));
         QVERIFY2(!overlapped(QStringLiteral("one"), QStringLiteral("two")),
                  "a repository install must not run beside an AUR build");
+    }
+
+    int searchesAsked() const
+    {
+        int n = 0;
+        for (const QString &line : logLines()) {
+            n += line.startsWith(QLatin1String("SEARCH ")) ? 1 : 0;
+        }
+        return n;
+    }
+
+    bool waitFor(const std::function<bool()> &cond, int ms = 8000)
+    {
+        QElapsedTimer t;
+        t.start();
+        while (!cond() && t.elapsed() < ms) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        }
+        return cond();
+    }
+
+    // Results arrive as each source answers, not all at the end. The first
+    // line carries what is ready and what is still pending.
+    void searchShowsResultsBeforeItFinishes()
+    {
+        qputenv("SAKURA_STUB_SEARCH_MS", "1500");
+        Backend b;
+        b.search(QStringLiteral("alpha"), QString());
+        QVERIFY(b.searching());
+        QVERIFY(b.results().isEmpty());
+        QVERIFY(waitFor([&] { return !b.results().isEmpty(); }));
+        QVERIFY2(b.searching(), "the first results should arrive while still searching");
+        QCOMPARE(b.searchPending(), QStringList{QStringLiteral("Flathub")});
+        QVERIFY(waitFor([&] { return !b.searching(); }));
+        QCOMPARE(b.results().size(), 2);
+        QVERIFY(b.searchPending().isEmpty());
+        qunsetenv("SAKURA_STUB_SEARCH_MS");
+    }
+
+    // The same search again is answered without asking the engine.
+    void repeatSearchComesFromTheCache()
+    {
+        Backend b;
+        b.search(QStringLiteral("beta"), QString());
+        QVERIFY(waitFor([&] { return !b.searching(); }));
+        QCOMPARE(searchesAsked(), 1);
+        b.search(QStringLiteral("Beta "), QString());   // case and spaces aside
+        QVERIFY(!b.searching());
+        QCOMPARE(b.results().size(), 2);
+        QCOMPARE(searchesAsked(), 1);
+    }
+
+    // An answer with a source missing is not remembered: asked again, the
+    // engine is asked again, in case the source is back.
+    void incompleteAnswersAreNotCached()
+    {
+        qputenv("SAKURA_STUB_SEARCH_INCOMPLETE", "1");
+        Backend b;
+        b.search(QStringLiteral("gamma"), QString());
+        QVERIFY(waitFor([&] { return !b.searching(); }));
+        QVERIFY(!b.unavailable().isEmpty());
+        b.search(QStringLiteral("gamma"), QString());
+        QVERIFY(waitFor([&] { return !b.searching(); }));
+        QCOMPARE(searchesAsked(), 2);
+        qunsetenv("SAKURA_STUB_SEARCH_INCOMPLETE");
+    }
+
+    // Installing something makes remembered results wrong about what is
+    // installed, so the cache is dropped.
+    void anInstallClearsTheSearchCache()
+    {
+        Backend b;
+        b.search(QStringLiteral("delta"), QString());
+        QVERIFY(waitFor([&] { return !b.searching(); }));
+        b.install(QStringLiteral("delta-flatpak"), QStringLiteral("flatpak"));
+        QVERIFY(waitForIdle(b));
+        b.search(QStringLiteral("delta"), QString());
+        QVERIFY(waitFor([&] { return !b.searching(); }));
+        QCOMPARE(searchesAsked(), 2);
+    }
+
+    // Typing a second search before the first answers: the first is dropped,
+    // and its late answer never replaces the second's.
+    void aNewerSearchWins()
+    {
+        qputenv("SAKURA_STUB_SEARCH_MS", "1500");
+        Backend b;
+        b.search(QStringLiteral("slow"), QString());
+        b.search(QStringLiteral("fast"), QString());
+        QVERIFY(waitFor([&] { return !b.searching(); }));
+        QTest::qWait(1200);
+        QVERIFY(!b.results().isEmpty());
+        for (const QVariant &v : b.results()) {
+            QVERIFY2(v.toMap().value(QStringLiteral("id")).toString().startsWith(
+                         QLatin1String("fast")),
+                     "a result from the overtaken search replaced the newer one");
+        }
+        qunsetenv("SAKURA_STUB_SEARCH_MS");
     }
 
     // A double click is one install, not two.

@@ -1109,6 +1109,38 @@ QQC2.ApplicationWindow {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top
                     spacing: 4
+                    // Said once, at the top of every page, instead of a
+                    // spinner that turns until three services time out and
+                    // then a row of "could not be reached".
+                    Rectangle {
+                        visible: backend.networkState !== "online"
+                        width: failures.width - 52
+                        x: 26
+                        implicitHeight: offlineText.implicitHeight + 20
+                        radius: 10
+                        color: Qt.rgba(root.warn.r, root.warn.g, root.warn.b, 0.10)
+                        border.width: 1
+                        border.color: Qt.rgba(root.warn.r, root.warn.g, root.warn.b, 0.35)
+                        QQC2.Label {
+                            id: offlineText
+                            anchors.left: parent.left; anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: 14; anchors.rightMargin: 14
+                            wrapMode: Text.WordWrap
+                            color: root.text; font.pixelSize: 13
+                            text: backend.networkState === "portal"
+                                ? "This network wants you to sign in first, like hotel or "
+                                  + "café Wi-Fi. Open a web browser to sign in; the store "
+                                  + "carries on by itself once you are through."
+                                : backend.networkState === "limited"
+                                  ? "This network does not seem to reach the internet. "
+                                    + "Results from Flathub, the Snap Store and the AUR may "
+                                    + "be missing."
+                                  : "You are offline. Searches show what SakuraOS's own "
+                                    + "repositories have; Flathub, the Snap Store and the AUR "
+                                    + "come back as soon as you reconnect."
+                        }
+                    }
                     Repeater {
                         model: Object.keys(backend.unavailable)
                         delegate: QQC2.Label {
@@ -1117,12 +1149,13 @@ QQC2.ApplicationWindow {
                             x: 26
                             topPadding: 8
                             wrapMode: Text.WordWrap
+                            // The engine gives the rest of a sentence: "did not
+                            // answer in time", "returned an error (HTTP 503)".
                             text: modelData === "engine"
                                   ? "The store ran into a problem: "
-                                    + backend.unavailable[modelData]
-                                  : modelData + " could not be reached ("
-                                    + backend.unavailable[modelData]
-                                    + "). Its results are missing."
+                                    + backend.unavailable[modelData] + "."
+                                  : modelData + " " + backend.unavailable[modelData]
+                                    + ". Its results are missing."
                             color: root.warn; font.pixelSize: 13
                         }
                     }
@@ -1305,26 +1338,30 @@ QQC2.ApplicationWindow {
 
             QQC2.Label {
                 Layout.leftMargin: 26; Layout.topMargin: 6
-                text: backend.searching ? "Searching…"
+                text: backend.searching && backend.results.length === 0 ? "Searching…"
                     : backend.results.length + " result" + (backend.results.length === 1 ? "" : "s")
                 color: root.text; font.pixelSize: 22; font.weight: Font.Light
             }
 
-            // A source that could not be reached is stated, never folded into
-            // "no results" -- that silence is what makes a store feel broken.
-            Repeater {
-                model: Object.keys(backend.unavailable)
-                delegate: QQC2.Label {
-                    required property var modelData
-                    Layout.leftMargin: 26
-                    text: modelData + " could not be reached (" +
-                          backend.unavailable[modelData] + "). Its results are missing."
-                    color: root.warn; font.pixelSize: 13
+            // Results arrive as each source answers. What is still being asked
+            // is named under the ones already here, rather than the whole page
+            // waiting on the slowest. A source that could not be reached is
+            // stated by the lines at the top of the page, never folded into
+            // "no results".
+            RowLayout {
+                visible: backend.searching && backend.results.length > 0
+                         && backend.searchPending.length > 0
+                Layout.leftMargin: 26
+                spacing: 8
+                Ring { diameter: 14; thickness: 2; progress: 0 }
+                QQC2.Label {
+                    text: "Still asking " + backend.searchPending.join(", ")
+                    color: root.dim; font.pixelSize: 12
                 }
             }
 
             Loading {
-                visible: backend.searching
+                visible: backend.searching && backend.results.length === 0
                 Layout.fillWidth: true
                 Layout.preferredHeight: 260
                 label: "Asking every enabled source"

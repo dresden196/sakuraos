@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QObject>
 #include <QProcess>
 #include <QJsonObject>
@@ -36,6 +37,12 @@ class Backend : public QObject
     Q_PROPERTY(bool loadingInstalled READ loadingInstalled NOTIFY installedChanged)
     Q_PROPERTY(QVariantMap app READ app NOTIFY appChanged)
     Q_PROPERTY(QVariantMap unavailable READ unavailable NOTIFY resultsChanged)
+    // Sources a search is still waiting on, while results from the others are
+    // already on screen.
+    Q_PROPERTY(QStringList searchPending READ searchPending NOTIFY resultsChanged)
+    // online | offline | limited | portal, from NetworkManager through
+    // QNetworkInformation, and from the engine's own answer.
+    Q_PROPERTY(QString networkState READ networkState NOTIFY networkChanged)
     Q_PROPERTY(QString stage READ stage NOTIFY progressChanged)
     Q_PROPERTY(int percent READ percent NOTIFY progressChanged)
     Q_PROPERTY(QString progressDetail READ progressDetail NOTIFY progressChanged)
@@ -115,6 +122,8 @@ public:
     bool loadingInstalled() const { return m_loadingInstalled; }
     QVariantMap app() const { return m_app; }
     QVariantMap unavailable() const { return m_unavailable; }
+    QStringList searchPending() const { return m_searchPending; }
+    QString networkState() const { return m_networkState; }
     QString stage() const { return m_stage; }
     int percent() const { return m_percent; }
     QString progressDetail() const { return m_detail; }
@@ -204,11 +213,30 @@ Q_SIGNALS:
     void appChanged();
     void progressChanged();
     void jobsChanged();
+    void networkChanged();
 
     void reviewChanged();
     void aurReviewChanged();
 private:
     QProcess *run(const QStringList &args);
+    void applySearchLine(const QJsonObject &o, const QString &key);
+    void setNetworkState(const QString &state);
+
+    // Recent complete answers, by query and source filter. Going back to the
+    // results, or asking again, was another four to six seconds of the same
+    // answer. Only answers with every source present are kept, so one made
+    // while a source was unreachable is not served after it is back; and any
+    // install or removal clears it, because results say what is installed.
+    struct CachedSearch {
+        QVariantList results;
+        qint64 at = 0;
+    };
+    QHash<QString, CachedSearch> m_searchCache;
+    QProcess *m_searchProc = nullptr;
+    QString m_lastQuery, m_lastSource;
+    bool m_lastSearchIncomplete = false;
+    QStringList m_searchPending;
+    QString m_networkState = QStringLiteral("online");
 
     // One queued or running piece of work. Everything the queue panel shows
     // and everything an app page needs to describe its own state lives here,

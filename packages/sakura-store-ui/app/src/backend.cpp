@@ -12,6 +12,8 @@
 #include <QUrl>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDateTime>
+#include <QNetworkInformation>
 #include <pwd.h>
 #include <unistd.h>
 
@@ -47,6 +49,31 @@ QVariantMap toMap(const QJsonObject &o)
 } // namespace
 
 Backend::Backend(QObject *parent) : QObject(parent) {
+    // Whether there is any internet to ask, from NetworkManager. Without
+    // this the store found out by trying: a spinner for as long as three
+    // services took to time out, then a row of "could not be reached".
+    if (QNetworkInformation::loadBackendByFeatures(
+            QNetworkInformation::Feature::Reachability)) {
+        QNetworkInformation *ni = QNetworkInformation::instance();
+        auto update = [this, ni] {
+            using R = QNetworkInformation::Reachability;
+            const R r = ni->reachability();
+            QString state = QStringLiteral("online");
+            if (r == R::Disconnected || r == R::Local) {
+                state = QStringLiteral("offline");
+            } else if (ni->supports(QNetworkInformation::Feature::CaptivePortal)
+                       && ni->isBehindCaptivePortal()) {
+                state = QStringLiteral("portal");
+            } else if (r == R::Site) {
+                state = QStringLiteral("limited");
+            }
+            setNetworkState(state);
+        };
+        connect(ni, &QNetworkInformation::reachabilityChanged, this, update);
+        connect(ni, &QNetworkInformation::isBehindCaptivePortalChanged, this, update);
+        update();
+    }
+
     // The source list comes from the engine too. It was a hardcoded literal
     // that listed Snap and the AUR unconditionally, so a machine without
     // snapd showed a filter that could only ever return nothing -- the same
@@ -94,48 +121,144 @@ void Backend::search(const QString &query, const QString &source)
     // as the new page having failed.
     m_error.clear();
     m_errorDetail.clear();
+    // A search still running for an earlier query is not wanted any more.
+    // Left running, three quick searches meant three engines working.
+    if (m_searchProc) {
+        m_searchProc->disconnect(this);
+        m_searchProc->kill();
+        m_searchProc->deleteLater();
+        m_searchProc = nullptr;
+    }
+    const int serial = ++m_searchSerial;
     if (query.trimmed().isEmpty()) {
         m_results.clear();
+        m_searching = false;
+        Q_EMIT stateChanged();
         Q_EMIT resultsChanged();
         return;
     }
+    m_lastQuery = query;
+    m_lastSource = source;
+
+    const QString key = query.trimmed().toLower() + QLatin1Char('|') + source;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const auto hit = m_searchCache.constFind(key);
+    if (hit != m_searchCache.constEnd() && now - hit->at < 10 * 60 * 1000) {
+        m_results = hit->results;
+        m_unavailable.clear();
+        m_searchPending.clear();
+        m_searching = false;
+        m_lastSearchIncomplete = false;
+        Q_EMIT stateChanged();
+        Q_EMIT resultsChanged();
+        return;
+    }
+
     m_searching = true;
     // The last search's results are not this one's. Left in place they sat
     // under "Searching…" for as long as the new search took, so the page
     // showed the answer to a question nobody was asking any more.
     m_results.clear();
     m_unavailable.clear();
-    const int serial = ++m_searchSerial;
+    m_searchPending.clear();
     Q_EMIT stateChanged();
     Q_EMIT resultsChanged();
 
-    QStringList args{QStringLiteral("search"), query, QStringLiteral("--json")};
+    // --stream: the engine sends the results so far each time a source
+    // answers, so this computer's own repositories show in about a second
+    // while Flathub is still being asked.
+    QStringList args{QStringLiteral("search"), query, QStringLiteral("--stream")};
     if (!source.isEmpty() && source != QLatin1String("all")) {
         args << QStringLiteral("--source") << source;
     }
 
     auto *p = run(args);
-    connect(p, &QProcess::finished, this, [this, p, serial] {
-        const QJsonObject root =
-            QJsonDocument::fromJson(p->readAllStandardOutput()).object();
+    m_searchProc = p;
+    auto drain = [this, p, serial, key] {
+        while (p->canReadLine()) {
+            const QJsonObject o = QJsonDocument::fromJson(p->readLine()).object();
+            // A search that was overtaken by a newer one. Its answer arriving
+            // later would replace the newer one's.
+            if (serial != m_searchSerial) {
+                return;
+            }
+            if (!o.isEmpty()) {
+                applySearchLine(o, key);
+            }
+        }
+    };
+    connect(p, &QProcess::readyReadStandardOutput, this, drain);
+    connect(p, &QProcess::finished, this, [this, p, serial, drain] {
+        drain();
         p->deleteLater();
-        // A search that was overtaken by a newer one. Its answer arriving
-        // later would replace the newer one's.
-        if (serial != m_searchSerial) {
+        if (m_searchProc == p) {
+            m_searchProc = nullptr;
+        }
+        if (serial != m_searchSerial || !m_searching) {
             return;
         }
-
-        m_results.clear();
-        for (const QJsonValue &v : root[QStringLiteral("apps")].toArray()) {
-            m_results.append(toMap(v.toObject()));
-        }
-        // Kept distinct from "no matches": a source we could not reach is a
-        // different answer, and saying so is the whole point.
-        m_unavailable = root[QStringLiteral("unavailable")].toObject().toVariantMap();
+        // Ended without its final answer: the engine died. Say so rather
+        // than leave a spinner turning for ever.
         m_searching = false;
+        m_searchPending.clear();
+        m_lastSearchIncomplete = true;
+        m_unavailable.insert(QStringLiteral("engine"),
+                             tr("the search stopped before it finished"));
         Q_EMIT stateChanged();
         Q_EMIT resultsChanged();
     });
+}
+
+void Backend::applySearchLine(const QJsonObject &o, const QString &key)
+{
+    m_results.clear();
+    for (const QJsonValue &v : o[QStringLiteral("apps")].toArray()) {
+        m_results.append(toMap(v.toObject()));
+    }
+    m_searchPending.clear();
+    for (const QJsonValue &v : o[QStringLiteral("pending")].toArray()) {
+        m_searchPending.append(v.toString());
+    }
+    if (o[QStringLiteral("done")].toBool()) {
+        m_searching = false;
+        m_searchPending.clear();
+        // Kept distinct from "no matches": a source we could not reach is a
+        // different answer, and saying so is the whole point.
+        m_unavailable = o[QStringLiteral("unavailable")].toObject().toVariantMap();
+        const QString offline = o[QStringLiteral("offline")].toString();
+        if (offline == QLatin1String("portal")) {
+            setNetworkState(QStringLiteral("portal"));
+        } else if (!offline.isEmpty()) {
+            setNetworkState(QStringLiteral("offline"));
+        }
+        m_lastSearchIncomplete = !m_unavailable.isEmpty() || !offline.isEmpty();
+        if (!m_lastSearchIncomplete) {
+            m_searchCache.insert(key, {m_results, QDateTime::currentMSecsSinceEpoch()});
+        }
+    }
+    Q_EMIT stateChanged();
+    Q_EMIT resultsChanged();
+}
+
+void Backend::setNetworkState(const QString &state)
+{
+    if (state == m_networkState) {
+        return;
+    }
+    const bool cameBack = state == QLatin1String("online");
+    m_networkState = state;
+    Q_EMIT networkChanged();
+    if (!cameBack) {
+        return;
+    }
+    // Back online: whatever was missing because of it is asked for again,
+    // rather than waiting for somebody to notice and search a second time.
+    if (m_lastSearchIncomplete && !m_lastQuery.isEmpty()) {
+        search(m_lastQuery, m_lastSource);
+    }
+    if (m_featured.isEmpty()) {
+        loadFeatured();
+    }
 }
 
 void Backend::loadFeatured()
@@ -646,6 +769,9 @@ void Backend::onJobLine(int index, const QJsonObject &o)
 void Backend::finishJob(int index, int code, bool crashed, const QString &trailing)
 {
     Job j = m_jobs.at(index);
+    // Results say what is installed; any install or removal makes the
+    // remembered ones wrong.
+    m_searchCache.clear();
 
     if (j.error.isEmpty() && (code != 0 || crashed)) {
         // A process that failed must never render as done. It did exactly
