@@ -595,8 +595,15 @@ check "the account password logs in" \
 # settings to them.
 check "GTK applications follow Plasma's settings" "pacman -Q kde-gtk-config breeze-gtk"
 check "an OpenVPN profile can be imported"         "pacman -Q networkmanager-openvpn"
-if [[ "$INSTALL_MODE" == "wipe" ]]; then
+if [[ "$INSTALL_MODE" == "wipe" && "${UPGRADE:-0}" == "1" ]]; then
+    # An upgrade run installs with the old image's installer on purpose, and
+    # removing a replaced system's boot entry happens at install time; no
+    # update can do it afterwards. Skipped out loud, like the clock checks.
+    echo "-- skipped (upgrade: installed by the old image): the replaced system's boot entry was removed"
+elif [[ "$INSTALL_MODE" == "wipe" ]]; then
     check "the replaced system's boot entry was removed" "! efibootmgr | grep -q 'Old System'"
+fi
+if [[ "$INSTALL_MODE" == "wipe" ]]; then
     check "exactly one SakuraOS boot entry" "test \"\$(efibootmgr | grep -c SakuraOS)\" = 1"
 fi
 if [[ -n "$SECBOOT" ]]; then
