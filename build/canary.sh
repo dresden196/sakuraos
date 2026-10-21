@@ -197,6 +197,25 @@ done" 2>&1
     } >> "$log"
 }
 
+# What pacman itself said went wrong: its error line and the detail under it,
+# which is what anybody reading the notification needs. From 16 to 21 October
+# every night was reported as "the update failed twice, the second time with a
+# cleared package cache" after "capturing evidence about the corrupted
+# download" -- while pacman had said, in plain words, that
+# /etc/xdg/kwinrulesrc existed in both kwin and sakura-theme.
+pacman_error() {
+    awk '/^--- /{if (p) exit} /^error: /{p=1} p' "$1" 2>/dev/null | grep -v -e '^$' -e '^Errors occurred' \
+        | head -6 | tr '\n' ' ' | sed 's/  */ /g; s/ $//' | cut -c1-400
+}
+
+# Whether a failure is one that trying again can fix. A bad or missing
+# download can; a file conflict, a broken dependency or a refused signature
+# fails the same transaction the same way every time, and retrying it only
+# turned the real message into "failed twice".
+retryable_failure() {
+    grep -q -E 'invalid or corrupted package|failed retrieving file|error: failed to (download|retrieve)|Operation too slow|Connection timed out|Could not resolve host' "$1" 2>/dev/null
+}
+
 say "what is pending"
 PENDING=$(guest "checkupdates 2>/dev/null || true" || true)
 if [[ -z "${PENDING//[[:space:]]/}" ]]; then
@@ -217,6 +236,9 @@ FAIL_LOG="$REPO_ROOT/out/canary-apply.log"
 # never actually given a chance to run.
 APPLY_TIMEOUT="${SAKURA_CANARY_APPLY_TIMEOUT:-2400}"
 if ! guest_long "$APPLY_TIMEOUT" "pacman -Syu --noconfirm" >"$FAIL_LOG" 2>&1; then
+    if ! retryable_failure "$FAIL_LOG"; then
+        die "the update failed: $(pacman_error "$FAIL_LOG" || true). See out/canary-apply.log"
+    fi
     # One retry, and only after clearing the package cache.
     #
     # A single corrupted download fails the whole transaction and the bad file
@@ -228,7 +250,7 @@ if ! guest_long "$APPLY_TIMEOUT" "pacman -Syu --noconfirm" >"$FAIL_LOG" 2>&1; th
     # The cache on a throwaway test machine is worth nothing, so there is no
     # need to work out which file was the bad one.
     # Before the cache is cleared, while the bad file is still there to look at.
-    capture_corrupt_evidence "$FAIL_LOG"
+    grep -q 'invalid or corrupted package' "$FAIL_LOG" && capture_corrupt_evidence "$FAIL_LOG"
     say "the update failed; letting the guest settle, then clearing the cache and trying once more"
     printf '\n--- retrying with a cleared package cache ---\n' >>"$FAIL_LOG"
     if ! settle_guest_pacman; then
@@ -237,8 +259,14 @@ if ! guest_long "$APPLY_TIMEOUT" "pacman -Syu --noconfirm" >"$FAIL_LOG" 2>&1; th
     fi
     guest "rm -f /var/cache/pacman/pkg/*.pkg.tar.zst /var/cache/pacman/pkg/*.part" \
         >/dev/null 2>&1 || true
-    guest_long "$APPLY_TIMEOUT" "pacman -Syu --noconfirm" >>"$FAIL_LOG" 2>&1 \
-        || die "the update failed twice, the second time with a cleared package cache. See out/canary-apply.log"
+    if ! guest_long "$APPLY_TIMEOUT" "pacman -Syu --noconfirm" >>"$FAIL_LOG" 2>&1; then
+        # The second attempt's own error: the log holds both, and the first
+        # one is the one already retried.
+        why=$(sed -n '/^--- retrying with a cleared package cache ---$/,$p' "$FAIL_LOG" \
+              | awk '/^--- /{if (p) exit} /^error: /{p=1} p' | grep -v -e '^$' -e '^Errors occurred' \
+              | head -6 | tr '\n' ' ' | sed 's/  */ /g; s/ $//' | cut -c1-400)
+        die "the update failed twice, the second time with a cleared package cache: ${why:-no error from pacman}. See out/canary-apply.log"
+    fi
 fi
 
 say "rebooting"
