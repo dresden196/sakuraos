@@ -11,12 +11,15 @@
 # not a policy. Resize it and it stays resized for that window; the next new
 # window starts here again, which is what a default should do.
 
+# Read from /usr/share/sakura/xdg, not /etc/xdg: KWin 6.8 ships its own
+# /etc/xdg/kwinrulesrc (a rule for Steam's windows), and two packages owning
+# one file made pacman refuse every update. KWin 6.8 loads every rule group it
+# finds across all of XDG_CONFIG_DIRS, so this one and KWin's both apply.
+# There is deliberately no [General] rules= list: from 6.8 that is a legacy key
+# whose migration deletes every rule not named in it, a user's own included.
+
 [$Version]
 update_info=kwinrules.upd:replace-placement-string-to-enum
-
-[General]
-count=1
-rules=sakura-dolphin-size
 
 [sakura-dolphin-size]
 Description=SakuraOS: Dolphin opens at a usable size

@@ -17,15 +17,17 @@ pkgdesc="SakuraOS appearance: colour schemes, global themes, defaults"
 arch=('any')
 url="https://sakuraos.org"
 license=('GPL-3.0-or-later')
-depends=('sddm' 'plasma-desktop' 'sakura-wallpapers' 'breeze' 'breeze-icons')
+# kwin >= 6.8: the window rules are written for how 6.8 reads them -- every
+# group across XDG_CONFIG_DIRS, no rules= list. See kwinrulesrc.
+depends=('sddm' 'plasma-desktop' 'sakura-wallpapers' 'breeze' 'breeze-icons' 'kwin>=6.8')
 # kdeglobals because a Light install replaces it with the light defaults. Not
 # listed, every update of this package put the dark ones back: the icons and
 # the theme name turned dark under a user's light colours.
 backup=('etc/sddm.conf.d/20-sakura.conf' 'etc/xdg/kdeglobals')
 install="$pkgname.install"
 source=('20-sakura.conf' 'kdeglobals' 'kdeglobals-dark' 'kdeglobals-light' 'kwinrulesrc' 'sddm-breeze-theme.conf.user'
-        'sakura-pin-browser' '95-sakura-pin-browser.hook')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+        'sakura-pin-browser' '95-sakura-pin-browser.hook' 'sakura-xdg.sh')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 package() {
     install -Dm644 "$srcdir/20-sakura.conf" "$pkgdir/etc/sddm.conf.d/20-sakura.conf"
@@ -43,7 +45,12 @@ package() {
 
     # Defaults for new users only; a user's own config always wins.
     install -Dm644 "$srcdir/kdeglobals" "$pkgdir/etc/xdg/kdeglobals"
-    install -Dm644 "$srcdir/kwinrulesrc" "$pkgdir/etc/xdg/kwinrulesrc"
+    # Not /etc/xdg/kwinrulesrc: KWin owns that path from 6.8, and a file two
+    # packages claim stops every update. In a directory of SakuraOS's own,
+    # which sakura-xdg.sh adds to XDG_CONFIG_DIRS for the Plasma session.
+    install -Dm644 "$srcdir/kwinrulesrc" "$pkgdir/usr/share/sakura/xdg/kwinrulesrc"
+    install -Dm644 "$srcdir/sakura-xdg.sh" \
+        "$pkgdir/etc/xdg/plasma-workspace/env/sakura-xdg.sh"
     # Both variants kept so the installer can apply the one the user picked.
     install -Dm644 "$srcdir/kdeglobals-dark"  "$pkgdir/usr/share/sakura/theme/kdeglobals-dark"
     install -Dm644 "$srcdir/kdeglobals-light" "$pkgdir/usr/share/sakura/theme/kdeglobals-light"

@@ -744,7 +744,11 @@ fi
 # when there is no network, and the copy used to bring the enablement across.
 check "the live clock-wait unit did not come across" \
       "! test -e /etc/systemd/system/sysinit.target.wants/systemd-time-wait-sync.service"
-check "the KWin rule for Dolphin shipped"  "grep -q dolphin /etc/xdg/kwinrulesrc"
+check "the KWin rule for Dolphin shipped"  "grep -q dolphin /usr/share/sakura/xdg/kwinrulesrc"
+# /etc/xdg/kwinrulesrc is KWin's own from 6.8. Ours there made pacman refuse
+# every update on every machine ("exists in both 'kwin' and 'sakura-theme'").
+check "KWin's rules file is KWin's"         "test \"\$(pacman -Qqo /etc/xdg/kwinrulesrc 2>/dev/null || echo none)\" != sakura-theme"
+check "the session searches SakuraOS's config" "grep -q /usr/share/sakura/xdg /etc/xdg/plasma-workspace/env/sakura-xdg.sh"
 check "user feedback was configured"       "grep -q FeedbackLevel /home/$USER_NAME/.config/PlasmaUserFeedback"
 
 echo
