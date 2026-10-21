@@ -34,7 +34,8 @@ if [[ $(stat -c %s "$TMP") -lt $BLANK_MAX_BYTES ]]; then
     echo ">> guest screen appears blanked; waking it and retrying" >&2
     "$REPO_ROOT/build/guest-run.sh" \
         "runuser -u sakura -- env XDG_RUNTIME_DIR=/run/user/1000 \
-         WAYLAND_DISPLAY=wayland-0 kscreen-doctor output.Virtual-1.enable" \
+         WAYLAND_DISPLAY=\$(cd /run/user/1000 && ls -1 wayland-[0-9]* | grep -v '\.lock\$' | head -1) \
+         kscreen-doctor output.Virtual-1.enable" \
         >/dev/null 2>&1 || true
     "$REPO_ROOT/build/sendkeys.sh" shift >/dev/null 2>&1 || true
     sleep 4

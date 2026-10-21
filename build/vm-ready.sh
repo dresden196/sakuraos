@@ -15,9 +15,16 @@ MODE="${SAKURA_VM_MODE:-1920x1080@60}"
 SESSION_USER="${SAKURA_VM_USER:-sakura}"
 DEADLINE=$(( SECONDS + ${SAKURA_VM_TIMEOUT:-600} ))
 
+# The compositor's socket, read from the session rather than assumed. It was
+# always wayland-0 until KWin 6.8, which put the live session on wayland-1;
+# every Qt tool run here then aborted at startup -- "no Qt platform plugin
+# could be initialized", in a core dump with no message -- and took the whole
+# install test down with it on 21 October.
+LIVE_WAYLAND='$(cd /run/user/1000 2>/dev/null && ls -1 wayland-[0-9]* 2>/dev/null | grep -v "\.lock$" | head -1)'
+
 as_live_user() {
     "$REPO_ROOT/build/guest-run.sh" \
-        "runuser -u $SESSION_USER -- env XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 $1"
+        "runuser -u $SESSION_USER -- env XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=$LIVE_WAYLAND $1"
 }
 
 echo -n ">> waiting for the live session"
