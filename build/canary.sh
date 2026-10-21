@@ -71,8 +71,21 @@ die() {
 }
 
 say "installing a fresh machine to update"
-SAKURA_VM=clean METHOD=copy "$REPO_ROOT/build/test-install.sh" >"$REPO_ROOT/out/canary-install.log" 2>&1 \
-    || die "the base install failed, so there is nothing to update. See out/canary-install.log"
+if ! SAKURA_VM=clean METHOD=copy "$REPO_ROOT/build/test-install.sh" >"$REPO_ROOT/out/canary-install.log" 2>&1; then
+    # An install that worked, with checks that did not pass, is not a base
+    # install that failed. The checks move with the repository and the image
+    # this installs from does not, so a check written for a fix that is only
+    # in the repository fails here until the next image is published -- on
+    # 21 October, three checks for 1.299's theme against the 10.06 image,
+    # and the update the canary exists to test was never run. Every check
+    # runs again after the update, where it counts.
+    if grep -q "SakuraOS installed on" "$REPO_ROOT/out/install-guest.log" 2>/dev/null \
+       && grep -qE '^>> [0-9]+ passed, [0-9]+ failed' "$REPO_ROOT/out/canary-install.log"; then
+        say "installed; before the update: $(grep -E '^>> [0-9]+ passed' "$REPO_ROOT/out/canary-install.log" | tail -1 | sed 's/^>> //') -- the checks run again after it"
+    else
+        die "the base install failed, so there is nothing to update. See out/canary-install.log"
+    fi
+fi
 
 # Wait for the install VM to actually let go of the disk.
 #
