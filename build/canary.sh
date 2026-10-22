@@ -94,13 +94,16 @@ fi
 # another process using the image", which then presents as the installed
 # machine never coming up. Signalling a process is not the same as it having
 # gone.
-for _i in $(seq 1 30); do
-    if ! fuser "$REPO_ROOT/out/sakura-clean.qcow2" >/dev/null 2>&1; then
-        break
-    fi
-    [[ $_i -eq 1 ]] && say "waiting for the install VM to release the disk"
-    sleep 2
-done
+wait_for_disk() {
+    for _i in $(seq 1 30); do
+        if ! fuser "$REPO_ROOT/out/sakura-clean.qcow2" >/dev/null 2>&1; then
+            break
+        fi
+        [[ $_i -eq 1 ]] && say "waiting for the last VM to release the disk"
+        sleep 2
+    done
+}
+wait_for_disk
 
 say "booting the installed machine"
 # Keep the boot output. Discarding it cost several rounds of debugging: the
@@ -111,8 +114,11 @@ say "booting the installed machine"
 # down -- which pct exec does -- qemu takes a SIGTERM and dies while the
 # canary carries on waiting for an agent that is never coming back. Observed
 # directly: "qemu-system-x86_64: terminating on signal 15".
-SAKURA_VM=clean setsid "$REPO_ROOT/build/test-vm.sh" --installed --headless \
-    > "$REPO_ROOT/out/installed-boot.log" 2>&1 &
+boot_installed() {
+    SAKURA_VM=clean setsid "$REPO_ROOT/build/test-vm.sh" --installed --headless \
+        > "$REPO_ROOT/out/$1" 2>&1 &
+}
+boot_installed installed-boot.log
 
 # Wait for the guest agent, not for a desktop session.
 #
@@ -288,7 +294,7 @@ sleep 20
 
 BROKEN=""
 REASON=""
-wait_for_agent; agent_rc=$?
+agent_rc=0; wait_for_agent || agent_rc=$?
 if (( agent_rc == 2 )); then
     # qemu itself died. That says nothing about the update, and publishing an
     # advisory on the strength of it would hold packages that were never shown
@@ -304,13 +310,26 @@ else
             >"$REPO_ROOT/out/canary-verify.log" 2>&1; then
         # Once more before anything is held. A hold stops a package reaching
         # every SakuraOS machine, so it has to rest on a failure that repeats:
-        # on 22 October gperftools was held for one night because a single
-        # download of sakura-store came back "corrupted" -- unrelated to
-        # gperftools, and fine on ten tries the next day. An update that
-        # really broke the machine fails the second time too.
+        # on 22 October gperftools was held for one night because sakura-store
+        # came back "corrupted" -- unrelated to gperftools, and in fact an
+        # empty file the harness itself had left in the cache (see
+        # cleanup_vm in test-install.sh). An update that really broke the
+        # machine fails the second time too.
         cp "$REPO_ROOT/out/canary-verify.log" "$REPO_ROOT/out/canary-verify-first.log"
-        say "checks failed after the update; running them once more before holding anything"
-        if ! SAKURA_VM=clean verify_only=1 "$REPO_ROOT/build/test-install.sh" --verify-only \
+        say "checks failed after the update; starting the machine again to run them once more before holding anything"
+        # Started again, because the checks take their VM down when they
+        # finish. The first version of this re-ran them against a machine
+        # that was already off: every check failed, and on 22 October that
+        # was the "twice" that held eleven updates.
+        wait_for_disk
+        boot_installed installed-boot-2.log
+        agent_rc=0; wait_for_agent || agent_rc=$?
+        if (( agent_rc == 2 )); then
+            die "the VM disappeared before the checks could run a second time, so nothing was proved either way. \
+See out/installed-boot-2.log"
+        elif (( agent_rc != 0 )); then
+            REASON="checks failed after the update, and the machine did not come back to run them again. See out/canary-verify-first.log"
+        elif ! SAKURA_VM=clean verify_only=1 "$REPO_ROOT/build/test-install.sh" --verify-only \
                 >"$REPO_ROOT/out/canary-verify.log" 2>&1; then
             REASON="checks failed after the update, twice. See out/canary-verify.log"
         else

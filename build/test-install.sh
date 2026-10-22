@@ -42,7 +42,19 @@ GRAPHICS_ARG="${SAKURA_TEST_GRAPHICS:-}"
 # compositor -- which reads as a product bug and is not one. The harness now
 # always takes its own VM down, whether it passed, failed or was interrupted.
 # The bracket in the pattern keeps pkill from matching this script itself.
+#
+# Sync first. Killing qemu is pulling the plug, and btrfs loses whatever the
+# guest wrote since its last commit, up to 30 seconds of it. The last check
+# downloads sakura-store; the plug was pulled seconds later, and the machine
+# came back with that file in its cache at the right name and zero bytes,
+# which the next pacman reports as "invalid or corrupted package
+# (checksum)". The canary then held every pending update on 22 October for
+# a fault the harness made. Reproduced directly: a download, a kill, and the
+# file was empty again after the reboot; with a sync in between, intact.
 cleanup_vm() {
+    if pgrep -f "[s]akura-${SAKURA_VM}\\.qcow2" >/dev/null 2>&1; then
+        timeout 30 "$REPO_ROOT/build/guest-run.sh" sync >/dev/null 2>&1 || true
+    fi
     pkill -f "[s]akura-${SAKURA_VM}\\.qcow2" 2>/dev/null || true
 }
 trap cleanup_vm EXIT INT TERM
@@ -646,7 +658,13 @@ if [[ "$OFFLINE" == "1" ]]; then
     echo "-- skipped (offline): our own packages verify"
 else
     check_pacman "the repo resolves"           "pacman -Sy --noconfirm"
-    check_pacman "our own packages verify"     "pacman -Sw --noconfirm sakura-store"
+    # Into an empty folder, not the machine's cache. The question is whether
+    # the repository serves a package that matches its own database, and a
+    # file already in the cache is not downloaded at all: an empty one left
+    # by an earlier run failed this check with nothing wrong on the server.
+    # 755, because pacman hands the download to its alpm user.
+    check_pacman "our own packages verify" \
+      "d=\$(mktemp -d /var/tmp/sakura-verify.XXXXXX) && chmod 755 \"\$d\" && pacman -Sw --noconfirm --cachedir \"\$d\" sakura-store; rc=\$?; rm -rf \"\$d\"; exit \$rc"
 fi
 check "the display manager is enabled"     "systemctl is-enabled sddm"
 check "the network manager is enabled"     "systemctl is-enabled NetworkManager"
