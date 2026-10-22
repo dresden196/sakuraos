@@ -103,9 +103,13 @@ check() {
     # The failing command's own words, kept. Discarding them turned every
     # failure into a guess -- the repo checks were blamed on a stale mirror,
     # then a bad signature, then a network race, none of which they were.
+    # The whole of the last check's output, for helpers that keep evidence;
+    # what is printed below is only its tail.
+    LAST_CHECK_OUT=""
     if out=$(run "$cmd" 2>&1); then
         printf '  ok    %s\n' "$label"; pass=$((pass + 1))
     else
+        LAST_CHECK_OUT=$out
         printf '  FAIL  %s\n' "$label"; fail=$((fail + 1))
         printf '        %s\n' "$(printf '%s' "$out" | tail -3 | tr '\n' ' ' | cut -c1-200)"
     fi
@@ -125,7 +129,18 @@ check_slow() {
 check_pacman() {
     run "for _ in \$(seq 60); do [ -e /var/lib/pacman/db.lck ] || break; sleep 1; done" \
         >/dev/null 2>&1 || true
+    # The whole of pacman's output, kept: the check keeps three lines, and an
+    # intermittent "invalid or corrupted package (checksum)" on sakura-store
+    # has never once been caught with the file name, the bytes received, the
+    # server's answer or what else was running. Next time it is.
+    local before=$fail
     check_slow "$1" "$2"
+    if (( fail > before )); then
+        {
+            printf '\n=== %s (%s): %s ===\n%s\n' "$1" "$(date -u +%FT%TZ)" "$2" "$LAST_CHECK_OUT"
+            run "echo '--- cache:'; ls -la --time-style=full-iso /var/cache/pacman/pkg/ | tail -15; echo '--- running:'; ps -eo pid,etime,args | grep -E '[p]acman|[s]akura-update|[c]heckupdates|[f]latpak|[s]nap'; echo '--- journal:'; journalctl -b --no-pager -n 40 -o short-monotonic" 2>&1
+        } >> "$REPO_ROOT/out/pacman-check-failures.log" || true
+    fi
 }
 
 # qemu can fail before it ever runs a guest instruction -- a held ssh forward,

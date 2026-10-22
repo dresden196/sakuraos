@@ -302,7 +302,20 @@ else
     say "re-running the checks"
     if ! SAKURA_VM=clean verify_only=1 "$REPO_ROOT/build/test-install.sh" --verify-only \
             >"$REPO_ROOT/out/canary-verify.log" 2>&1; then
-        REASON="checks failed after the update. See out/canary-verify.log"
+        # Once more before anything is held. A hold stops a package reaching
+        # every SakuraOS machine, so it has to rest on a failure that repeats:
+        # on 22 October gperftools was held for one night because a single
+        # download of sakura-store came back "corrupted" -- unrelated to
+        # gperftools, and fine on ten tries the next day. An update that
+        # really broke the machine fails the second time too.
+        cp "$REPO_ROOT/out/canary-verify.log" "$REPO_ROOT/out/canary-verify-first.log"
+        say "checks failed after the update; running them once more before holding anything"
+        if ! SAKURA_VM=clean verify_only=1 "$REPO_ROOT/build/test-install.sh" --verify-only \
+                >"$REPO_ROOT/out/canary-verify.log" 2>&1; then
+            REASON="checks failed after the update, twice. See out/canary-verify.log"
+        else
+            say "passed the second time: $(grep -E '^  FAIL' "$REPO_ROOT/out/canary-verify-first.log" | sed 's/^  FAIL  //' | paste -sd, -) failed only once (out/canary-verify-first.log)"
+        fi
     fi
 fi
 
